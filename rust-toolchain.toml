@@ -1,0 +1,6 @@
+# Matches Core's pinned toolchain (../valyria/rust-toolchain.toml). The bundled
+# `valyria` sidecar is built from Core, so the app's Rust build must be >= Core's.
+# See docs/INTEGRATION.md RI3.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]

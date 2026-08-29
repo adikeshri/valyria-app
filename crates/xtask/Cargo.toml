@@ -1,0 +1,13 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Build-time checks for valyria-app: check-layering (D2), check-protocol (schema drift), verify-core (core.lock.json consistency)."
+publish = false
+
+[dependencies]
+toml = "0.8"
+serde = { workspace = true }
+serde_json = { workspace = true }

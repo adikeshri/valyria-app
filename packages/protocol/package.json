@@ -1,0 +1,23 @@
+{
+  "name": "@valyria/protocol",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The typed Core boundary: generated request/response types from the pinned schemas, the event-payload decoder registry (PLAN D5), and the capability registry (PLAN D6).",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "codegen": "node scripts/codegen.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "json-schema-to-typescript": "^15.0.4",
+    "typescript": "~6.0.2"
+  }
+}

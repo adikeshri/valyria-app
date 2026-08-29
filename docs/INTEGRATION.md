@@ -1,0 +1,277 @@
+# Integrating Core: distribution, runtime setup, and models
+
+How `valyria-app` ships the Core runtime and connects to it. This document
+settles the questions [PLAN.md](PLAN.md) §4.18 and §10 leave open — packaging,
+first-run, and model acquisition — and specifies exactly how the Core tree at
+`../valyria` (protocol `1.0.0`, rev pinned in [`core.lock.json`](../core.lock.json))
+enters this repository.
+
+Read [PLAN.md](PLAN.md) §1 (design decisions) and
+[CORE-INTERFACE.md](CORE-INTERFACE.md) §2 (the gap list) first. This document
+does not restate them; it depends on them.
+
+---
+
+## 1. The target experience
+
+> A user downloads one file. The Valyria runtime is already inside it — no
+> toolchain, no package manager, no build step. On first launch the app opens a
+> repository and runs a real agent task against Core's built-in offline model.
+> Choosing and downloading a real model is a deliberate, later, in-app step.
+
+This splits into two principles that are handled completely differently:
+
+- **Runtime setup is invisible.** The `valyria` binary is bundled as a Tauri
+  sidecar. "Setup" is the session supervisor spawning it and Core creating its
+  own state directories. There is nothing for the user to install.
+- **Model acquisition is explicit and Core-mediated.** The app never fetches
+  weights (PLAN §20, §41, D2). The Model Manager drives Core's
+  `valyria-model-store` through the protocol and renders progress events. Until
+  Core exposes those methods (G5), the app runs on the deterministic fake model
+  and says so.
+
+---
+
+## 2. What ships in the app bundle
+
+### D-INT-1 — The `valyria` binary is a bundled Tauri sidecar
+
+The `valyria` binary (crate `valyria-cli`, which links the full
+`valyria-app::Runtime` and carries `serve`) is built per target triple and
+shipped via Tauri `externalBin`. It is the entire runtime in one file: agent
+loop, tools, index, verification, journal, daemon.
+
+The session supervisor (PLAN §4.2) resolves which binary to run, in order:
+
+1. `settings.coreBinaryPath` — explicit user override
+2. `VALYRIA_BIN` environment variable
+3. the bundled sidecar
+
+Developers use 1 or 2 against their own `../valyria` checkout. Everyone else
+gets 3, transparently.
+
+### D-INT-2 — First run needs no model
+
+Core's fake model is deterministic and runs the complete agent loop. A clean
+machine reaches **Ready → open repository → run a harmless read-only task →
+watch events stream** with zero network activity. That is the onboarding
+proof-of-life, and it is enough to ship a first release (PLAN §10 decision 5,
+default).
+
+### D-INT-3 — The app has no code path that downloads a model
+
+Not in the renderer, not in `valyria-bridge`. The bridge depends only on
+`valyria-protocol` and `valyria-types` (D2, enforced by `xtask check-layering`);
+a downloader would be new logic and a layering violation. Every weight byte
+flows Core → disk; the app renders `model_install_progress` events and nothing
+else.
+
+---
+
+## 3. How Core enters this repository
+
+Three separate things flow from Core, each pinned to the same
+`core.lock.json` `git_rev`, each with its own mechanism:
+
+| From Core | Mechanism | Rationale |
+|---|---|---|
+| `valyria-protocol` + `valyria-types` Rust crates (the bridge compiles against these) | **Cargo git dependency** pinned to `rev` in `crates/valyria-bridge/Cargo.toml` | Small subtree — protocol, types, util, serde, tokio, futures. No tree-sitter, no SQLite, no model runtime. Compiles in seconds. |
+| Protocol JSON schemas (`docs/protocol/*.schema.json`, `version.txt`) + captured event traces | **Vendored copy** committed at `packages/protocol/schemas/` and `fixtures/traces/` | TS codegen and the `check-protocol` drift gate must run in CI with no Core checkout. Refreshed by `xtask sync-core` on a bump. |
+| The `valyria` daemon binary | **Downloaded Core release artifact** (target state) → **git submodule built in CI** (interim, until Core publishes per-triple binaries) | App CI should not compile ~40 Rust crates + a model runtime on every build. The binary is a versioned artifact with its own provenance. |
+
+### `core.lock.json`
+
+```json
+{
+  "git_rev": "<40-hex>",
+  "protocol_version": "1.0.0",
+  "runtime_version": "<from hello>",
+  "capabilities": ["plan", "doctor", "storage", "memory", "models", "rollback", "events_resume"]
+}
+```
+
+### Bumping Core
+
+One PR: update `git_rev` + `runtime_version`, run `xtask sync-core` (re-vendors
+schemas, re-runs TS codegen, re-captures trace fixtures), bump the cargo git dep
+`rev`, update the sidecar artifact reference. CI's `check-protocol` fails the PR
+if the vendored schemas and the generated types disagree. A `capabilities`
+change is called out in the PR description.
+
+### Interim binary source (until Core ships release artifacts)
+
+- Core added as a submodule at `vendor/valyria`, pinned to `git_rev`.
+- `vendor/` is excluded from the root Cargo workspace (two workspaces, one
+  tree).
+- The per-platform release job runs
+  `cargo build --release -p valyria-cli --target <triple>` with Core's pinned
+  Rust toolchain, then renames the output to `valyria-<triple>`.
+- **Core request:** a release workflow that publishes signed `valyria-<triple>`
+  binaries per tag. When it lands, the release job's "get the binary" step
+  swaps from *build* to *download + verify checksum/signature*; nothing else
+  changes. Track alongside the CORE-INTERFACE gap list.
+
+---
+
+## 4. Sidecar mechanics
+
+1. **Place** the binary at `apps/desktop/src-tauri/bin/valyria-<target-triple>`
+   (`valyria-aarch64-apple-darwin`, `valyria-x86_64-unknown-linux-gnu`, …). The
+   triple suffix is mandatory.
+2. **Declare** in `apps/desktop/src-tauri/tauri.conf.json`:
+   ```json
+   { "bundle": { "externalBin": ["bin/valyria"] } }
+   ```
+   `tauri build` resolves the current triple, copies the binary into the bundle,
+   and drops the suffix in the packaged app.
+3. **Permit** in `apps/desktop/src-tauri/capabilities/default.json`: the shell
+   plugin's sidecar-execute permission, scoped to `valyria`.
+4. **Spawn** from `valyria-bridge`, applying the D-INT-1 resolution order:
+   ```rust
+   let cmd = match source {
+       Source::Explicit(path) => app.shell().command(path),
+       Source::Sidecar        => app.shell().sidecar("valyria")?,
+   };
+   let (mut events, child) = cmd
+       .args(["serve", "--workspace", &root, "--socket", &sock])
+       .spawn()?;
+   // supervisor owns `child`: watches exit, restarts on mid-task death,
+   // re-subscribes from lastSeq, surfaces the "Core restarted" notice.
+   ```
+5. **Sign.** The nested binary is signed and notarized as part of `tauri build`
+   because it lives inside the bundle — but the macOS signing identity must be
+   configured in CI or Gatekeeper blocks the whole app. Linux needs nothing
+   extra.
+
+The sidecar shares no Cargo workspace with `src-tauri`. `src-tauri` builds the
+Tauri host and `valyria-bridge` (against the pinned `valyria-protocol` crate);
+the `valyria` binary is produced by a separate build and meets the app only as a
+file in `bin/`.
+
+---
+
+## 5. First-run flow
+
+The runtime needs nothing installed. On first workspace-open the supervisor
+spawns the sidecar and Core creates `$VALYRIA_HOME` (`~/.valyria`:
+`config.toml`, `run/`, `models/`, `logs/`) and `<repo>/.valyria/workspace.db`.
+That is the entirety of "setup".
+
+1. **Welcome** — "Valyria runs entirely on your machine. The runtime is already
+   installed."
+2. **Environment check** — `doctor_run`; render the ten checks; issues show
+   Core's specific remediation string.
+3. **Open a repository** — an explicit authorization act; the root is recorded
+   and shown in the header (PLAN §4.4).
+4. **Prove the stack** — the daemon runs a harmless read-only task (e.g.
+   "summarize the README") against the fake model; the user watches events
+   stream. "Your runtime works."
+5. **Model step — deferred** — "You're on the built-in offline model, good for
+   trying the flow. Add a real model from the Models tab." If Core has
+   `model_catalog` / `model_install`, this step becomes §6's flow instead.
+
+No step blocks on a download.
+
+---
+
+## 6. Models
+
+### Now (no Core change)
+
+- Model Manager is an inventory view over `model_list` — empty on a clean
+  machine.
+- First-run ends honestly on the fake model (D-INT-2).
+- Escape hatch: point `config.toml` `[model]` at an existing local GGUF via a
+  D13 config write — a setting, not a download.
+
+### Core requests (file against `adikeshri/valyria`, per CORE-INTERFACE G4/G5)
+
+| Method | Purpose |
+|---|---|
+| `model_catalog` | Installable models with id, family, quantization, size, license, min RAM/VRAM — from Core's registry, so the app hardcodes no model list. |
+| `model_install { id }` | Returns immediately; emits `model_install_progress { id, bytes, total, phase }` / `_completed` / `_failed` on the event stream. Backed by `valyria-model-store` (verified resumable download, checksum, license, GC). |
+| `model_remove { id }` / `model_activate { id, role }` / `model_inspect { id }` | Lifecycle + license text for the acceptance prompt. |
+| `hardware_probe` / `model_recommend { role }` | So the wizard can *explain* a recommendation using Core's `fit()` scoring rather than an app heuristic (§41). |
+
+### End-state UX (once those land)
+
+1. App works immediately (bundled runtime + fake model).
+2. A "Set up a real model" step calls `hardware_probe` + `model_recommend` and
+   shows a short list with size / license / "fits your machine".
+3. Install → `model_install` → progress bar fed by events → `model_activate` on
+   completion.
+4. License text rendered from `model_inspect`; acceptance recorded by Core.
+5. Weights land in `$VALYRIA_HOME/models/`, Core-owned. A release-gate test
+   asserts that directory is byte-identical across an app upgrade (§38).
+
+---
+
+## 7. Build and release pipeline
+
+Per-platform CI release job:
+
+1. Checkout the app; resolve the Core binary — download the pinned release
+   artifact (target state) or build `vendor/valyria` `valyria-cli` with Core's
+   pinned Rust toolchain (interim).
+2. Place `valyria-<triple>` in `apps/desktop/src-tauri/bin/`.
+3. `tsc --noEmit`, lint, unit + trace-replay, `check-layering`,
+   `check-protocol`.
+4. `tauri build` → signed/notarized `.dmg` + `.app`, `.deb` + `.AppImage`, and a
+   Windows `.msi` that is honest about tier 3 (D14, G9).
+5. **Release gates:** fresh install → open a fixture repo → daemon spawns from
+   the sidecar → `hello` → a task completes on the fake model, **network
+   disabled**. Upgrade test → `$VALYRIA_HOME/models/` byte-identical.
+6. Bundle-size check against the PLAN §9 budget (120 MB/platform, models
+   excluded).
+
+---
+
+## 8. Risks specific to this approach
+
+| # | Risk | Mitigation |
+|---|---|---|
+| RI1 | The sidecar binary blows the 120 MB installer budget once a model runtime (llama.cpp / MLX) is statically linked into Core. | Measure a real Core build with the runtime linked *before* committing to a single bundled binary. Fallback: bundle `valyria serve` only; have Core fetch the inference engine as a second on-demand component on first `model_install`. Decision stays data-driven. |
+| RI2 | Unsigned nested executable → macOS Gatekeeper blocks the whole app. | Signing identity configured in the release job; a gate asserts the bundled binary is signed. |
+| RI3 | App Rust toolchain (`src-tauri` `rust-version` `1.77.2`) is older than Core's `1.97.1`; the sidecar and the host build under different toolchains. | Move the app to Core's pinned toolchain; add `rust-toolchain.toml` at the app root. |
+| RI4 | Windows: bundling the binary does not help — no Unix socket, no sandbox (G9). | Tier 3 (D14): installs, shows version/compat, refuses to start a session with the reason. Revisit when Core lands a named-pipe transport. |
+| RI5 | Interim submodule friction (detached HEAD, `--recursive` clones, slow CI compiling 40 crates). | Aggressive CI caching keyed on `git_rev`; `xtask` guards that check out and verify the submodule rev. Removed entirely once Core publishes release artifacts. |
+
+---
+
+## 9. Decisions
+
+**Locked:**
+
+- **D-INT-1** — `valyria` ships as a bundled Tauri sidecar; supervisor
+  resolution order is override → env → sidecar.
+- **D-INT-2** — first release ships with the fake model; no download gates
+  onboarding.
+- **D-INT-3** — no model-download code path exists in the app.
+- Core enters via three pinned inflows (§3): cargo git dep for the protocol
+  crates, vendored copy for schemas/fixtures, release artifact (interim:
+  submodule) for the binary.
+- **npm workspaces**, not pnpm (PLAN §2's default). The repo already
+  standardized on npm (`apps/desktop/package-lock.json`, `.claude/launch.json`);
+  workspace semantics are equivalent for `packages/*`. Revisit only if a pnpm-
+  specific need appears.
+- The cargo git dep resolves against `9203d23…`, already reachable from
+  `origin/main` — no submodule needed for the protocol crates. The submodule is
+  introduced only when the release pipeline needs to build the binary, and is
+  removed once Core publishes release artifacts.
+
+**Increment 1 landed** (branch `integrate/core-bridge`): `core.lock.json`,
+`rust-toolchain.toml`, the Cargo + npm workspace roots, `crates/valyria-bridge`
+(workspace id + socket-path convention, Core-binary resolution, `hello`
+handshake with protocol-major checking), `crates/xtask`
+(`check-layering` / `check-protocol` / `verify-core`, all green, layering
+violation verified to fail), `packages/protocol` (vendored schemas, TS codegen,
+capability registry, tolerant event-decoder registry), `packages/state` (pure
+reducer + store + selectors). Next: the spawn/adopt/backoff supervisor loop and
+the batched event pump (PLAN Phase 1).
+
+**Open:**
+
+- **Single bundled binary vs. split runtime/engine** — resolved by RI1's
+  measurement, not now.
+- **When to switch the interim submodule to downloaded artifacts** — gated on a
+  Core release workflow existing.

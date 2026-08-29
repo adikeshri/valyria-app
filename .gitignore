@@ -1,0 +1,9 @@
+# Rust
+/target
+# Cargo.lock IS committed — this workspace ships binaries.
+
+# Node
+node_modules/
+
+# OS / editor
+.DS_Store

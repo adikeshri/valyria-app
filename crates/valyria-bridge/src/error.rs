@@ -5,7 +5,9 @@ use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BridgeError {
-    #[error("no Core binary found: checked settings override, $VALYRIA_BIN, and the bundled sidecar")]
+    #[error(
+        "no Core binary found: checked settings override, $VALYRIA_BIN, and the bundled sidecar"
+    )]
     CoreBinaryNotFound,
 
     #[error("Core binary at {path} is not executable")]

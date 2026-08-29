@@ -24,7 +24,9 @@ fn main() -> ExitCode {
             .and_then(|_| check_protocol(&repo)),
         other => {
             eprintln!("unknown task: {other:?}");
-            eprintln!("usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|all>");
+            eprintln!(
+                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|all>"
+            );
             return ExitCode::from(2);
         }
     };
@@ -101,7 +103,9 @@ fn verify_core(repo: &Path) -> Result<(), String> {
         .and_then(|v| v.as_str())
         .ok_or("core.lock.json: missing git_rev")?;
     if rev.len() != 40 || !rev.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(format!("core.lock.json: git_rev {rev:?} is not a 40-char sha"));
+        return Err(format!(
+            "core.lock.json: git_rev {rev:?} is not a 40-char sha"
+        ));
     }
 
     let lock_proto = lock

@@ -1,7 +1,24 @@
-# Valyria App
+<p align="center">
+  <img src="docs/assets/logo.png" alt="Valyria" width="360">
+</p>
 
-The desktop application for [Valyria](../valyria) — a local-first autonomous
-software engineer that runs entirely on your own machine.
+<h1 align="center">Valyria App</h1>
+
+<p align="center">
+  The desktop application for <a href="../valyria">Valyria</a> — a local-first
+  autonomous software engineer that runs entirely on your own machine.
+</p>
+
+## See it
+
+![Valyria App — clicking through the Agent, Task, Diff, Tests and Terminal surfaces](docs/assets/demo.gif)
+
+<p align="center">
+  <img src="docs/assets/screenshot.png" alt="The Valyria App desktop renderer" width="900">
+</p>
+
+The tour above runs against `apps/desktop/src/data/mock.ts` — every panel is
+built on the exact data shapes Core's protocol will provide.
 
 > **Status: visual prototype, now a real native app.** [apps/desktop](apps/desktop)
 > is a full renderer implementation of every PRD surface, running against

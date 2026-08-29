@@ -23,6 +23,43 @@ export interface TaskSummary {
   updated_at_ms: number;
 }
 
+export interface TaskStatus {
+  task_id: string;
+  objective: string;
+  state: string;
+  paused_from: string | null;
+  recovery_note: string | null;
+}
+
+export interface PlanStep {
+  id: string;
+  intent: string;
+  targets: string[];
+  depends_on: string[];
+  rollback_boundary: boolean;
+  checkpoint: boolean;
+}
+
+export interface PlanGet {
+  revision: number | null;
+  content_hash: string | null;
+  steps: PlanStep[];
+}
+
+export interface VerifiedClaim {
+  kind: string;
+  command: string;
+  outcome: string;
+  run_id: string;
+}
+
+export interface TaskReport {
+  task_id: string;
+  status: string;
+  verified: VerifiedClaim[];
+  unverified: string[];
+}
+
 /** Shape of `core://event-batch` — mirrors `valyria_bridge::EventBatch`. */
 export interface CoreEventBatch {
   first_seq: number;
@@ -41,6 +78,9 @@ export const bridge = {
   sessionStatus: () => invoke<SessionInfo | null>("session_status"),
   taskCreate: (objective: string) => invoke<string>("task_create", { objective }),
   taskList: () => invoke<{ tasks: TaskSummary[] }>("task_list"),
+  taskStatus: (taskId: string) => invoke<TaskStatus>("task_status", { taskId }),
+  taskPlan: (taskId: string) => invoke<PlanGet>("task_plan", { taskId }),
+  taskReport: (taskId: string) => invoke<TaskReport>("task_report", { taskId }),
   taskPause: (taskId: string) => invoke<null>("task_pause", { taskId }),
   taskResume: (taskId: string) => invoke<null>("task_resume", { taskId }),
   taskCancel: (taskId: string) => invoke<null>("task_cancel", { taskId }),

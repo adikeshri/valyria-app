@@ -3,6 +3,8 @@ import { Paperclip, ArrowUp, Sparkles, Loader2, X, FileCode, GitCompareArrows, T
 import { currentTask } from "../data/mock";
 import ApprovalCard from "../components/ApprovalCard";
 import { useApp } from "../state/store";
+import { useLive } from "../core/liveStore";
+import LiveChatPanel from "./LiveChatPanel";
 
 const attachOptions = [
   { label: "src/auth/service.py", icon: <FileCode size={12} /> },
@@ -11,6 +13,12 @@ const attachOptions = [
 ];
 
 export default function ChatPanel() {
+  const liveSession = useLive((s) => s.session);
+  if (liveSession) return <LiveChatPanel />;
+  return <MockChatPanel />;
+}
+
+function MockChatPanel() {
   const [draft, setDraft] = useState("");
   const [attached, setAttached] = useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);

@@ -5,6 +5,7 @@
 // to a Core method when G3 lands.
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export interface DirEntry {
   path: string;
@@ -39,9 +40,14 @@ export interface GitCommit {
 export const repo = {
   listDir: (path: string) => invoke<DirEntry[]>("fs_list_dir", { path }),
   readFile: (path: string) => invoke<FileView>("fs_read_file", { path }),
+  search: (query: string, limit = 200) =>
+    invoke<string[]>("fs_search", { query, limit }),
   gitStatus: () => invoke<GitEntry[]>("git_status"),
   gitLog: (limit: number) => invoke<GitCommit[]>("git_log", { limit }),
   gitDiff: (path: string | null, staged: boolean) =>
     invoke<string>("git_diff", { path, staged }),
   gitBranch: () => invoke<string>("git_branch"),
+  /** `core://fs-changed` → batch of paths (relative, forward-slashed). */
+  onFsChanged: (cb: (paths: string[]) => void): Promise<UnlistenFn> =>
+    listen<string[]>("core://fs-changed", (e) => cb(e.payload)),
 };

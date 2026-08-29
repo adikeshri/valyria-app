@@ -16,10 +16,12 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
-use valyria_bridge::protocol::TaskListResponse;
+use valyria_bridge::protocol::{
+  PlanGetResponse, TaskListResponse, TaskReportResponse, TaskStatusResponse,
+};
 use valyria_bridge::{
   spawn_or_adopt, BridgeError, CoreBinary, CoreClient, DirEntry, EventPump, FileView, GitCommit,
-  GitEntry, GitRepo, PumpMessage, Session, SupervisorConfig, WorkspaceFs,
+  GitEntry, GitRepo, PumpMessage, Session, SupervisorConfig, WorkspaceFs, WorkspaceWatcher,
 };
 
 /// Protocol version this build negotiates against (core.lock.json).
@@ -36,6 +38,9 @@ struct Live {
   /// (CORE-INTERFACE §3). Deleted per-surface as Core exposes G3.
   fs: WorkspaceFs,
   git: GitRepo,
+  /// Recursive fs watcher → `core://fs-changed`. Dropped (and its thread
+  /// joined) when the session is replaced.
+  _watcher: Option<WorkspaceWatcher>,
 }
 
 impl Drop for Live {
@@ -108,6 +113,15 @@ pub async fn session_open(
   let client = CoreClient::new(session.socket_path.clone());
   let fs = WorkspaceFs::new(&workspace_root).map_err(err_str)?;
   let git = GitRepo::new(&workspace_root);
+
+  // Recursive fs watch → the renderer, coalesced in the bridge.
+  let watch_app = app.clone();
+  let watcher = WorkspaceWatcher::start(&workspace_root, move |paths| {
+    let _ = watch_app.emit("core://fs-changed", paths);
+  })
+  .map_err(err_str)
+  .ok();
+
   let info = SessionInfo::of(workspace_root, &session);
 
   // Fan the workspace event stream out to the renderer.
@@ -136,6 +150,7 @@ pub async fn session_open(
     pump_task,
     fs,
     git,
+    _watcher: watcher,
   });
   Ok(info)
 }
@@ -166,6 +181,30 @@ pub async fn task_create(
 #[tauri::command]
 pub async fn task_list(state: State<'_, BridgeState>) -> Result<TaskListResponse, String> {
   with_client(&state, |c| async move { c.task_list().await }).await
+}
+
+#[tauri::command]
+pub async fn task_status(
+  state: State<'_, BridgeState>,
+  task_id: String,
+) -> Result<TaskStatusResponse, String> {
+  with_client(&state, |c| async move { c.task_status(&task_id).await }).await
+}
+
+#[tauri::command]
+pub async fn task_plan(
+  state: State<'_, BridgeState>,
+  task_id: String,
+) -> Result<PlanGetResponse, String> {
+  with_client(&state, |c| async move { c.task_plan(&task_id).await }).await
+}
+
+#[tauri::command]
+pub async fn task_report(
+  state: State<'_, BridgeState>,
+  task_id: String,
+) -> Result<TaskReportResponse, String> {
+  with_client(&state, |c| async move { c.task_report(&task_id).await }).await
 }
 
 #[tauri::command]
@@ -224,6 +263,20 @@ pub async fn fs_list_dir(
 pub async fn fs_read_file(state: State<'_, BridgeState>, path: String) -> Result<FileView, String> {
   let (fs, _) = snapshot(&state).await?;
   tokio::task::spawn_blocking(move || fs.read_file(&path))
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(err_str)
+}
+
+#[tauri::command]
+pub async fn fs_search(
+  state: State<'_, BridgeState>,
+  query: String,
+  limit: Option<usize>,
+) -> Result<Vec<String>, String> {
+  let (fs, _) = snapshot(&state).await?;
+  let cap = limit.unwrap_or(200).min(1000);
+  tokio::task::spawn_blocking(move || fs.search(&query, cap))
     .await
     .map_err(|e| e.to_string())?
     .map_err(err_str)

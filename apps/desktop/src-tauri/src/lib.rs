@@ -15,9 +15,11 @@ pub fn run() {
       }
       Ok(())
     })
+    .plugin(tauri_plugin_notification::init())
     .manage(BridgeState::default())
     .invoke_handler(tauri::generate_handler![
       bridge_host::session_open,
+      bridge_host::session_restart,
       bridge_host::session_status,
       bridge_host::task_create,
       bridge_host::task_list,
@@ -25,6 +27,8 @@ pub fn run() {
       bridge_host::task_plan,
       bridge_host::task_report,
       bridge_host::task_rollback,
+      bridge_host::doctor_run,
+      bridge_host::config_show,
       bridge_host::task_pause,
       bridge_host::task_resume,
       bridge_host::task_cancel,

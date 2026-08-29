@@ -19,6 +19,13 @@ export function activeTasks(state: StoreState): TaskProjection[] {
   return tasksByRecency(state).filter((t) => !t.terminal);
 }
 
+/** Tasks blocked on a human decision (§13). Distinct from "working" — the task
+ *  panel and history badge these differently, and a transition into this set is
+ *  what raises the "permission required" notification (§31). */
+export function blockedTasks(state: StoreState): TaskProjection[] {
+  return tasksByRecency(state).filter((t) => t.state === "waiting_for_permission");
+}
+
 export function taskById(state: StoreState, id: string): TaskProjection | undefined {
   return state.tasks[id];
 }
@@ -192,6 +199,19 @@ export function pendingApprovalFor(
   const task = state.tasks[taskId];
   if (!task || task.state !== "waiting_for_permission") return undefined;
   return state.approvals[taskId];
+}
+
+/** G2 supersession guard: is the approval the UI last rendered (`seenSeq`) still
+ *  the one Core is waiting on? `permission_resolve` carries no request id, so
+ *  the app must not answer a prompt a newer `approval_requested` has replaced —
+ *  it re-prompts instead (docs/PLAN.md §4.7). Returns false when there is no
+ *  pending approval at all. */
+export function approvalIsCurrent(
+  state: StoreState,
+  taskId: string,
+  seenSeq: number,
+): boolean {
+  return state.approvals[taskId]?.seq === seenSeq;
 }
 
 /** Rows the decoder could not type — surfaced with a raw-payload disclosure (D5). */

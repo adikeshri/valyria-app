@@ -17,7 +17,8 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 use valyria_bridge::protocol::{
-  PlanGetResponse, TaskListResponse, TaskReportResponse, TaskRollbackResponse, TaskStatusResponse,
+  ConfigShowResponse, DoctorRunResponse, PlanGetResponse, TaskListResponse, TaskReportResponse,
+  TaskRollbackResponse, TaskStatusResponse,
 };
 use valyria_bridge::{
   spawn_or_adopt, BridgeError, CoreBinary, CoreClient, DirEntry, EventPump, FileView, GitCommit,
@@ -58,6 +59,12 @@ pub struct SessionInfo {
   pub protocol_version: String,
   pub runtime_version: String,
   pub capabilities: Vec<String>,
+  /// Autonomy level the daemon is running under (§25). `null` when adopted
+  /// from a daemon that recorded none. `owns_daemon` is false for an adopted
+  /// daemon — the autonomy switch is disabled then, because a restart is not
+  /// ours to perform (CORE-INTERFACE G1).
+  pub permission_mode: Option<String>,
+  pub owns_daemon: bool,
 }
 
 impl SessionInfo {
@@ -70,7 +77,19 @@ impl SessionInfo {
       protocol_version: s.negotiated.protocol_version.clone(),
       runtime_version: s.negotiated.runtime_version.clone(),
       capabilities: s.negotiated.capabilities.clone(),
+      permission_mode: s.permission_mode.clone(),
+      owns_daemon: s.is_owned(),
     }
+  }
+}
+
+/// `manual` | `assisted` | `autonomous`, or an error string for anything else.
+fn validate_mode(mode: &str) -> Result<String, String> {
+  match mode {
+    "manual" | "assisted" | "autonomous" => Ok(mode.to_string()),
+    other => Err(format!(
+      "[bridge.autonomy.bad_mode] {other:?} is not a valid autonomy level"
+    )),
   }
 }
 
@@ -98,6 +117,53 @@ pub async fn session_open(
   app: AppHandle,
   state: State<'_, BridgeState>,
   workspace_root: String,
+  permission_mode: Option<String>,
+) -> Result<SessionInfo, String> {
+  let mode = permission_mode.map(|m| validate_mode(&m)).transpose()?;
+  open_and_store(app, state, workspace_root, mode).await
+}
+
+/// Restart the workspace daemon under a new autonomy level (§25 / G1). Only
+/// valid when this process spawned the daemon — an adopted daemon is not ours
+/// to stop. Refuses while a task is active (checked in the renderer, enforced
+/// here as a courtesy by leaving the running session in place on error).
+#[tauri::command]
+pub async fn session_restart(
+  app: AppHandle,
+  state: State<'_, BridgeState>,
+  permission_mode: String,
+) -> Result<SessionInfo, String> {
+  let mode = validate_mode(&permission_mode)?;
+
+  let workspace_root = {
+    let mut guard = state.0.lock().await;
+    let live = guard
+      .as_ref()
+      .ok_or_else(|| "[bridge.no_session] no session is open".to_string())?;
+    if !live.session.is_owned() {
+      return Err(
+        "[bridge.autonomy.not_owned] Core for this workspace was started by another process. \
+         Quit it there to change the autonomy level."
+          .to_string(),
+      );
+    }
+    let root = live.fs.root().display().to_string();
+    // Take it out and stop the daemon; on a spawn failure below the workspace
+    // is left with no session and the renderer surfaces the error.
+    let mut prev = guard.take().expect("checked present above");
+    prev.session.shutdown_daemon().await.map_err(err_str)?;
+    drop(prev); // aborts the old pump task
+    root
+  };
+
+  open_and_store(app, state, workspace_root, Some(mode)).await
+}
+
+async fn open_and_store(
+  app: AppHandle,
+  state: State<'_, BridgeState>,
+  workspace_root: String,
+  permission_mode: Option<String>,
 ) -> Result<SessionInfo, String> {
   let core = resolve_core_binary()?;
   let cfg = SupervisorConfig {
@@ -107,6 +173,7 @@ pub async fn session_open(
     valyria_home: None,
     startup_timeout: Duration::from_secs(20),
     kill_daemon_on_drop: false,
+    permission_mode,
   };
 
   let session = spawn_or_adopt(cfg).await.map_err(err_str)?;
@@ -217,6 +284,16 @@ pub async fn task_rollback(
     c.task_rollback(&task_id, &checkpoint_id).await
   })
   .await
+}
+
+#[tauri::command]
+pub async fn doctor_run(state: State<'_, BridgeState>) -> Result<DoctorRunResponse, String> {
+  with_client(&state, |c| async move { c.doctor_run().await }).await
+}
+
+#[tauri::command]
+pub async fn config_show(state: State<'_, BridgeState>) -> Result<ConfigShowResponse, String> {
+  with_client(&state, |c| async move { c.config_show().await }).await
 }
 
 #[tauri::command]

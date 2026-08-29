@@ -155,6 +155,7 @@ async fn supervise_stream_kill_ui_resume_kill_daemon() {
         valyria_home: Some(home.path().to_path_buf()),
         startup_timeout: Duration::from_secs(30),
         kill_daemon_on_drop: true,
+        permission_mode: None,
     };
 
     // 1. Spawn, negotiate, create a task, stream it to completion.
@@ -265,6 +266,7 @@ async fn capture_trace() {
         valyria_home: Some(home.path().to_path_buf()),
         startup_timeout: Duration::from_secs(30),
         kill_daemon_on_drop: true,
+        permission_mode: None,
     };
     let mut session = spawn_or_adopt(cfg).await.unwrap();
     let client = CoreClient::new(session.socket_path.clone());

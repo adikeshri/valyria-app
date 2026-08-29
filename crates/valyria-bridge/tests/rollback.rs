@@ -129,6 +129,7 @@ async fn rollback_wire_path_reports_core_errors_structurally() {
         valyria_home: Some(home.path().to_path_buf()),
         startup_timeout: Duration::from_secs(30),
         kill_daemon_on_drop: true,
+        permission_mode: None,
     };
 
     let mut session = spawn_or_adopt(cfg).await.expect("spawn Core");

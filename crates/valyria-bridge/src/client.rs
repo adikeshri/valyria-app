@@ -17,8 +17,8 @@ use valyria_protocol::{
     TaskIdRequest, TaskRollbackRequest, TaskStatusRequest, WireError, WireEvent,
 };
 use valyria_protocol::{
-    HelloResponse, PlanGetResponse, TaskListResponse, TaskReportResponse, TaskRollbackResponse,
-    TaskStatusResponse, WorkspaceStatusResponse,
+    ConfigShowResponse, DoctorRunResponse, HelloResponse, PlanGetResponse, TaskListResponse,
+    TaskReportResponse, TaskRollbackResponse, TaskStatusResponse, WorkspaceStatusResponse,
 };
 
 use crate::error::{BridgeError, Result};
@@ -195,6 +195,28 @@ impl CoreClient {
             approve,
         }))
         .await
+    }
+
+    // --- diagnostics & config (§4.15, §26) ---------------------------
+
+    /// The ten environment checks (`doctor_run`). Read-only; the Security
+    /// overview and first-run wizard render these verbatim, marking anything
+    /// Core does not report rather than inventing a verdict (§26, D8).
+    pub async fn doctor_run(&self) -> Result<DoctorRunResponse> {
+        match self.call(Request::DoctorRun(Empty {})).await? {
+            Response::DoctorRun(r) => Ok(r),
+            other => Err(unexpected("DoctorRun", other)),
+        }
+    }
+
+    /// Effective config entries with their `origin` (`config_show`). The
+    /// Settings and Security surfaces display the resolved value + origin; the
+    /// app never claims a value it cannot read back here (D13).
+    pub async fn config_show(&self) -> Result<ConfigShowResponse> {
+        match self.call(Request::ConfigShow(Empty {})).await? {
+            Response::ConfigShow(r) => Ok(r),
+            other => Err(unexpected("ConfigShow", other)),
+        }
     }
 
     async fn ack(&self, req: Request) -> Result<()> {

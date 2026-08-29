@@ -13,6 +13,36 @@ export interface SessionInfo {
   protocol_version: string;
   runtime_version: string;
   capabilities: string[];
+  /** Autonomy level the daemon runs under (§25); null when adopted from a
+   *  daemon that recorded none. */
+  permission_mode: "manual" | "assisted" | "autonomous" | null;
+  /** False for an adopted daemon — the autonomy switch is disabled then (G1). */
+  owns_daemon: boolean;
+}
+
+export type PermissionMode = "manual" | "assisted" | "autonomous";
+
+export interface DoctorCheck {
+  name: string;
+  /** pass | warn | fail */
+  status: string;
+  detail: string;
+  remediation: string | null;
+}
+export interface DoctorReport {
+  checks: DoctorCheck[];
+  /** worst status across all checks */
+  summary: string;
+}
+
+export interface ConfigEntry {
+  key: string;
+  value: string;
+  /** default | global | workspace | env | task */
+  origin: string;
+}
+export interface ConfigReport {
+  entries: ConfigEntry[];
 }
 
 export interface TaskSummary {
@@ -79,9 +109,15 @@ export const inTauri = typeof (globalThis as { __TAURI_INTERNALS__?: unknown }).
   "undefined";
 
 export const bridge = {
-  sessionOpen: (workspaceRoot: string) =>
-    invoke<SessionInfo>("session_open", { workspaceRoot }),
+  sessionOpen: (workspaceRoot: string, permissionMode?: PermissionMode) =>
+    invoke<SessionInfo>("session_open", { workspaceRoot, permissionMode: permissionMode ?? null }),
+  /** Restart the workspace daemon under a new autonomy level. Rejected when the
+   *  daemon was adopted from another process (G1). */
+  sessionRestart: (permissionMode: PermissionMode) =>
+    invoke<SessionInfo>("session_restart", { permissionMode }),
   sessionStatus: () => invoke<SessionInfo | null>("session_status"),
+  doctorRun: () => invoke<DoctorReport>("doctor_run"),
+  configShow: () => invoke<ConfigReport>("config_show"),
   taskCreate: (objective: string) => invoke<string>("task_create", { objective }),
   taskList: () => invoke<{ tasks: TaskSummary[] }>("task_list"),
   taskStatus: (taskId: string) => invoke<TaskStatus>("task_status", { taskId }),

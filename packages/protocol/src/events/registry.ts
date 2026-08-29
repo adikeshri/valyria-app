@@ -4,41 +4,45 @@
 // a field can be renamed under a *patch* bump. A naive `payload.tool_name` in a
 // component fails silently — an empty cell, not an error.
 //
-// So every payload passes through a declared decoder here. A decoder that fails
-// does NOT drop the event: it yields `{ ok: false, ... raw }`, which the
-// Activity feed renders as a generic row with a "raw payload" disclosure.
-// Unknown `kind` values do the same. The UI degrades to "less informative",
-// never to "blank" or "crashed".
+// So every payload passes through a declared decoder here. Decoders are
+// deliberately permissive: every field is optional and `.passthrough()` keeps
+// unknown fields, so a real event is always typed and a renamed field degrades
+// to "less informative" rather than "blank". A payload that is not even an
+// object fails the decoder and the event still survives as
+// `{ ok: false, reason, raw }`, which the Activity feed renders as a generic
+// row with a raw-payload disclosure. Unknown `kind` values do the same.
 //
-// Increment 1: the 21 known kinds are registered with passthrough schemas.
-// Tightening each `z.object({...})` against a captured trace fixture is Phase 2,
-// gated by `coverageReport()` below.
+// The set of `kind`s is gated: `KNOWN_EVENT_KINDS` here must equal
+// `packages/protocol/schemas/event-kinds.txt` (a pinned copy of Core's
+// `valyria_events::EventKind`), checked by `xtask check-protocol` and by
+// `test/decoders.test.ts`.
 
 import { z } from "zod";
 
-/** The 21 event kinds `valyria_events::EventKind` emits today (CORE-INTERFACE §1). */
+/** The 21 event kinds `valyria_events::EventKind` emits today. Keep sorted and
+ *  in sync with `schemas/event-kinds.txt`. */
 export const KNOWN_EVENT_KINDS = [
-  "task_started",
-  "plan_created",
-  "context_retrieved",
-  "model_started",
-  "model_completed",
-  "tool_started",
-  "tool_completed",
-  "file_changed",
-  "test_started",
-  "test_passed",
-  "test_failed",
   "approval_requested",
-  "task_paused",
+  "context_retrieved",
+  "external_change_detected",
+  "file_changed",
+  "memory_written",
+  "model_completed",
+  "model_started",
+  "plan_created",
+  "progress_stalled",
+  "resource_pressure",
+  "state_changed",
   "task_completed",
   "task_failed",
-  "state_changed",
-  "progress_stalled",
-  "external_change_detected",
+  "task_paused",
+  "task_started",
+  "test_failed",
+  "test_passed",
+  "test_started",
+  "tool_completed",
+  "tool_started",
   "verification_evidence",
-  "memory_written",
-  "resource_pressure",
 ] as const;
 
 export type EventKind = (typeof KNOWN_EVENT_KINDS)[number];
@@ -53,23 +57,79 @@ export const wireEventEnvelope = z.object({
 });
 export type WireEvent = z.infer<typeof wireEventEnvelope>;
 
-/**
- * Per-kind payload decoders. Passthrough for now (`z.unknown()`), so nothing is
- * asserted about payload shape yet — but the registry exists, the coverage gate
- * can see it, and tightening one decoder is a localized change.
- *
- * When a decoder is tightened past `z.unknown()`, add its kind to `TIGHTENED`
- * so `coverageReport()` tracks progress without reaching into zod internals.
- */
-const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = KNOWN_EVENT_KINDS.reduce(
-  (acc, k) => {
-    acc[k] = z.unknown();
-    return acc;
-  },
-  {} as Record<EventKind, z.ZodTypeAny>,
-);
+const s = z.string();
+const anyObj = z.object({}).passthrough();
 
-const TIGHTENED = new Set<EventKind>();
+/** Per-kind payload decoders. Fields the UI reads, all optional, passthrough on
+ *  the rest. Shapes verified against `fixtures/traces/` and CORE-INTERFACE §2. */
+const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
+  approval_requested: z
+    .object({
+      prompt: s.optional(),
+      tool: s.optional(),
+      category: s.optional(),
+      target: s.optional(),
+      risk: s.optional(),
+    })
+    .passthrough(),
+  context_retrieved: z
+    .object({
+      items: z.array(z.unknown()).optional(),
+      budget_used: z.number().optional(),
+      budget_total: z.number().optional(),
+    })
+    .passthrough(),
+  external_change_detected: z
+    .object({ paths: z.array(s).optional() })
+    .passthrough(),
+  file_changed: z
+    .object({ path: s.optional(), change: s.optional() })
+    .passthrough(),
+  memory_written: anyObj,
+  // `text` is model output — decoders type it, but selectors must never surface
+  // it in the Activity narrative (§10).
+  model_completed: z
+    .object({ finish_reason: s.optional(), text: s.optional() })
+    .passthrough(),
+  model_started: z.object({ turn_index: z.number().optional() }).passthrough(),
+  plan_created: z
+    .object({ revision: z.number().optional(), steps: z.array(z.unknown()).optional() })
+    .passthrough(),
+  progress_stalled: z.object({ reason: s.optional() }).passthrough(),
+  resource_pressure: anyObj,
+  state_changed: z.object({ from: s.optional(), to: s.optional() }).passthrough(),
+  task_completed: anyObj,
+  task_failed: z.object({ reason: s.optional() }).passthrough(),
+  task_paused: anyObj,
+  task_started: z.object({ objective: s.optional() }).passthrough(),
+  test_failed: z.object({ passed: z.boolean().optional(), summary: s.optional() }).passthrough(),
+  test_passed: z.object({ passed: z.boolean().optional() }).passthrough(),
+  test_started: anyObj,
+  tool_completed: z
+    .object({
+      tool: s.optional(),
+      success: z.boolean().optional(),
+      tool_invocation_id: s.optional(),
+      rendered: s.optional(),
+    })
+    .passthrough(),
+  tool_started: z
+    .object({ tool: s.optional(), input: z.unknown().optional() })
+    .passthrough(),
+  verification_evidence: z
+    .object({
+      passed: z.boolean().optional(),
+      command: s.optional(),
+      kind: s.optional(),
+      outcome: s.optional(),
+      run_id: s.optional(),
+    })
+    .passthrough(),
+};
+
+export function hasDecoder(kind: string): kind is EventKind {
+  return Object.prototype.hasOwnProperty.call(PAYLOAD_DECODERS, kind);
+}
 
 export type DecodedEvent =
   | {
@@ -94,12 +154,13 @@ export type DecodedEvent =
 export function decodeEvent(raw: unknown): DecodedEvent {
   const env = wireEventEnvelope.safeParse(raw);
   if (!env.success) {
+    const r = raw as { kind?: unknown; seq?: unknown; ts_ms?: unknown };
     return {
       ok: false,
       reason: "bad_envelope",
-      kind: typeof (raw as { kind?: unknown })?.kind === "string" ? (raw as { kind: string }).kind : "?",
-      seq: Number((raw as { seq?: unknown })?.seq ?? -1),
-      ts: Number((raw as { ts_ms?: unknown })?.ts_ms ?? 0),
+      kind: typeof r?.kind === "string" ? r.kind : "?",
+      seq: Number(r?.seq ?? -1),
+      ts: Number(r?.ts_ms ?? 0),
       taskId: null,
       raw,
     };
@@ -107,24 +168,24 @@ export function decodeEvent(raw: unknown): DecodedEvent {
   const { kind, seq, ts_ms, task_id, payload } = env.data;
   const taskId = task_id ?? null;
 
-  if (!(KNOWN_EVENT_KINDS as readonly string[]).includes(kind)) {
+  if (!hasDecoder(kind)) {
     return { ok: false, reason: "unknown_kind", kind, seq, ts: ts_ms, taskId, raw: payload };
   }
 
-  const decoder = PAYLOAD_DECODERS[kind as EventKind];
-  const parsed = decoder.safeParse(payload);
+  const parsed = PAYLOAD_DECODERS[kind].safeParse(payload);
   if (!parsed.success) {
     return { ok: false, reason: "bad_payload", kind, seq, ts: ts_ms, taskId, raw: payload };
   }
 
-  return { ok: true, kind: kind as EventKind, seq, ts: ts_ms, taskId, payload: parsed.data };
+  return { ok: true, kind, seq, ts: ts_ms, taskId, payload: parsed.data };
 }
 
-/**
- * Coverage gate hook (docs/PLAN.md §7 "Contract"). CI compares
- * `KNOWN_EVENT_KINDS` against the kinds actually present in the schema export
- * and in captured traces, and fails when Core emits a kind with no decoder.
- */
+/** Coverage: which kinds have a decoder tightened past `z.unknown()`.
+ *  CI (`test/decoders.test.ts`) fails if any is `false` or if the kind set
+ *  drifts from `schemas/event-kinds.txt`. */
 export function coverageReport(): { kind: EventKind; tightened: boolean }[] {
-  return KNOWN_EVENT_KINDS.map((kind) => ({ kind, tightened: TIGHTENED.has(kind) }));
+  return KNOWN_EVENT_KINDS.map((kind) => ({
+    kind,
+    tightened: PAYLOAD_DECODERS[kind] !== undefined,
+  }));
 }

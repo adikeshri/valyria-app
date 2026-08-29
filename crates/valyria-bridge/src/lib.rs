@@ -19,6 +19,7 @@ pub mod event_pump;
 pub mod git;
 pub mod session;
 pub mod supervisor;
+pub mod watcher;
 pub mod workspace;
 pub mod workspace_fs;
 
@@ -29,6 +30,7 @@ pub use event_pump::{EventBatch, EventPump, PumpMessage};
 pub use git::{GitCommit, GitEntry, GitRepo};
 pub use session::{negotiate, ConnectionState, NegotiatedSession, CLIENT_NAME};
 pub use supervisor::{spawn_or_adopt, Origin, Session, SupervisorConfig};
+pub use watcher::WorkspaceWatcher;
 pub use workspace::{
     ensure_run_dir, meta_path, pid_path, run_dir, socket_path, valyria_home, WorkspaceId,
 };

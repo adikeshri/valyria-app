@@ -145,3 +145,60 @@ function normalizeState(wire: string): TaskState | "unknown" {
 export function replay(rawEvents: readonly unknown[]): StoreState {
   return applyBatch(emptyStore(), rawEvents);
 }
+
+/** A `task_list` / `task_status` row. The event stream never carries the
+ *  objective (`task_started` payload is `{}`), so it is merged in from here. */
+export interface TaskSummaryLike {
+  task_id: string;
+  objective: string;
+  state: string;
+  created_at_ms?: number;
+  updated_at_ms?: number;
+}
+
+const TERMINAL_STATES = new Set<TaskState | "unknown">(["completed", "failed", "cancelled"]);
+
+/** Merge task summaries into the projection. The event stream stays
+ *  authoritative for `state` / `terminal` on any task it has actually touched
+ *  (`lastSeq > 0`); summaries fill objective, and everything for
+ *  history-only tasks. */
+export function mergeTaskSummaries(
+  state: StoreState,
+  summaries: readonly TaskSummaryLike[],
+): StoreState {
+  let tasks = state.tasks;
+  let changed = false;
+
+  for (const su of summaries) {
+    const prev = tasks[su.task_id];
+    const streamed = prev !== undefined && prev.lastSeq > 0;
+    const summaryState = normalizeState(su.state);
+
+    const merged: TaskProjection = {
+      id: su.task_id,
+      state: streamed ? prev.state : summaryState,
+      objective: prev?.objective ?? (su.objective || null),
+      lastSeq: prev?.lastSeq ?? 0,
+      firstSeenSeq: prev?.firstSeenSeq ?? 0,
+      firstTs: prev?.firstTs ?? su.created_at_ms ?? 0,
+      lastTs: prev?.lastTs ?? su.updated_at_ms ?? 0,
+      terminal: streamed ? prev.terminal : TERMINAL_STATES.has(summaryState),
+    };
+
+    if (
+      !prev ||
+      prev.state !== merged.state ||
+      prev.objective !== merged.objective ||
+      prev.terminal !== merged.terminal ||
+      prev.lastTs !== merged.lastTs
+    ) {
+      if (!changed) {
+        tasks = { ...tasks };
+        changed = true;
+      }
+      tasks[su.task_id] = merged;
+    }
+  }
+
+  return changed ? { ...state, tasks } : state;
+}

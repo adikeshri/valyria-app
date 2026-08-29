@@ -209,6 +209,66 @@ impl WorkspaceFs {
     }
 }
 
+/// Directory names skipped by [`WorkspaceFs::search`] — heavy, rarely what a
+/// filename search wants.
+const SEARCH_PRUNE: &[&str] = &[
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".next",
+    ".venv",
+    "__pycache__",
+];
+
+impl WorkspaceFs {
+    /// Substring filename search (case-insensitive) over the whole tree,
+    /// breadth-first, capped at `limit`. A display fallback marked "filename
+    /// match only" in the UI — it is **not** Core's ranked retrieval (G3).
+    pub fn search(&self, query: &str, limit: usize) -> Result<Vec<String>> {
+        let q = query.trim().to_lowercase();
+        if q.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut out = Vec::new();
+        let mut queue = std::collections::VecDeque::from([self.root.clone()]);
+        while let Some(dir) = queue.pop_front() {
+            if out.len() >= limit {
+                break;
+            }
+            let Ok(read) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in read.flatten() {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                let Ok(ft) = entry.file_type() else { continue };
+                if ft.is_dir() {
+                    if !SEARCH_PRUNE.contains(&name.as_ref()) {
+                        queue.push_back(entry.path());
+                    }
+                    continue;
+                }
+                if !ft.is_file() {
+                    continue;
+                }
+                if let Ok(rel) = entry.path().strip_prefix(&self.root) {
+                    let rel = rel.to_string_lossy().replace('\\', "/");
+                    if rel.to_lowercase().contains(&q) {
+                        out.push(rel);
+                        if out.len() >= limit {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        out.sort();
+        Ok(out)
+    }
+}
+
 fn read_capped(path: &Path, cap: usize) -> Result<Vec<u8>> {
     use std::io::Read;
     let file = std::fs::File::open(path).map_err(|source| BridgeError::Fs {
@@ -294,6 +354,17 @@ mod tests {
             err.code(),
             "bridge.fs.io" | "bridge.fs.path_escape"
         ));
+    }
+
+    #[test]
+    fn search_matches_by_substring_and_prunes_heavy_dirs() {
+        let (dir, fs) = fixture();
+        std::fs::create_dir_all(dir.path().join("node_modules/pkg")).unwrap();
+        std::fs::write(dir.path().join("node_modules/pkg/lib.rs"), "x").unwrap();
+        let hits = fs.search("lib", 50).unwrap();
+        assert!(hits.contains(&"src/lib.rs".to_string()));
+        assert!(!hits.iter().any(|h| h.contains("node_modules")));
+        assert!(fs.search("", 50).unwrap().is_empty());
     }
 
     #[test]

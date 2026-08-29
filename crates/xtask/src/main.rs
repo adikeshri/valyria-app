@@ -169,19 +169,63 @@ fn check_protocol(repo: &Path) -> Result<(), String> {
         let b = std::fs::read_to_string(sibling.join(name))
             .map_err(|e| format!("reading ../valyria {name}: {e}"))?;
         if a != b {
-            mismatches.push(name);
+            mismatches.push(name.to_string());
         }
     }
 
+    // Event-kind coverage (D5 / G12): the vendored kind list must equal the
+    // string literals in Core's `valyria_events::EventKind::as_str`.
+    let vendored_kinds = read_lines_sorted(&vendored.join("event-kinds.txt"))?;
+    let core_kind_rs = repo
+        .parent()
+        .unwrap()
+        .join("valyria/crates/valyria-events/src/kind.rs");
+    match std::fs::read_to_string(&core_kind_rs) {
+        Ok(src) => {
+            let mut core_kinds: Vec<String> = src
+                .lines()
+                .filter_map(|l| {
+                    let l = l.trim();
+                    // matches:  EventKind::Foo => "foo_bar",
+                    let start = l.find("=> \"")? + 4;
+                    let end = l[start..].find('"')? + start;
+                    Some(l[start..end].to_string())
+                })
+                .filter(|k| k.chars().all(|c| c.is_ascii_lowercase() || c == '_'))
+                .collect();
+            core_kinds.sort();
+            core_kinds.dedup();
+            if core_kinds != vendored_kinds {
+                mismatches.push(format!(
+                    "event-kinds.txt (vendored {:?} vs Core {:?})",
+                    vendored_kinds, core_kinds
+                ));
+            }
+        }
+        Err(e) => return Err(format!("reading {}: {e}", core_kind_rs.display())),
+    }
+
     if mismatches.is_empty() {
-        println!("check-protocol: ok — vendored schemas match ../valyria");
+        println!("check-protocol: ok — vendored schemas and event kinds match ../valyria");
         Ok(())
     } else {
         Err(format!(
-            "vendored schemas differ from ../valyria: {}\n\
+            "vendored protocol artifacts differ from ../valyria: {}\n\
              If ../valyria is at the pinned rev, run `xtask sync-core` and commit. \
              If it is ahead, this is an unrecorded Core bump.",
             mismatches.join(", ")
         ))
     }
+}
+
+fn read_lines_sorted(path: &Path) -> Result<Vec<String>, String> {
+    let mut v: Vec<String> = std::fs::read_to_string(path)
+        .map_err(|e| format!("reading {}: {e}", path.display()))?
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    v.sort();
+    v.dedup();
+    Ok(v)
 }

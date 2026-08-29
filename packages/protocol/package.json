@@ -11,13 +11,16 @@
   },
   "scripts": {
     "codegen": "node scripts/codegen.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/node": "^22.10.2",
     "json-schema-to-typescript": "^15.0.4",
+    "tsx": "^4.19.2",
     "typescript": "~6.0.2"
   }
 }

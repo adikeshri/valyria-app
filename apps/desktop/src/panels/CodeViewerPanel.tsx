@@ -31,9 +31,15 @@ export default function CodeViewerPanel() {
   const selectedFile = useApp((s) => s.selectedFile);
   const setDockTab = useApp((s) => s.setDockTab);
   const liveSession = useLive((s) => s.session);
+  const fsRev = useLive((s) => s.fsRev);
+  const fsChangedPaths = useLive((s) => s.fsChangedPaths);
 
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Re-read the open file when the watcher reports it changed on disk.
+  const reloadKey =
+    liveSession && selectedFile && fsChangedPaths.includes(selectedFile) ? fsRev : 0;
 
   useEffect(() => {
     setError(null);
@@ -63,7 +69,7 @@ export default function CodeViewerPanel() {
     }
     const entry = fileContents[selectedFile];
     setLoaded(entry ? { path: selectedFile, code: entry.code, language: entry.language, local: false } : null);
-  }, [selectedFile, liveSession]);
+  }, [selectedFile, liveSession, reloadKey]);
 
   if (!selectedFile || (!loaded && !error)) {
     return (

@@ -1,6 +1,8 @@
 import { CheckCircle2, Circle, CircleDot, Clock, Cpu, FileDiff, ShieldCheck, Bookmark, Pause, X } from "lucide-react";
 import { currentTask, taskHistory } from "../data/mock";
 import { useApp } from "../state/store";
+import { useLive } from "../core/liveStore";
+import LiveTaskPanel from "./LiveTaskPanel";
 import type { TaskState } from "../types/domain";
 
 const stateLabel: Record<TaskState, string> = {
@@ -32,6 +34,12 @@ function fmtDuration(sec: number) {
 }
 
 export default function TaskDetailPanel() {
+  const liveSession = useLive((s) => s.session);
+  if (liveSession) return <LiveTaskPanel />;
+  return <MockTaskDetailPanel />;
+}
+
+function MockTaskDetailPanel() {
   const selectedTaskId = useApp((s) => s.selectedTaskId);
   const setSelectedFile = useApp((s) => s.setSelectedFile);
   const setDockTab = useApp((s) => s.setDockTab);

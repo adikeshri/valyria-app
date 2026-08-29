@@ -4,6 +4,8 @@ import {
 } from "lucide-react";
 import { timeline } from "../data/mock";
 import type { TimelineKind } from "../types/domain";
+import { useLive } from "../core/liveStore";
+import LiveActivityFeed from "./LiveActivityFeed";
 
 function iconFor(kind: TimelineKind) {
   switch (kind) {
@@ -20,6 +22,12 @@ function iconFor(kind: TimelineKind) {
 }
 
 export default function ActivityFeed() {
+  const liveSession = useLive((s) => s.session);
+  if (liveSession) return <LiveActivityFeed />;
+  return <MockActivityFeed />;
+}
+
+function MockActivityFeed() {
   return (
     <div className="scroll-y" style={{ height: "100%", padding: "10px 14px" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>

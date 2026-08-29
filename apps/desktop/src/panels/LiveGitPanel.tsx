@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { GitBranch, GitCommitHorizontal, FileDiff } from "lucide-react";
 import { repo, type GitCommit, type GitEntry } from "../core/repo";
 import { useApp } from "../state/store";
+import { useLive } from "../core/liveStore";
 import ServedLocally from "../components/ServedLocally";
 
 export default function LiveGitPanel() {
@@ -11,6 +12,7 @@ export default function LiveGitPanel() {
   const [notRepo, setNotRepo] = useState(false);
   const setSelectedFile = useApp((s) => s.setSelectedFile);
   const setDockTab = useApp((s) => s.setDockTab);
+  const fsRev = useLive((s) => s.fsRev);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +35,7 @@ export default function LiveGitPanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [fsRev]);
 
   if (notRepo) {
     return (

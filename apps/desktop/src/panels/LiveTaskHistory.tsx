@@ -1,49 +1,62 @@
+import { useEffect } from "react";
 import { CheckCircle2, XCircle, Loader2, CircleDashed, Clock } from "lucide-react";
-import { taskHistory } from "../data/mock";
-import type { Task, TaskState } from "../types/domain";
-import { useApp } from "../state/store";
+import { tasksByRecency, type TaskProjection } from "@valyria/state";
 import { useLive } from "../core/liveStore";
-import LiveTaskHistory from "./LiveTaskHistory";
+import { useApp } from "../state/store";
+import { dayBucket, relTime, isActive } from "../core/view";
 
-function stateIcon(state: TaskState) {
-  switch (state) {
+function stateIcon(t: TaskProjection) {
+  switch (t.state) {
     case "completed": return <CheckCircle2 size={13} style={{ color: "var(--success)" }} />;
     case "failed": return <XCircle size={13} style={{ color: "var(--danger)" }} />;
+    case "cancelled": return <CircleDashed size={13} style={{ color: "var(--text-tertiary)" }} />;
     case "waiting_for_permission": return <Clock size={13} style={{ color: "var(--warning)" }} />;
     case "paused": return <CircleDashed size={13} style={{ color: "var(--text-tertiary)" }} />;
     default: return <Loader2 size={13} className="spin" style={{ color: "var(--info)" }} />;
   }
 }
 
-function fmtDuration(sec: number) {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}m ${s}s`;
-}
+const BUCKETS = ["Today", "Yesterday", "Earlier"] as const;
 
-export default function TaskHistoryPanel() {
-  const liveSession = useLive((s) => s.session);
-  if (liveSession) return <LiveTaskHistory />;
-  return <MockTaskHistoryPanel />;
-}
-
-function MockTaskHistoryPanel() {
+export default function LiveTaskHistory() {
+  const store = useLive((s) => s.store);
+  const refreshTasks = useLive((s) => s.refreshTasks);
   const selectedTaskId = useApp((s) => s.selectedTaskId);
   const setSelectedTaskId = useApp((s) => s.setSelectedTaskId);
   const setCenterTab = useApp((s) => s.setCenterTab);
 
-  const groups: Record<string, Task[]> = {};
-  for (const t of taskHistory) {
-    groups[t.day] = groups[t.day] || [];
-    groups[t.day].push(t);
+  useEffect(() => { void refreshTasks(); }, [refreshTasks]);
+
+  const now = Date.now();
+  const all = tasksByRecency(store);
+
+  if (all.length === 0) {
+    return (
+      <div className="panel-empty" style={{ padding: 24 }}>
+        <Clock size={20} />
+        <strong>No tasks yet</strong>
+        <span>Tasks you run in this workspace appear here.</span>
+      </div>
+    );
+  }
+
+  const grouped = new Map<string, TaskProjection[]>();
+  for (const t of all) {
+    const k = dayBucket(t.lastTs || t.firstTs, now);
+    let arr = grouped.get(k);
+    if (!arr) {
+      arr = [];
+      grouped.set(k, arr);
+    }
+    arr.push(t);
   }
 
   return (
     <div className="scroll-y" style={{ height: "100%", paddingBottom: 8 }}>
-      {Object.entries(groups).map(([day, tasks]) => (
+      {BUCKETS.filter((b) => grouped.has(b)).map((day) => (
         <div key={day}>
           <div className="section-label" style={{ padding: "10px 12px 4px" }}>{day}</div>
-          {tasks.map((t) => (
+          {grouped.get(day)!.map((t) => (
             <button
               key={t.id}
               className="no-native-focus"
@@ -55,17 +68,17 @@ function MockTaskHistoryPanel() {
               onMouseEnter={(e) => { if (selectedTaskId !== t.id) e.currentTarget.style.background = "var(--bg-hover)"; }}
               onMouseLeave={(e) => { if (selectedTaskId !== t.id) e.currentTarget.style.background = "transparent"; }}
             >
-              <span style={{ marginTop: 1, flexShrink: 0 }}>{stateIcon(t.state)}</span>
+              <span style={{ marginTop: 1, flexShrink: 0 }}>{stateIcon(t)}</span>
               <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                 <span style={{
                   fontSize: "var(--text-sm)", color: "var(--text-primary)",
                   overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box",
                   WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
                 }}>
-                  {t.objective}
+                  {t.objective ?? "(objective pending)"}
                 </span>
                 <span style={{ fontSize: 10.5, color: "var(--text-tertiary)" }}>
-                  {t.updatedAt} · {fmtDuration(t.durationSec)} · {t.model.split(" ")[0]}
+                  {t.state}{isActive(t.state) ? " · running" : ""} · {relTime(t.lastTs || t.firstTs, now)}
                 </span>
               </span>
             </button>

@@ -68,6 +68,9 @@ pub enum BridgeError {
 
     #[error("git error: {0}")]
     Git(String),
+
+    #[error("filesystem watch error: {0}")]
+    Watch(String),
 }
 
 impl BridgeError {
@@ -88,6 +91,7 @@ impl BridgeError {
             BridgeError::PathEscape { .. } => "bridge.fs.path_escape",
             BridgeError::Fs { .. } => "bridge.fs.io",
             BridgeError::Git(_) => "bridge.git",
+            BridgeError::Watch(_) => "bridge.fs.watch",
         }
     }
 

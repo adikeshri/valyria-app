@@ -9,10 +9,10 @@
     "exactOptionalPropertyTypes": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": [],
+    "types": ["node"],
     "paths": {
       "@valyria/protocol": ["../protocol/src/index.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "test"]
 }

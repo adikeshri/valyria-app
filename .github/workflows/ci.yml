@@ -16,25 +16,8 @@ env:
   RUST_TOOLCHAIN: "1.97.1"
 
 jobs:
-  renderer:
-    name: Renderer (lint · typecheck · build)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/desktop
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: apps/desktop/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
-
-  packages:
-    name: Packages (protocol · state — codegen · typecheck)
+  node:
+    name: Node (codegen · typecheck · test · lint · build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,10 +27,15 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
+
       - run: npm run codegen
       # codegen output is committed; fail if it drifted from the schemas.
       - run: git diff --exit-code packages/protocol/src/generated
+
       - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint -w desktop
+      - run: npm run build -w desktop
 
   rust:
     name: Rust (fmt · clippy · test · gates)

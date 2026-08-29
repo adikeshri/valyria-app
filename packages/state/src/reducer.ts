@@ -5,6 +5,7 @@
 import { decodeEvent, type DecodedEvent } from "@valyria/protocol";
 import {
   emptyStore,
+  type ConnectionState,
   type StoreState,
   type TaskProjection,
   type TaskState,
@@ -15,10 +16,18 @@ export function applyRawEvent(state: StoreState, raw: unknown): StoreState {
   return applyDecoded(state, decodeEvent(raw));
 }
 
+/** Fold a whole batch (the pump's unit of delivery) in one pass. */
+export function applyBatch(state: StoreState, raws: readonly unknown[]): StoreState {
+  return raws.reduce<StoreState>((s, r) => applyRawEvent(s, r), state);
+}
+
+/** Set the transport-level connection state (not event-derived). */
+export function setConnection(state: StoreState, connection: ConnectionState): StoreState {
+  return state.connection === connection ? state : { ...state, connection };
+}
+
 /** Apply an already-decoded event. Split out so tests can inject decoder output. */
 export function applyDecoded(state: StoreState, ev: DecodedEvent): StoreState {
-  // Contiguity: the pump asserts firstSeq === lastSeq + 1 per batch; here we
-  // guard per event so a replayed trace with a hole is caught in unit tests too.
   const expected = state.lastSeq + 1;
   if (ev.seq < expected) {
     return state; // already applied (idempotent resume) — ignore
@@ -36,6 +45,7 @@ export function applyDecoded(state: StoreState, ev: DecodedEvent): StoreState {
         ts: ev.ts,
         kind: ev.kind,
         taskId: ev.taskId,
+        payload: ev.ok ? ev.payload : ev.raw,
         degraded: !ev.ok,
       },
     ],
@@ -46,6 +56,19 @@ export function applyDecoded(state: StoreState, ev: DecodedEvent): StoreState {
       ...state.tasks,
       [ev.taskId]: advanceTask(state.tasks[ev.taskId], ev),
     };
+
+    if (ev.ok && ev.kind === "plan_created") {
+      next.plans = {
+        ...state.plans,
+        [ev.taskId]: { taskId: ev.taskId, seq: ev.seq, payload: ev.payload },
+      };
+    }
+    if (ev.ok && ev.kind === "approval_requested") {
+      next.approvals = {
+        ...state.approvals,
+        [ev.taskId]: { taskId: ev.taskId, seq: ev.seq, payload: ev.payload },
+      };
+    }
   }
   return next;
 }
@@ -54,52 +77,71 @@ function advanceTask(
   prev: TaskProjection | undefined,
   ev: DecodedEvent,
 ): TaskProjection {
-  const base: TaskProjection =
-    prev ??
-    {
-      id: ev.taskId as string,
-      state: "unknown",
-      lastSeq: ev.seq,
-      firstSeenSeq: ev.seq,
-      terminal: false,
-    };
+  const base: TaskProjection = prev ?? {
+    id: ev.taskId as string,
+    state: "unknown",
+    objective: null,
+    lastSeq: ev.seq,
+    firstSeenSeq: ev.seq,
+    firstTs: ev.ts,
+    lastTs: ev.ts,
+    terminal: false,
+  };
 
   let taskState = base.state;
   let terminal = base.terminal;
+  let objective = base.objective;
 
-  if (ev.ok && ev.kind === "state_changed") {
-    const to = (ev.payload as { to?: unknown } | null)?.to;
-    if (typeof to === "string") taskState = normalizeState(to);
-  }
-  if (ev.ok && ev.kind === "task_completed") {
-    taskState = "completed";
-    terminal = true;
-  }
-  if (ev.ok && ev.kind === "task_failed") {
-    taskState = "failed";
-    terminal = true;
+  if (ev.ok) {
+    const payload = (ev.payload ?? {}) as Record<string, unknown>;
+    if (ev.kind === "task_started" && typeof payload.objective === "string") {
+      objective = payload.objective;
+    }
+    if (ev.kind === "state_changed" && typeof payload.to === "string") {
+      taskState = normalizeState(payload.to);
+    }
+    if (ev.kind === "task_completed") {
+      taskState = "completed";
+      terminal = true;
+    }
+    if (ev.kind === "task_failed") {
+      taskState = "failed";
+      terminal = true;
+    }
   }
 
-  return { ...base, state: taskState, lastSeq: ev.seq, terminal };
+  return {
+    ...base,
+    state: taskState,
+    objective,
+    lastSeq: ev.seq,
+    lastTs: ev.ts,
+    terminal,
+  };
 }
 
-/** Core's state names are SCREAMING_SNAKE on the wire; the store uses lower. */
+/** Core's state names are SCREAMING_SNAKE on the wire; the store uses lower and
+ *  keeps them 1:1 (§41 — no bucketing). Unknown values become "unknown". */
 function normalizeState(wire: string): TaskState | "unknown" {
   const v = wire.toLowerCase();
   const known: TaskState[] = [
+    "idle",
+    "understanding",
+    "discovery",
     "planning",
-    "running",
-    "waiting_for_permission",
+    "implementing",
     "verifying",
     "repairing",
+    "waiting_for_permission",
     "paused",
     "completed",
     "failed",
+    "cancelled",
   ];
   return (known as string[]).includes(v) ? (v as TaskState) : "unknown";
 }
 
 /** Replay a whole trace from the empty store — the primary test entry point. */
 export function replay(rawEvents: readonly unknown[]): StoreState {
-  return rawEvents.reduce<StoreState>((s, e) => applyRawEvent(s, e), emptyStore());
+  return applyBatch(emptyStore(), rawEvents);
 }

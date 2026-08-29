@@ -158,10 +158,12 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: apps/desktop/package-lock.json
+          # Single root lockfile — this is an npm workspace (INTEGRATION §9).
+          cache-dependency-path: package-lock.json
 
       - name: Install frontend dependencies
-        working-directory: apps/desktop
+        # `npm ci` at the workspace root installs apps/desktop too; tauri-action's
+        # beforeBuildCommand (`npm run build`) then runs against it.
         run: npm ci
 
       - name: Signing status

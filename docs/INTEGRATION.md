@@ -423,6 +423,36 @@ transitions, computed by diffing the projection in `liveStore`. `session_open`
 never yet passes a mode from the UI — the app opens at Core's default and the
 switch restarts into a chosen one.
 
+**Phase 6 — models, hardware, first run (complete)**.
+
+`valyria-bridge`: `CoreClient::model_list`; new `config_writer` module — a
+generic dotted-key TOML read-modify-write (`write_key`, `config_path`,
+`ConfigScope`), atomic via temp-file + rename, siblings preserved,
+`toml` + `std` only (layering unaffected). Host: `model_list`,
+`workspace_status`, and `config_write { scope, key, value }` — edits the file
+then returns a fresh `config_show` in one call (D13). `models_config.rs`
+proves both against real Core: `model_list` decodes (empty on a clean box —
+D-INT-3), and `write_key("log.format","json")` → `config_show` reports it with
+`origin = "global"`; a nested `network.internet` write shows up in the policy
+blob.
+
+Renderer dispatchers (live when a session is open): `LiveModelsPanel` —
+`model_list` inventory (id, family, quant, GiB, license, installed); install /
+remove **disabled with the G5 reason**, "the app never downloads a model" note.
+`LiveHardwarePanel` — `doctor_run` rows (disk / model store / sandbox) with
+status + remediation, and an explicit **"Not reported by Core"** block for CPU /
+memory / GPU / VRAM / accelerator naming G4; no recommendation. `LiveFirstRun` —
+welcome → real `doctor_run` → open a repository → one harmless
+`task_create("summarize the top-level modules")` watched live to completion →
+"Runtime verified"; **no model-install step** (D-INT-2). `LiveConfigSettings`
+in Settings → Agent — write-then-verify for `network.internet` and `log.format`,
+each showing effective value + `origin`; the mock iteration/verification knobs
+are hidden when live (G6 — no key). `Header` tells the truth when live: model
+chip = sole installed model or "not reported", the RAM chip is dropped (G4),
+"N approvals waiting" from `blockedTasks`. First run auto-opens once
+(`localStorage` `valyria.seenFirstRun`). **Notifications** were delivered in
+Phase 5.
+
 **Open:**
 
 - **Single bundled binary vs. split runtime/engine** — resolved by RI1's

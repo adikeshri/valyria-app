@@ -9,6 +9,7 @@ import { modelList, hardware } from "../data/mock";
 import LiveAutonomyControl from "./LiveAutonomyControl";
 import LiveSecurityOverview from "./LiveSecurityOverview";
 import LiveRepoInstructions from "./LiveRepoInstructions";
+import LiveConfigSettings from "./LiveConfigSettings";
 import { NOTIFY_CATEGORIES, loadPrefs, savePrefs, type NotifyPrefs } from "../core/notify";
 
 type Section = "agent" | "models" | "security" | "repository" | "application";
@@ -160,13 +161,21 @@ export default function SettingsView() {
               <>
                 <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 650, marginBottom: 16 }}>Agent</h2>
                 <Field label="Autonomy level"><AutonomySetting /></Field>
-                <Field label="Iteration limit" origin="~/.valyria/config.toml">
-                  <input className="no-native-focus" type="range" min={4} max={40} defaultValue={20} style={{ width: "100%" }} />
-                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>20 steps before the driver hands off rather than spinning silently.</div>
-                </Field>
-                <Field label="Mandatory full verification before completion" origin="compiled default">
-                  <Toggle checked onChange={() => {}} label="Always run the full suite once, even after targeted tests pass" />
-                </Field>
+                {liveSession ? (
+                  <Field label="Runtime config">
+                    <LiveConfigSettings />
+                  </Field>
+                ) : (
+                  <>
+                    <Field label="Iteration limit" origin="~/.valyria/config.toml">
+                      <input className="no-native-focus" type="range" min={4} max={40} defaultValue={20} style={{ width: "100%" }} />
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>20 steps before the driver hands off rather than spinning silently.</div>
+                    </Field>
+                    <Field label="Mandatory full verification before completion" origin="compiled default">
+                      <Toggle checked onChange={() => {}} label="Always run the full suite once, even after targeted tests pass" />
+                    </Field>
+                  </>
+                )}
               </>
             )}
             {section === "models" && (

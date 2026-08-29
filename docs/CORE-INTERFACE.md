@@ -164,19 +164,27 @@ already lists these as `model.install/remove/inspect` "with progress streams".
 says so; it does not shell out to a downloader. **No model is ever fetched by the
 app** (§20).
 
-### G6 — Config is read-only (§24)
+### G6 — Config is read-only, and narrow (§24)
 
 `config_show` returns effective values with origin. There is no `config_set`.
+The surface is also **small**: `config_show` reports only three leaves today —
+`permission.mode`, `log.format`, and `network` (a whole `NetworkPolicy` struct,
+debug-formatted into one string). The PRD's Settings has ~15 knobs (iteration
+limit, verification policy, model role bindings, context window, …); none of
+those keys exist in Core's `Settings` yet.
 
-*Requested:* `config_set { key, value, scope: "workspace" | "user" }`, validated
-against Core's compiled-in policy floor.
+*Requested:* `config_set { key, value, scope: "workspace" | "user" }` validated
+against the policy floor; and `config_show` broadening as the owning subsystems
+land (per Core's own `settings.rs` note).
 
-*Until then:* Settings writes go to `<repo>/.valyria/config.toml` or
-`~/.valyria/config.toml` — Core's own documented user-facing files — and the app
-immediately re-reads `config_show` and displays the **effective** value with its
-origin. If the write did not take effect (policy floor, precedence), the UI shows
-the resolved value, not the value we wrote. Settings that Core cannot confirm are
-marked pending.
+*Until then:* the app edits `<repo>/.valyria/config.toml` or
+`~/.valyria/config.toml` — Core's own documented files — via a generic dotted-key
+TOML writer (`valyria_bridge::config_writer`), then immediately re-reads
+`config_show` and displays the **effective** value with its origin. If the write
+did not take effect (policy floor, precedence), the UI shows the resolved value,
+not the value we wrote. What the app exposes today: `log.format` and
+`network.internet` (written as a nested leaf; read back out of the `network`
+blob). The mock Settings knobs with no Core key are hidden when live.
 
 ### G7 — No context provenance (§34)
 

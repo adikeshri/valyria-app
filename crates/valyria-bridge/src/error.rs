@@ -71,6 +71,9 @@ pub enum BridgeError {
 
     #[error("filesystem watch error: {0}")]
     Watch(String),
+
+    #[error("config file error: {0}")]
+    Config(String),
 }
 
 impl BridgeError {
@@ -92,6 +95,7 @@ impl BridgeError {
             BridgeError::Fs { .. } => "bridge.fs.io",
             BridgeError::Git(_) => "bridge.git",
             BridgeError::Watch(_) => "bridge.fs.watch",
+            BridgeError::Config(_) => "bridge.config.write",
         }
     }
 

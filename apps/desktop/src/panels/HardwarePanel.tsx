@@ -1,5 +1,13 @@
 import { Cpu, MemoryStick, Gauge, Sparkles, Zap } from "lucide-react";
 import { hardware } from "../data/mock";
+import { useLive } from "../core/liveStore";
+import LiveHardwarePanel from "./LiveHardwarePanel";
+
+export default function HardwarePanel() {
+  const liveSession = useLive((s) => s.session);
+  if (liveSession) return <LiveHardwarePanel />;
+  return <MockHardwarePanel />;
+}
 
 function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
@@ -11,7 +19,7 @@ function Row({ icon, label, value }: { icon: React.ReactNode; label: string; val
   );
 }
 
-export default function HardwarePanel() {
+function MockHardwarePanel() {
   return (
     <div className="scroll-y" style={{ height: "100%" }}>
       <Row icon={<Cpu size={13} />} label="CPU" value={`${hardware.cpu} (${hardware.cores} cores)`} />

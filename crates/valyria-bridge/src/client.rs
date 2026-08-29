@@ -17,8 +17,9 @@ use valyria_protocol::{
     TaskIdRequest, TaskRollbackRequest, TaskStatusRequest, WireError, WireEvent,
 };
 use valyria_protocol::{
-    ConfigShowResponse, DoctorRunResponse, HelloResponse, PlanGetResponse, TaskListResponse,
-    TaskReportResponse, TaskRollbackResponse, TaskStatusResponse, WorkspaceStatusResponse,
+    ConfigShowResponse, DoctorRunResponse, HelloResponse, ModelListResponse, PlanGetResponse,
+    TaskListResponse, TaskReportResponse, TaskRollbackResponse, TaskStatusResponse,
+    WorkspaceStatusResponse,
 };
 
 use crate::error::{BridgeError, Result};
@@ -216,6 +217,16 @@ impl CoreClient {
         match self.call(Request::ConfigShow(Empty {})).await? {
             Response::ConfigShow(r) => Ok(r),
             other => Err(unexpected("ConfigShow", other)),
+        }
+    }
+
+    /// The model inventory (`model_list`). Read-only: v1 has no
+    /// install/remove/activate on the wire (CORE-INTERFACE G5), and the app has
+    /// no code path that downloads a model (docs/INTEGRATION.md D-INT-3).
+    pub async fn model_list(&self) -> Result<ModelListResponse> {
+        match self.call(Request::ModelList(Empty {})).await? {
+            Response::ModelList(r) => Ok(r),
+            other => Err(unexpected("ModelList", other)),
         }
     }
 

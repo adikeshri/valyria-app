@@ -1,15 +1,39 @@
 name: Release
 
-# Builds the native installers Tauri can only produce on their own OS
-# (.dmg / .app on macOS, .msi / .exe on Windows, .deb / .AppImage on Linux).
-# Runs on a version tag, or on demand.
+# Builds a `valyria` Core runtime binary from the Core repo, bundles it into the
+# Valyria App as a Tauri sidecar (docs/INTEGRATION.md D-INT-1 / §7), produces the
+# native installer per platform, and publishes them.
+#
+#   .dmg / .app        macOS (arm64 + x86_64)
+#   .deb / .AppImage   Linux x86_64
+#   .msi / .exe        Windows x86_64 (tier 3 — installs, refuses to start a
+#                      session; the bundled valyria.exe cannot `serve`, G9)
+#
+#   push a `v*` tag        -> draft GitHub Release with installers attached
+#   manual dispatch        -> installers kept as workflow artifacts only
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      core_ref:
+        description: >-
+          Core git ref to build the runtime from. `pinned` reads
+          core.lock.json's git_rev (reproducible).
+        default: main
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
+
+env:
+  # Both repos pin this (rust-toolchain.toml here, ../valyria/rust-toolchain.toml).
+  RUST_TOOLCHAIN: "1.97.1"
+  CORE_REPO: adikeshri/valyria
 
 jobs:
   bundle:
@@ -18,29 +42,62 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-latest, label: macOS (Apple Silicon), args: "--target aarch64-apple-darwin" }
-          - { os: macos-latest, label: macOS (Intel), args: "--target x86_64-apple-darwin" }
-          - { os: ubuntu-latest, label: Linux, args: "" }
-          - { os: windows-latest, label: Windows, args: "" }
+          - os: macos-latest
+            label: macOS (Apple Silicon)
+            rust_target: aarch64-apple-darwin
+            exe: ""
+          - os: macos-latest
+            label: macOS (Intel)
+            rust_target: x86_64-apple-darwin
+            exe: ""
+          - os: ubuntu-22.04
+            label: Linux
+            rust_target: x86_64-unknown-linux-gnu
+            exe: ""
+          - os: windows-latest
+            label: Windows
+            rust_target: x86_64-pc-windows-msvc
+            exe: ".exe"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout valyria-app
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Resolve Core ref
+        id: core
+        shell: bash
+        run: |
+          ref='${{ github.event.inputs.core_ref || 'main' }}'
+          if [ "$ref" = "pinned" ]; then
+            ref="$(node -p "require('./core.lock.json').git_rev")"
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Core ref: $ref"
+
+      - name: Checkout Core (${{ steps.core.outputs.ref }})
+        uses: actions/checkout@v4
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: apps/desktop/package-lock.json
+          repository: ${{ env.CORE_REPO }}
+          ref: ${{ steps.core.outputs.ref }}
+          path: core
+          fetch-depth: 1
 
-      - name: Install Rust toolchain
-        run: rustup toolchain install stable --profile minimal --no-self-update
+      - name: Record Core SHA
+        id: core_sha
+        shell: bash
+        run: |
+          sha="$(git -C core rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Core SHA: $sha"
 
-      - name: Add macOS Rust targets
-        if: matrix.os == 'macos-latest'
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Rust ${{ env.RUST_TOOLCHAIN }} (+ ${{ matrix.rust_target }})
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.rust_target }}
 
       - name: Install Tauri system dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -49,24 +106,110 @@ jobs:
             librsvg2-dev \
             libgtk-3-dev \
             libssl-dev \
+            libfuse2 \
+            file \
             patchelf \
             build-essential
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: apps/desktop/src-tauri
+          # The app's src-tauri crate is a member of the repo-root Cargo
+          # workspace, so its build output lands in <repo>/target, not
+          # apps/desktop/src-tauri/target.
+          workspaces: |
+            . -> target
+            core -> target
+          key: ${{ matrix.rust_target }}-${{ steps.core_sha.outputs.sha }}
+
+      - name: Build Core runtime (valyria)
+        shell: bash
+        run: |
+          cargo build --release --locked --bin valyria \
+            --manifest-path core/Cargo.toml \
+            --target ${{ matrix.rust_target }}
+
+      - name: Stage Core sidecar
+        shell: bash
+        run: |
+          src="core/target/${{ matrix.rust_target }}/release/valyria${{ matrix.exe }}"
+          dst_dir="apps/desktop/src-tauri/binaries"
+          dst="$dst_dir/valyria-${{ matrix.rust_target }}${{ matrix.exe }}"
+          mkdir -p "$dst_dir"
+          cp "$src" "$dst"
+          chmod +x "$dst" || true
+          ls -l "$dst"
+
+      - name: Write Core provenance
+        shell: bash
+        run: |
+          cat > apps/desktop/src-tauri/core-provenance.json <<EOF
+          {
+            "core_repo": "https://github.com/${{ env.CORE_REPO }}",
+            "core_ref": "${{ steps.core.outputs.ref }}",
+            "core_sha": "${{ steps.core_sha.outputs.sha }}",
+            "rust_toolchain": "${{ env.RUST_TOOLCHAIN }}",
+            "target": "${{ matrix.rust_target }}",
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          cat apps/desktop/src-tauri/core-provenance.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
 
       - name: Install frontend dependencies
         working-directory: apps/desktop
         run: npm ci
 
-      - uses: tauri-apps/tauri-action@v0
+      - name: Signing status
+        id: sign
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.APPLE_CERTIFICATE }}" ]; then
+            echo "status=signed & notarized" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=unsigned (no APPLE_* secrets configured)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build installers (+ draft release on a tag)
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing / notarization — active when the secrets exist.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           projectPath: apps/desktop
-          args: ${{ matrix.args }}
+          args: >-
+            --target ${{ matrix.rust_target }}
+            --config src-tauri/tauri.release.conf.json
+          # Only a real `v*` tag cuts a Release. Manual runs build only; their
+          # installers are uploaded as workflow artifacts below.
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseBody: |
+            Bundled Core runtime: `${{ steps.core_sha.outputs.sha }}`
+            (ref `${{ steps.core.outputs.ref }}` of ${{ env.CORE_REPO }})
+
+            macOS builds: ${{ steps.sign.outputs.status }}.
+            Windows is tier 3 — the installer runs and explains itself; the
+            bundled runtime cannot serve over a Unix socket (G9).
+
+            Draft release — review the attached installers, then publish.
           releaseDraft: true
           prerelease: false
+
+      - name: Upload installers as workflow artifacts
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: valyria-app-${{ matrix.rust_target }}
+          path: target/${{ matrix.rust_target }}/release/bundle/**/*
+          if-no-files-found: error

@@ -208,21 +208,37 @@ No step blocks on a download.
 
 ## 7. Build and release pipeline
 
-Per-platform CI release job:
+`.github/workflows/release.yml` — one matrix job per target
+(`aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-unknown-linux-gnu`,
+`x86_64-pc-windows-msvc`). Triggered by a `v*` tag or manual dispatch.
 
-1. Checkout the app; resolve the Core binary — download the pinned release
-   artifact (target state) or build `vendor/valyria` `valyria-cli` with Core's
-   pinned Rust toolchain (interim).
-2. Place `valyria-<triple>` in `apps/desktop/src-tauri/bin/`.
-3. `tsc --noEmit`, lint, unit + trace-replay, `check-layering`,
-   `check-protocol`.
-4. `tauri build` → signed/notarized `.dmg` + `.app`, `.deb` + `.AppImage`, and a
-   Windows `.msi` that is honest about tier 3 (D14, G9).
-5. **Release gates:** fresh install → open a fixture repo → daemon spawns from
-   the sidecar → `hello` → a task completes on the fake model, **network
-   disabled**. Upgrade test → `$VALYRIA_HOME/models/` byte-identical.
-6. Bundle-size check against the PLAN §9 budget (120 MB/platform, models
-   excluded).
+1. Checkout `valyria-app`; checkout `adikeshri/valyria` at `core_ref` (default
+   `main`; `pinned` reads `core.lock.json`'s `git_rev`) into `core/`, record the
+   resolved SHA. No submodule.
+2. Toolchain `1.97.1` + the target (both repos pin it via `rust-toolchain.toml`).
+3. `cargo build --release --locked --bin valyria --manifest-path core/Cargo.toml
+   --target <triple>` → stage at `apps/desktop/src-tauri/binaries/valyria-<triple>`.
+   *(Measured: 15 MB, macOS arm64, no inference runtime linked yet — see RI1.)*
+4. Write `src-tauri/core-provenance.json` (`core_ref`, `core_sha`, target,
+   toolchain, timestamp) — bundled as an app resource for the
+   About/Compatibility surface.
+5. `npm ci` in `apps/desktop`; `tauri-action` runs `tauri build --target <triple>
+   --config src-tauri/tauri.release.conf.json`. The overlay adds
+   `bundle.externalBin: ["binaries/valyria"]` + the provenance resource — kept
+   out of `tauri.conf.json` so `tauri dev` needs no sidecar.
+6. **Upload:** `tauri-action` drafts a GitHub Release on
+   `adikeshri/valyria-app` and attaches `.dmg` / `.app.tar.gz`, `.deb` /
+   `.AppImage`, `.msi` / `.exe`, with the Core SHA and signing status in the
+   body. Manual builds with `publish=false` keep the installers as workflow
+   artifacts instead. *(GitHub Releases is the default target; swap the final
+   step for `aws s3 cp` / `wrangler r2` / a `gh release` to a dedicated repo if
+   a CDN or separate download host is wanted.)*
+7. macOS signing/notarization activates when the `APPLE_*` repo secrets exist;
+   without them the builds are unsigned (Gatekeeper will warn — RI2).
+
+**Not yet wired** (needs the supervisor increment): the fresh-install →
+`hello` → fake-model-task release gate, the `$VALYRIA_HOME/models/`
+byte-identical upgrade test, and the 120 MB bundle-size gate.
 
 ---
 
@@ -232,9 +248,9 @@ Per-platform CI release job:
 |---|---|---|
 | RI1 | The sidecar binary blows the 120 MB installer budget once a model runtime (llama.cpp / MLX) is statically linked into Core. | Measure a real Core build with the runtime linked *before* committing to a single bundled binary. Fallback: bundle `valyria serve` only; have Core fetch the inference engine as a second on-demand component on first `model_install`. Decision stays data-driven. |
 | RI2 | Unsigned nested executable → macOS Gatekeeper blocks the whole app. | Signing identity configured in the release job; a gate asserts the bundled binary is signed. |
-| RI3 | App Rust toolchain (`src-tauri` `rust-version` `1.77.2`) is older than Core's `1.97.1`; the sidecar and the host build under different toolchains. | Move the app to Core's pinned toolchain; add `rust-toolchain.toml` at the app root. |
+| RI3 | ~~App Rust toolchain older than Core's~~ | **Done.** Both repos pin `1.97.1` via `rust-toolchain.toml`; the release job installs that one toolchain for both builds. |
 | RI4 | Windows: bundling the binary does not help — no Unix socket, no sandbox (G9). | Tier 3 (D14): installs, shows version/compat, refuses to start a session with the reason. Revisit when Core lands a named-pipe transport. |
-| RI5 | Interim submodule friction (detached HEAD, `--recursive` clones, slow CI compiling 40 crates). | Aggressive CI caching keyed on `git_rev`; `xtask` guards that check out and verify the submodule rev. Removed entirely once Core publishes release artifacts. |
+| RI5 | The release job compiles ~40 Core crates per target (~70 s cached on an M-series; slower cold in CI). | `Swatinem/rust-cache` keyed on the resolved Core SHA + target. Acceptable for a release-only workflow. If it gets painful, split "build Core" into its own job that publishes the binary as an artifact, or consume a Core release artifact once Core publishes them. |
 
 ---
 

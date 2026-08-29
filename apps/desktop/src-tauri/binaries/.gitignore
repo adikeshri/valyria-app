@@ -1,0 +1,4 @@
+# The Core `valyria` sidecar is staged here by .github/workflows/release.yml
+# (built from the Core repo per docs/INTEGRATION.md §7). Never committed.
+valyria-*
+!.gitignore

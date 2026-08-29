@@ -1,8 +1,16 @@
 import { GitBranch, GitCommitHorizontal, FileDiff } from "lucide-react";
 import { gitCommits, modifiedFiles, CURRENT_BRANCH } from "../data/mock";
 import { useApp } from "../state/store";
+import { useLive } from "../core/liveStore";
+import LiveGitPanel from "./LiveGitPanel";
 
 export default function GitPanel() {
+  const liveSession = useLive((s) => s.session);
+  if (liveSession) return <LiveGitPanel />;
+  return <MockGitPanel />;
+}
+
+function MockGitPanel() {
   const setSelectedFile = useApp((s) => s.setSelectedFile);
   const setDockTab = useApp((s) => s.setDockTab);
 

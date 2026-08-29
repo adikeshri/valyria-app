@@ -16,19 +16,23 @@ pub mod client;
 pub mod core_binary;
 pub mod error;
 pub mod event_pump;
+pub mod git;
 pub mod session;
 pub mod supervisor;
 pub mod workspace;
+pub mod workspace_fs;
 
 pub use client::{CoreClient, DEFAULT_CALL_TIMEOUT};
 pub use core_binary::CoreBinary;
 pub use error::{BridgeError, Result};
 pub use event_pump::{EventBatch, EventPump, PumpMessage};
+pub use git::{GitCommit, GitEntry, GitRepo};
 pub use session::{negotiate, ConnectionState, NegotiatedSession, CLIENT_NAME};
 pub use supervisor::{spawn_or_adopt, Origin, Session, SupervisorConfig};
 pub use workspace::{
     ensure_run_dir, meta_path, pid_path, run_dir, socket_path, valyria_home, WorkspaceId,
 };
+pub use workspace_fs::{DirEntry, FileView, WorkspaceFs};
 
 /// Re-exported so callers name wire types through the bridge, never by
 /// depending on `valyria-protocol` directly.

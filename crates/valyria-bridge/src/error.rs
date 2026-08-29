@@ -55,6 +55,19 @@ pub enum BridgeError {
 
     #[error("unexpected response from Core: {0}")]
     UnexpectedResponse(String),
+
+    #[error("path {rel:?} escapes the workspace root")]
+    PathEscape { rel: String },
+
+    #[error("filesystem error at {path}: {source}")]
+    Fs {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("git error: {0}")]
+    Git(String),
 }
 
 impl BridgeError {
@@ -72,6 +85,9 @@ impl BridgeError {
             BridgeError::StartupTimeout { .. } => "bridge.startup_timeout",
             BridgeError::Protocol { .. } => "bridge.protocol.error",
             BridgeError::UnexpectedResponse(_) => "bridge.protocol.unexpected",
+            BridgeError::PathEscape { .. } => "bridge.fs.path_escape",
+            BridgeError::Fs { .. } => "bridge.fs.io",
+            BridgeError::Git(_) => "bridge.git",
         }
     }
 

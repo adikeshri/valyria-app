@@ -25,6 +25,12 @@ pub fn run() {
       bridge_host::task_resume,
       bridge_host::task_cancel,
       bridge_host::permission_resolve,
+      bridge_host::fs_list_dir,
+      bridge_host::fs_read_file,
+      bridge_host::git_status,
+      bridge_host::git_log,
+      bridge_host::git_diff,
+      bridge_host::git_branch,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

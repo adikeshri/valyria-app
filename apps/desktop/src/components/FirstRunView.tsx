@@ -4,13 +4,21 @@ import {
   Loader2, ArrowRight, Server,
 } from "lucide-react";
 import { useApp } from "../state/store";
+import { useLive } from "../core/liveStore";
 import { hardware, modelList, WORKSPACE_NAME } from "../data/mock";
 import logoFull from "../assets/logo-full.png";
+import LiveFirstRun from "./LiveFirstRun";
 
 type Step = "welcome" | "hardware" | "model" | "install" | "workspace" | "verify" | "ready";
 const order: Step[] = ["welcome", "hardware", "model", "install", "workspace", "verify", "ready"];
 
 export default function FirstRunView() {
+  const available = useLive((s) => s.available);
+  if (available) return <LiveFirstRun />;
+  return <MockFirstRunView />;
+}
+
+function MockFirstRunView() {
   const setRoute = useApp((s) => s.setRoute);
   const [step, setStep] = useState<Step>("welcome");
   const [installPct, setInstallPct] = useState(0);

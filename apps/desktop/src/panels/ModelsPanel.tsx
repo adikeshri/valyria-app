@@ -1,6 +1,8 @@
 import { Download, Trash2, CheckCircle2, Info } from "lucide-react";
 import { modelList } from "../data/mock";
 import type { ModelSummary } from "../types/domain";
+import { useLive } from "../core/liveStore";
+import LiveModelsPanel from "./LiveModelsPanel";
 
 function roleColor(role: ModelSummary["role"]) {
   if (role === "coding") return "badge--accent";
@@ -9,6 +11,12 @@ function roleColor(role: ModelSummary["role"]) {
 }
 
 export default function ModelsPanel() {
+  const liveSession = useLive((s) => s.session);
+  if (liveSession) return <LiveModelsPanel />;
+  return <MockModelsPanel />;
+}
+
+function MockModelsPanel() {
   return (
     <div className="scroll-y" style={{ height: "100%", paddingBottom: 8 }}>
       <div style={{ padding: "0 12px 8px", fontSize: 11, color: "var(--text-tertiary)" }}>

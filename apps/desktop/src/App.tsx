@@ -1,5 +1,8 @@
+import { useEffect } from "react";
 import { useApp } from "./state/store";
+import { useLive } from "./core/liveStore";
 import { useThemeEffect } from "./state/useThemeEffect";
+import { FIRST_RUN_LS_KEY } from "./components/LiveFirstRun";
 import Header from "./components/Header";
 import ConnectBar from "./components/ConnectBar";
 import ResumePrompt from "./components/ResumePrompt";
@@ -14,6 +17,21 @@ import CommandPalette from "./components/CommandPalette";
 export default function App() {
   useThemeEffect();
   const route = useApp((s) => s.route);
+  const setRoute = useApp((s) => s.setRoute);
+  const available = useLive((s) => s.available);
+
+  // First launch in the desktop shell with no prior setup → open the wizard.
+  useEffect(() => {
+    if (!available) return;
+    let seen = true;
+    try {
+      seen = localStorage.getItem(FIRST_RUN_LS_KEY) === "1";
+    } catch {
+      seen = false;
+    }
+    if (!seen) setRoute("first-run");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [available]);
 
   return (
     <>

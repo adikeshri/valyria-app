@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 
 pub mod client;
+pub mod config_writer;
 pub mod core_binary;
 pub mod error;
 pub mod event_pump;
@@ -24,6 +25,7 @@ pub mod workspace;
 pub mod workspace_fs;
 
 pub use client::{CoreClient, DEFAULT_CALL_TIMEOUT};
+pub use config_writer::{config_path, write_key, ConfigScope};
 pub use core_binary::CoreBinary;
 pub use error::{BridgeError, Result};
 pub use event_pump::{EventBatch, EventPump, PumpMessage};

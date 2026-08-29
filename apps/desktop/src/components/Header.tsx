@@ -1,11 +1,14 @@
+import { useEffect, useState } from "react";
 import { GitBranch, Cpu, WifiOff, Moon, Sun, Monitor, Settings, Command, ChevronDown } from "lucide-react";
+import { blockedTasks } from "@valyria/state";
 import { useApp } from "../state/store";
 import { useLive } from "../core/liveStore";
 import { WORKSPACE_NAME, CURRENT_BRANCH, hardware, currentTask } from "../data/mock";
 import { modelList } from "../data/mock";
+import { bridge } from "../core/bridge";
 import logoMark from "../assets/logo-mark.png";
 
-const activeModel = modelList.find((m) => m.active && m.role === "coding")!;
+const mockActiveModel = modelList.find((m) => m.active && m.role === "coding")!;
 
 const basename = (p: string) => p.replace(/\/+$/, "").split("/").pop() || p;
 
@@ -49,9 +52,30 @@ export default function Header() {
   const mockConnection = useApp((s) => s.connection);
   const liveSession = useLive((s) => s.session);
   const liveConnection = useLive((s) => s.connection);
+  const liveStore = useLive((s) => s.store);
   // Once a real session exists, the header tells the truth about it.
   const connection = liveSession ? liveConnection : mockConnection;
   const runtimeVersion = liveSession?.runtime_version;
+
+  // Active model: v1 has no "active" flag on model_list, so the honest best we
+  // can do live is name the sole installed model, else say it's not reported.
+  const [liveModelName, setLiveModelName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!liveSession) return;
+    let cancelled = false;
+    bridge
+      .modelList()
+      .then((r) => {
+        if (cancelled) return;
+        const inst = r.models.filter((m) => m.installed);
+        setLiveModelName(inst.length === 1 ? inst[0]!.family : inst.length === 0 ? "offline model" : `${inst.length} models`);
+      })
+      .catch(() => !cancelled && setLiveModelName(null));
+    return () => { cancelled = true; };
+  }, [liveSession]);
+
+  const modelLabel = liveSession ? (liveModelName ?? "model: not reported") : mockActiveModel.family;
+  const blockedCount = liveSession ? blockedTasks(liveStore).length : currentTask.state === "waiting_for_permission" ? 1 : 0;
 
   return (
     <header className="header">
@@ -82,19 +106,21 @@ export default function Header() {
       <button
         className="status-chip no-native-focus"
         onClick={() => setRoute("settings")}
-        title={runtimeVersion ? `Core ${runtimeVersion} · ${connection}` : `Active model: ${activeModel.family}`}
+        title={runtimeVersion ? `Core ${runtimeVersion} · ${connection}` : `Active model: ${modelLabel}`}
       >
         <span className={`dot ${connection === "ready" ? "dot--success" : "dot--warning"}`} />
-        <strong>{activeModel.family}</strong>
+        <strong>{modelLabel}</strong>
       </button>
 
-      <button className="status-chip no-native-focus" onClick={() => setRoute("workspace")} title={hardware.gpu}>
-        <Cpu size={12} style={{ color: "var(--text-tertiary)" }} />
-        <span>{hardware.ramGb} GB unified</span>
-      </button>
+      {!liveSession && (
+        <button className="status-chip no-native-focus" onClick={() => setRoute("workspace")} title={hardware.gpu}>
+          <Cpu size={12} style={{ color: "var(--text-tertiary)" }} />
+          <span>{hardware.ramGb} GB unified</span>
+        </button>
+      )}
 
-      {currentTask.state === "waiting_for_permission" && (
-        <span className="badge badge--warning">1 approval waiting</span>
+      {blockedCount > 0 && (
+        <span className="badge badge--warning">{blockedCount} approval{blockedCount === 1 ? "" : "s"} waiting</span>
       )}
 
       <div className="header-divider" />

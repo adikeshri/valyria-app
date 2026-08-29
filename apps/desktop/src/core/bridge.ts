@@ -45,6 +45,31 @@ export interface ConfigReport {
   entries: ConfigEntry[];
 }
 
+export type ConfigScope = "workspace" | "user";
+
+/** `model_list` — `ModelSummaryWire`. No `role` / `active` / min-RAM on the
+ *  wire (CORE-INTERFACE G4/G5). */
+export interface ModelSummary {
+  id: string;
+  family: string;
+  quantization: string;
+  size_bytes: number;
+  installed: boolean;
+  license: string;
+}
+export interface ModelReport {
+  models: ModelSummary[];
+}
+
+export interface WorkspaceStatus {
+  root: string;
+  workspace_id: string;
+  data_dir: string;
+  index_generation: number | null;
+  active_tasks: number;
+  total_tasks: number;
+}
+
 export interface TaskSummary {
   task_id: string;
   objective: string;
@@ -118,6 +143,12 @@ export const bridge = {
   sessionStatus: () => invoke<SessionInfo | null>("session_status"),
   doctorRun: () => invoke<DoctorReport>("doctor_run"),
   configShow: () => invoke<ConfigReport>("config_show"),
+  /** D13 write-then-verify: edit Core's `config.toml`, get a fresh
+   *  `config_show` back so the caller renders the effective value + origin. */
+  configWrite: (scope: ConfigScope, key: string, value: string) =>
+    invoke<ConfigReport>("config_write", { scope, key, value }),
+  workspaceStatus: () => invoke<WorkspaceStatus>("workspace_status"),
+  modelList: () => invoke<ModelReport>("model_list"),
   taskCreate: (objective: string) => invoke<string>("task_create", { objective }),
   taskList: () => invoke<{ tasks: TaskSummary[] }>("task_list"),
   taskStatus: (taskId: string) => invoke<TaskStatus>("task_status", { taskId }),

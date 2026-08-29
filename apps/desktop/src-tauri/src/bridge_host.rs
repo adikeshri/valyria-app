@@ -17,12 +17,13 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 use valyria_bridge::protocol::{
-  ConfigShowResponse, DoctorRunResponse, PlanGetResponse, TaskListResponse, TaskReportResponse,
-  TaskRollbackResponse, TaskStatusResponse,
+  ConfigShowResponse, DoctorRunResponse, ModelListResponse, PlanGetResponse, TaskListResponse,
+  TaskReportResponse, TaskRollbackResponse, TaskStatusResponse, WorkspaceStatusResponse,
 };
 use valyria_bridge::{
-  spawn_or_adopt, BridgeError, CoreBinary, CoreClient, DirEntry, EventPump, FileView, GitCommit,
-  GitEntry, GitRepo, PumpMessage, Session, SupervisorConfig, WorkspaceFs, WorkspaceWatcher,
+  config_path, spawn_or_adopt, write_key, BridgeError, ConfigScope, CoreBinary, CoreClient,
+  DirEntry, EventPump, FileView, GitCommit, GitEntry, GitRepo, PumpMessage, Session,
+  SupervisorConfig, WorkspaceFs, WorkspaceWatcher,
 };
 
 /// Protocol version this build negotiates against (core.lock.json).
@@ -294,6 +295,51 @@ pub async fn doctor_run(state: State<'_, BridgeState>) -> Result<DoctorRunRespon
 #[tauri::command]
 pub async fn config_show(state: State<'_, BridgeState>) -> Result<ConfigShowResponse, String> {
   with_client(&state, |c| async move { c.config_show().await }).await
+}
+
+#[tauri::command]
+pub async fn workspace_status(
+  state: State<'_, BridgeState>,
+) -> Result<WorkspaceStatusResponse, String> {
+  with_client(&state, |c| async move { c.workspace_status().await }).await
+}
+
+#[tauri::command]
+pub async fn model_list(state: State<'_, BridgeState>) -> Result<ModelListResponse, String> {
+  with_client(&state, |c| async move { c.model_list().await }).await
+}
+
+/// D13 write-then-verify (CORE-INTERFACE G6): edit Core's own `config.toml`,
+/// then return a fresh `config_show` so the caller renders the **effective**
+/// value with its origin — not the optimistic write.
+#[tauri::command]
+pub async fn config_write(
+  state: State<'_, BridgeState>,
+  scope: String,
+  key: String,
+  value: String,
+) -> Result<ConfigShowResponse, String> {
+  let scope = ConfigScope::parse(&scope).map_err(err_str)?;
+  let client = {
+    let guard = state.0.lock().await;
+    guard
+      .as_ref()
+      .map(|l| l.client.clone())
+      .ok_or_else(|| "[bridge.no_session] no session is open".to_string())?
+  };
+
+  let data_dir = match scope {
+    ConfigScope::Workspace => Some(client.workspace_status().await.map_err(err_str)?.data_dir),
+    ConfigScope::User => None,
+  };
+  let path = config_path(scope, data_dir.as_deref().map(std::path::Path::new)).map_err(err_str)?;
+
+  tokio::task::spawn_blocking(move || write_key(&path, &key, &value))
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(err_str)?;
+
+  client.config_show().await.map_err(err_str)
 }
 
 #[tauri::command]

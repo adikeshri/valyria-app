@@ -16,11 +16,14 @@ pub fn run() {
       Ok(())
     })
     .plugin(tauri_plugin_notification::init())
+    .plugin(tauri_plugin_updater::Builder::new().build())
+    .plugin(tauri_plugin_process::init())
     .manage(BridgeState::default())
     .invoke_handler(tauri::generate_handler![
       bridge_host::session_open,
       bridge_host::session_restart,
       bridge_host::session_status,
+      bridge_host::about_info,
       bridge_host::task_create,
       bridge_host::task_list,
       bridge_host::task_status,

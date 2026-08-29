@@ -30,12 +30,27 @@ import { useApp } from "../state/store";
  *  to close or show a "this request changed" banner (G2). */
 export type ResolveOutcome = "sent" | "superseded" | "error";
 
+/** A startup condition that stops a session from opening and needs the About /
+ *  Compatibility surface to explain it (§4.18 / D14): a protocol-major mismatch
+ *  or an unsupported platform. Distinct from a transient `error`. */
+export interface Blocker {
+  code: "bridge.protocol.mismatch" | "bridge.platform.unsupported";
+  message: string;
+}
+
+/** Pull a `[bridge.foo.bar]` code off the front of a bridge error string. */
+export function parseErrorCode(s: string): string | null {
+  return /^\[([a-z0-9._]+)\]/.exec(s)?.[1] ?? null;
+}
+
 interface LiveState {
   available: boolean;
   session: SessionInfo | null;
   connection: ConnectionState;
   store: StoreState;
   error: string | null;
+  /** Set when `session_open` fails on a compatibility/platform condition. */
+  blocker: Blocker | null;
   /** Non-terminal tasks found at session open — drives the resume prompt. */
   resumePromptDismissed: boolean;
   /** Bumped on every `core://fs-changed`; paths from the latest batch. */
@@ -73,6 +88,7 @@ export const useLive = create<LiveState>((set, get) => ({
   connection: "starting",
   store: emptyStore(),
   error: null,
+  blocker: null,
   resumePromptDismissed: false,
   fsRev: 0,
   fsChangedPaths: [],
@@ -85,6 +101,7 @@ export const useLive = create<LiveState>((set, get) => ({
     set({
       connection: "connecting",
       error: null,
+      blocker: null,
       store: emptyStore(),
       resumePromptDismissed: false,
       fsRev: 0,
@@ -116,7 +133,16 @@ export const useLive = create<LiveState>((set, get) => ({
       set({ session, connection: "ready" });
       await get().refreshTasks();
     } catch (e) {
-      set({ connection: "failed", error: String(e) });
+      const msg = String(e);
+      const code = parseErrorCode(msg);
+      if (code === "bridge.protocol.mismatch" || code === "bridge.platform.unsupported") {
+        // Not a transient failure — a compatibility wall. Send the user to the
+        // About / Compatibility surface, which explains it (CORE-INTERFACE §4).
+        set({ connection: "incompatible", blocker: { code, message: msg } });
+        useApp.getState().setRoute("about");
+      } else {
+        set({ connection: "failed", error: msg });
+      }
     }
   },
 

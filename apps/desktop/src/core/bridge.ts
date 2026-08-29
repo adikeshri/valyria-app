@@ -121,6 +121,26 @@ export interface RollbackResult {
   restored_files: string[];
 }
 
+/** `about_info` — static build + platform facts for the About / Compatibility
+ *  surface (§4.18). No session required; also backs the Windows tier-3 screen. */
+export interface AboutInfo {
+  app_version: string;
+  expected_protocol: string;
+  os: string;
+  arch: string;
+  /** false on a platform with no Core transport (Windows, G9). */
+  sessions_supported: boolean;
+  /** provenance of the bundled Core sidecar; null in a dev build. */
+  core_provenance: {
+    core_repo?: string;
+    core_ref?: string;
+    core_sha?: string;
+    rust_toolchain?: string;
+    target?: string;
+    built_at?: string;
+  } | null;
+}
+
 /** Shape of `core://event-batch` — mirrors `valyria_bridge::EventBatch`. */
 export interface CoreEventBatch {
   first_seq: number;
@@ -141,6 +161,7 @@ export const bridge = {
   sessionRestart: (permissionMode: PermissionMode) =>
     invoke<SessionInfo>("session_restart", { permissionMode }),
   sessionStatus: () => invoke<SessionInfo | null>("session_status"),
+  aboutInfo: () => invoke<AboutInfo>("about_info"),
   doctorRun: () => invoke<DoctorReport>("doctor_run"),
   configShow: () => invoke<ConfigReport>("config_show"),
   /** D13 write-then-verify: edit Core's `config.toml`, get a fresh

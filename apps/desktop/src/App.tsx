@@ -12,6 +12,7 @@ import RightRail from "./components/RightRail";
 import Dock from "./components/Dock";
 import SettingsView from "./components/SettingsView";
 import FirstRunView from "./components/FirstRunView";
+import AboutView from "./components/AboutView";
 import CommandPalette from "./components/CommandPalette";
 
 export default function App() {
@@ -53,6 +54,7 @@ export default function App() {
       </div>
       {route === "settings" && <SettingsView />}
       {route === "first-run" && <FirstRunView />}
+      {route === "about" && <AboutView />}
       <CommandPalette />
     </>
   );

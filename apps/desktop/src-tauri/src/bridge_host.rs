@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 use valyria_bridge::protocol::{
   ConfigShowResponse, DoctorRunResponse, ModelListResponse, PlanGetResponse, TaskListResponse,
@@ -583,4 +583,42 @@ pub async fn session_status(state: State<'_, BridgeState>) -> Result<Option<Sess
       .as_ref()
       .map(|l| SessionInfo::of(l.session.socket_path.display().to_string(), &l.session)),
   )
+}
+
+/// Static build + platform facts for the About / Compatibility surface
+/// (docs/PLAN.md §4.18). No session required — it also backs the Windows
+/// tier-3 screen (D14).
+#[derive(serde::Serialize)]
+pub struct AboutInfo {
+  /// This app's version, from `Cargo.toml`.
+  app_version: String,
+  /// Protocol major.minor this build negotiates against (core.lock.json).
+  expected_protocol: String,
+  os: String,
+  arch: String,
+  /// Whether a Core session can be started on this platform (false on Windows
+  /// until Core lands a transport — CORE-INTERFACE G9).
+  sessions_supported: bool,
+  /// The bundled Core runtime's build provenance, from the `core-provenance.json`
+  /// resource written by the release pipeline. `null` in a `tauri dev` build.
+  core_provenance: Option<serde_json::Value>,
+}
+
+#[tauri::command]
+pub async fn about_info(app: AppHandle) -> Result<AboutInfo, String> {
+  let core_provenance = app
+    .path()
+    .resolve("core-provenance.json", tauri::path::BaseDirectory::Resource)
+    .ok()
+    .and_then(|p| std::fs::read_to_string(p).ok())
+    .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
+
+  Ok(AboutInfo {
+    app_version: env!("CARGO_PKG_VERSION").to_string(),
+    expected_protocol: EXPECTED_PROTOCOL.to_string(),
+    os: std::env::consts::OS.to_string(),
+    arch: std::env::consts::ARCH.to_string(),
+    sessions_supported: cfg!(unix),
+    core_provenance,
+  })
 }

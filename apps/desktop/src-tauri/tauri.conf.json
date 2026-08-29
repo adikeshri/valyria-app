@@ -25,10 +25,19 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/adikeshri/valyria-app/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENDQjE0NzdERkFFQTUzQUUKUldTdVUrcjZmVWV4ekpxWldZTnZlZlJvUnI4SVpvUjRTbzNPVWF2RkVTa2F4Y1VpS2JtY1ozUnIK"
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
     "publisher": "Valyria",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

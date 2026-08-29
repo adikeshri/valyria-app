@@ -132,6 +132,88 @@ export function requirementFor(surface: string): SurfaceRequirement | undefined 
   return SURFACE_REQUIREMENTS.find((r) => r.surface === surface);
 }
 
+// --- version & compatibility verdict (CORE-INTERFACE §4) ----------------
+
+export type CompatLevel = "ok" | "reduced" | "blocked";
+
+export interface CompatVerdict {
+  level: CompatLevel;
+  headline: string;
+  detail: string;
+}
+
+/** Numeric `major.minor` of a version string; `null` if it doesn't parse. */
+function majorMinor(v: string): { major: number; minor: number } | null {
+  const m = /^(\d+)\.(\d+)/.exec(v.trim());
+  if (!m) return null;
+  return { major: Number(m[1]), minor: Number(m[2]) };
+}
+
+/**
+ * The startup compatibility verdict from CORE-INTERFACE §4's table.
+ *
+ *   protocol major ≠ expected major → blocked (hard block, never proceed)
+ *   Core minor > app minor          → ok      (newer Core; unknown fields ignored)
+ *   Core minor < app minor          → reduced (features driven by capabilities[])
+ *   otherwise                       → ok
+ *
+ * `negotiated === null` means no session yet — reported as `ok` with a neutral
+ * line so the About surface can render before a workspace is open.
+ */
+export function compatVerdict(
+  expectedProtocol: string,
+  negotiated: { protocol_version: string; capabilities: readonly string[] } | null,
+): CompatVerdict {
+  if (!negotiated) {
+    return {
+      level: "ok",
+      headline: "Not connected",
+      detail: `This build speaks protocol ${expectedProtocol}. Open a workspace to check the running Core.`,
+    };
+  }
+
+  const exp = majorMinor(expectedProtocol);
+  const got = majorMinor(negotiated.protocol_version);
+
+  if (!exp || !got || exp.major !== got.major) {
+    return {
+      level: "blocked",
+      headline: "Incompatible Core",
+      detail:
+        `The Core runtime speaks protocol ${negotiated.protocol_version}; this build of the app ` +
+        `requires ${expectedProtocol}. Use the Core bundled with this app, or update the app ` +
+        `to a build that matches. The app will not run against a different protocol major.`,
+    };
+  }
+
+  if (got.minor < exp.minor) {
+    const missing = KNOWN_CAPABILITIES.filter((c) => !negotiated.capabilities.includes(c));
+    return {
+      level: "reduced",
+      headline: "Older Core — some features reduced",
+      detail: missing.length
+        ? `Core is protocol ${negotiated.protocol_version}; this build expects ${expectedProtocol}. ` +
+          `Surfaces needing ${missing.join(", ")} show their unavailable state.`
+        : `Core is protocol ${negotiated.protocol_version}; this build expects ${expectedProtocol}. ` +
+          `All advertised capabilities are present.`,
+    };
+  }
+
+  if (got.minor > exp.minor) {
+    return {
+      level: "ok",
+      headline: "Compatible (newer Core)",
+      detail: `Core is protocol ${negotiated.protocol_version}, ahead of this build's ${expectedProtocol}. Unknown response fields and event kinds are ignored.`,
+    };
+  }
+
+  return {
+    level: "ok",
+    headline: "Compatible",
+    detail: `Core and app both speak protocol ${negotiated.protocol_version}.`,
+  };
+}
+
 /** True when `surface` can run at full fidelity against the given capability set. */
 export function surfaceIsLive(surface: string, capabilities: readonly string[]): boolean {
   const req = requirementFor(surface);

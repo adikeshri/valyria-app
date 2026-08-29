@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GitBranch, Cpu, WifiOff, Moon, Sun, Monitor, Settings, Command, ChevronDown } from "lucide-react";
+import { GitBranch, Cpu, WifiOff, Moon, Sun, Monitor, Settings, Command, ChevronDown, Info } from "lucide-react";
 import { blockedTasks } from "@valyria/state";
 import { useApp } from "../state/store";
 import { useLive } from "../core/liveStore";
@@ -129,6 +129,13 @@ export default function Header() {
         <Command size={15} />
       </button>
       <ThemeToggle />
+      <button
+        className={`icon-btn no-native-focus ${route === "about" ? "active" : ""}`}
+        title="About & compatibility"
+        onClick={() => setRoute("about")}
+      >
+        <Info size={15} />
+      </button>
       <button
         className={`icon-btn no-native-focus ${route === "settings" ? "active" : ""}`}
         title="Settings"

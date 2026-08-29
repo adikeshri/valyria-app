@@ -8,7 +8,7 @@ export type DockTab = "activity" | "timeline" | "terminal" | "tests" | "diff";
 export type RightTab = "context" | "symbols" | "verify";
 export type TerminalSub = "human" | "agent";
 export type Theme = "light" | "dark" | "system";
-export type Route = "workspace" | "settings" | "first-run";
+export type Route = "workspace" | "settings" | "first-run" | "about";
 
 /** A request from one panel to open a file in another (Phase 7 cross-panel
  *  navigation — the failure → file → diff → change chain). `reveal()` is the

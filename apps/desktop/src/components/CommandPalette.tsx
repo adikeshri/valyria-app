@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Search, MessageSquare, GitCompareArrows, TerminalSquare, FlaskConical,
-  Boxes, ShieldCheck, Settings, Sparkles, ListChecks,
+  Boxes, ShieldCheck, Settings, Sparkles, ListChecks, Info, RefreshCw,
 } from "lucide-react";
 import { useApp } from "../state/store";
 
@@ -37,6 +37,8 @@ export default function CommandPalette() {
     { id: "models", label: "Open Model Manager", icon: <Boxes size={14} />, run: () => setSidebarSection("models") },
     { id: "settings-security", label: "Open Security settings", icon: <ShieldCheck size={14} />, run: () => setRoute("settings") },
     { id: "settings", label: "Open Settings", icon: <Settings size={14} />, run: () => setRoute("settings") },
+    { id: "about", label: "About Valyria & compatibility", icon: <Info size={14} />, run: () => setRoute("about") },
+    { id: "check-updates", label: "Check for updates", hint: "About", icon: <RefreshCw size={14} />, run: () => setRoute("about") },
     { id: "first-run", label: "Replay first-run experience", icon: <Sparkles size={14} />, run: () => setRoute("first-run") },
   ], [setCenterTab, setDockTab, setRightTab, setSidebarSection, setTerminalSub, setRoute]);
 

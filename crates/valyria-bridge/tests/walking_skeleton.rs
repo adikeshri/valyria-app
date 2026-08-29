@@ -246,3 +246,58 @@ async fn supervise_stream_kill_ui_resume_kill_daemon() {
     let report = after.task_report(&task_id).await.expect("task_report");
     assert!(!report.status.is_empty(), "rehydrated report has no status");
 }
+
+/// Not a gate — a helper to (re)capture the trace fixture the `@valyria/state`
+/// reducer replay test runs against. Run explicitly:
+///   VALYRIA_BIN=... cargo test -p valyria-bridge --test walking_skeleton -- --ignored capture_trace
+#[ignore]
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+async fn capture_trace() {
+    let Some(bin) = locate_core() else {
+        panic!("set VALYRIA_BIN to capture a trace");
+    };
+    let repo = Fixture::new();
+    let home = tempfile::tempdir().unwrap();
+    let cfg = SupervisorConfig {
+        workspace_root: repo.root.clone(),
+        core_binary: CoreBinary::Explicit(bin),
+        expected_protocol: "1.0.0".to_string(),
+        valyria_home: Some(home.path().to_path_buf()),
+        startup_timeout: Duration::from_secs(30),
+        kill_daemon_on_drop: true,
+    };
+    let mut session = spawn_or_adopt(cfg).await.unwrap();
+    let client = CoreClient::new(session.socket_path.clone());
+    let task_id = client.task_create("add a function").await.unwrap();
+
+    let mut pump = EventPump::start(session.socket_path.clone(), 0);
+    let mut lines: Vec<String> = Vec::new();
+    let tid = task_id.clone();
+    loop {
+        match timeout(Duration::from_secs(90), pump.recv()).await {
+            Ok(Some(PumpMessage::Batch(b))) => {
+                let mut done = false;
+                for e in &b.events {
+                    lines.push(serde_json::to_string(e).unwrap());
+                    if is_terminal(&tid, e) {
+                        done = true;
+                    }
+                }
+                if done {
+                    break;
+                }
+            }
+            Ok(Some(_)) => {}
+            Ok(None) | Err(_) => break,
+        }
+    }
+    let out = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .unwrap()
+        .join("fixtures/traces/add-a-function.jsonl");
+    std::fs::create_dir_all(out.parent().unwrap()).unwrap();
+    std::fs::write(&out, lines.join("\n") + "\n").unwrap();
+    eprintln!("wrote {} events to {}", lines.len(), out.display());
+    let _ = session.shutdown_daemon().await;
+}

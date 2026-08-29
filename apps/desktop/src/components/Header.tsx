@@ -1,10 +1,13 @@
 import { GitBranch, Cpu, WifiOff, Moon, Sun, Monitor, Settings, Command, ChevronDown } from "lucide-react";
 import { useApp } from "../state/store";
+import { useLive } from "../core/liveStore";
 import { WORKSPACE_NAME, CURRENT_BRANCH, hardware, currentTask } from "../data/mock";
 import { modelList } from "../data/mock";
 import logoMark from "../assets/logo-mark.png";
 
 const activeModel = modelList.find((m) => m.active && m.role === "coding")!;
+
+const basename = (p: string) => p.replace(/\/+$/, "").split("/").pop() || p;
 
 function ThemeToggle() {
   const theme = useApp((s) => s.theme);
@@ -43,7 +46,12 @@ export default function Header() {
   const setRoute = useApp((s) => s.setRoute);
   const route = useApp((s) => s.route);
   const setCommandPaletteOpen = useApp((s) => s.setCommandPaletteOpen);
-  const connection = useApp((s) => s.connection);
+  const mockConnection = useApp((s) => s.connection);
+  const liveSession = useLive((s) => s.session);
+  const liveConnection = useLive((s) => s.connection);
+  // Once a real session exists, the header tells the truth about it.
+  const connection = liveSession ? liveConnection : mockConnection;
+  const runtimeVersion = liveSession?.runtime_version;
 
   return (
     <header className="header">
@@ -55,7 +63,7 @@ export default function Header() {
       <div className="header-divider" />
 
       <button className="workspace-chip no-native-focus" onClick={() => setRoute("workspace")}>
-        <strong>{WORKSPACE_NAME}</strong>
+        <strong>{liveSession ? basename(liveSession.workspace_root) : WORKSPACE_NAME}</strong>
         <span className="branch"><GitBranch size={11} />{CURRENT_BRANCH}</span>
         <ChevronDown size={12} style={{ color: "var(--text-tertiary)" }} />
       </button>
@@ -71,7 +79,11 @@ export default function Header() {
         <span>Local · Offline</span>
       </button>
 
-      <button className="status-chip no-native-focus" onClick={() => setRoute("settings")} title={`Active model: ${activeModel.family}`}>
+      <button
+        className="status-chip no-native-focus"
+        onClick={() => setRoute("settings")}
+        title={runtimeVersion ? `Core ${runtimeVersion} · ${connection}` : `Active model: ${activeModel.family}`}
+      >
         <span className={`dot ${connection === "ready" ? "dot--success" : "dot--warning"}`} />
         <strong>{activeModel.family}</strong>
       </button>

@@ -10,12 +10,15 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "@valyria/protocol": "*"
   },
   "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
     "typescript": "~6.0.2"
   }
 }

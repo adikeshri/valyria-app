@@ -14,6 +14,8 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
+    "@valyria/protocol": "*",
+    "@valyria/state": "*",
     "@xterm/xterm": "^6.0.0",
     "diff": "^9.0.0",
     "lucide-react": "^1.37.0",

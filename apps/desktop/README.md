@@ -17,10 +17,39 @@ Core's protocol will provide, so wiring it up is a data-source swap — the
 
 ## Run it
 
+**As a web page** (fastest iteration, hot reload):
+
 ```bash
 npm install
 npm run dev
 ```
+
+**As a real native app**, in a Tauri-managed window (macOS/Windows/Linux — needs a stable
+Rust toolchain via [rustup](https://rustup.rs); on macOS you also need Xcode Command Line
+Tools, `xcode-select --install`):
+
+```bash
+npm install
+npm run app:dev     # compiles the Rust shell, opens a native window against the Vite dev server
+```
+
+First run compiles the whole Tauri/WebView dependency tree (~1-2 min); after that it's
+fast. The window opens at 1440×900 (1024×640 minimum) with the Valyria icon, title, and
+dock/taskbar entry — this is the actual desktop app, not a browser tab.
+
+**To build an installer** (`.app`/`.dmg` on macOS, `.msi`/`.exe` on Windows, `.deb`/`.AppImage`
+on Linux — each platform builds only its own installers, so run this on each target OS, or in
+CI per-platform):
+
+```bash
+npm run app:build
+```
+
+Output lands in `src-tauri/target/release/bundle/`.
+
+The native shell lives in [src-tauri/](src-tauri) — a thin Rust/Tauri wrapper (window config,
+icons, bundler) with no app logic in it yet. `npm run tauri -- <command>` reaches the Tauri
+CLI directly for anything not covered by the two scripts above (`icon`, `signer`, etc).
 
 ## What to look at
 

@@ -3,12 +3,13 @@
 The desktop application for [Valyria](../valyria) — a local-first autonomous
 software engineer that runs entirely on your own machine.
 
-> **Status: visual prototype.** [apps/desktop](apps/desktop) is a full
-> renderer implementation of every PRD surface, running against realistic
-> local sample data — see [apps/desktop/README.md](apps/desktop/README.md) to
-> run it. The Tauri native shell, the Rust protocol bridge, and the real Core
-> connection are not wired up yet; that's the deliberate next phase (see
-> [docs/PLAN.md](docs/PLAN.md) Phase 1).
+> **Status: visual prototype, now a real native app.** [apps/desktop](apps/desktop)
+> is a full renderer implementation of every PRD surface, running against
+> realistic local sample data, packaged with a Tauri native shell — it builds
+> and launches as an actual desktop window (`npm run app:dev`), not just a
+> browser tab. See [apps/desktop/README.md](apps/desktop/README.md) to run it.
+> The Rust protocol bridge and the real Core connection are not wired up yet;
+> that's the deliberate next phase (see [docs/PLAN.md](docs/PLAN.md) Phase 1).
 
 `valyria-app` is a **client** of the Valyria Core runtime, not a second
 implementation of it. Core plans, edits, runs and verifies; the app is the

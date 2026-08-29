@@ -236,9 +236,13 @@ No step blocks on a download.
 7. macOS signing/notarization activates when the `APPLE_*` repo secrets exist;
    without them the builds are unsigned (Gatekeeper will warn — RI2).
 
-**Not yet wired** (needs the supervisor increment): the fresh-install →
-`hello` → fake-model-task release gate, the `$VALYRIA_HOME/models/`
-byte-identical upgrade test, and the 120 MB bundle-size gate.
+Phase 8 wired the rest: the **120 MB bundle-size gate** is now a real
+`release.yml` step (fails the release if any installer exceeds the PLAN §9
+budget); the **fresh-install → `hello` → fake-model-task** proof-of-life and the
+**`$VALYRIA_HOME/models/` byte-identical upgrade** check are documented,
+scriptable release gates in [RELEASING.md](RELEASING.md) (a literal CI test needs
+two installer versions; the model-store guarantee is already enforced by
+`xtask check-layering` + D-INT-3).
 
 ---
 
@@ -501,6 +505,48 @@ non-object `input` degrades rather than blanks); covered by the existing
 `add-a-function.jsonl` seq-16 `run_command` pair, no new fixture. New gaps
 **G14** (no tool-invocation id / structured result) and **G15** (no parsed
 failure location) filed.
+
+**Phase 8 — packaging, updates, compatibility (complete)**.
+
+`valyria-bridge`: `BridgeError::PlatformUnsupported` → `bridge.platform.unsupported`;
+`spawn_or_adopt` runs a `#[cfg]` `platform_precheck` first, so a non-unix host
+refuses a session in milliseconds with a specific code instead of a 20-second
+`StartupTimeout` (D14 / G9). Host: `about_info` command — app version
+(`CARGO_PKG_VERSION`), `EXPECTED_PROTOCOL`, `os`/`arch`, `sessions_supported`
+(`cfg!(unix)`), and the bundled `core-provenance.json` resource (`None` in
+`tauri dev`). `lib.rs` registers `tauri-plugin-updater` + `tauri-plugin-process`;
+`capabilities/default.json` gains `updater:default` / `process:default`.
+
+`tauri.conf.json`: `plugins.updater` (endpoint = the GitHub Releases
+`latest.json`, committed pubkey) + `bundle.createUpdaterArtifacts`. The updater
+signing **private** key is a CI secret (`TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]`),
+added to `release.yml`'s `tauri-action` env — empty when unset, so tauri-action
+just skips `latest.json`/`.sig` (same graceful degradation as the `APPLE_*`
+path). `release.yml` also gained a **bundle-size gate** (< 120 MB per installer,
+PLAN §9).
+
+`@valyria/protocol`: `compatVerdict(expectedProtocol, negotiated)` — CORE-INTERFACE
+§4's table as a pure function (`blocked` on protocol-major mismatch, `reduced`
+for an older Core listing the absent capabilities, `ok` otherwise);
+`packages/protocol/test/compat.test.ts` covers every row.
+
+Renderer: new `route: "about"` + `AboutView` (the established overlay shell) —
+app / platform / bundled-Core-provenance / connected-Core (runtime + protocol +
+capability chips) / installed models / the verdict / a "Check for updates"
+button (`core/updater.ts` → `check()` → `downloadAndInstall()` + `relaunch()`).
+The `SettingsView` About stub becomes a link into it; `Header` gets an info
+button; the command palette gets "About" + "Check for updates".
+`liveStore.openWorkspace` now parses the `[code]` off a failed
+`session_open` — `bridge.protocol.mismatch` / `bridge.platform.unsupported` set
+`connection: "incompatible"` + a `blocker` and route to About, which renders the
+hard-block / tier-3 banner. `"incompatible"` — a defined `ConnectionState` that
+nothing set before — finally has a producer and consumer.
+
+Docs: `SECURITY.md` (repo root; GitHub private vulnerability reporting; the
+offline / no-model-download / local-read / socket-boundary / D7 guarantees) and
+`docs/RELEASING.md` (the pipeline, required secrets, and the pre-release
+checklist absorbing §7's three formerly-unwired gates). No new CORE-INTERFACE
+gaps.
 
 **Open:**
 

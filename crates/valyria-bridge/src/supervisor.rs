@@ -125,8 +125,28 @@ impl Drop for Session {
     }
 }
 
+/// Refuse early on a platform with no Core transport, rather than spawning a
+/// daemon that can never bind its socket and timing out (D14 / CORE-INTERFACE
+/// G9). The rest of the app still runs — this only gates sessions.
+#[cfg(unix)]
+fn platform_precheck() -> Result<()> {
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn platform_precheck() -> Result<()> {
+    Err(BridgeError::PlatformUnsupported(
+        "Valyria's runtime talks to the app over a Unix domain socket, and this platform \
+         has no transport for it yet (CORE-INTERFACE G9). The app runs and shows version \
+         and compatibility information, but a session cannot start here."
+            .to_string(),
+    ))
+}
+
 /// Adopt a running daemon for this workspace, or spawn one.
 pub async fn spawn_or_adopt(config: SupervisorConfig) -> Result<Session> {
+    platform_precheck()?;
+
     let id = WorkspaceId::from_root(&config.workspace_root)?;
     ensure_run_dir(&id)?;
     let sock = socket_path(&id);
@@ -298,4 +318,23 @@ fn now_ms() -> u128 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn platform_precheck_gates_only_non_unix() {
+        let r = platform_precheck();
+        if cfg!(unix) {
+            assert!(r.is_ok(), "unix must be allowed to open sessions");
+        } else {
+            assert_eq!(
+                r.unwrap_err().code(),
+                "bridge.platform.unsupported",
+                "a non-unix host must refuse sessions with a specific code (D14)"
+            );
+        }
+    }
 }

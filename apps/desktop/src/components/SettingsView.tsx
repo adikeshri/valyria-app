@@ -288,11 +288,13 @@ export default function SettingsView() {
                   <Toggle checked={reducedMotion} onChange={setReducedMotion} label="Minimize animation throughout the app" />
                 </Field>
                 <Field label="About">
-                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", lineHeight: 1.8 }}>
-                    Valyria App — <span style={{ fontFamily: "var(--font-mono)" }}>0.1.0-preview</span><br />
-                    Core runtime — not connected in this preview<br />
-                    Protocol — v1.0.0 (pinned)
-                  </div>
+                  <button
+                    className="btn btn--sm"
+                    onClick={() => setRoute("about")}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                  >
+                    <Info size={12} /> Version, compatibility &amp; updates →
+                  </button>
                 </Field>
               </>
             )}

@@ -173,6 +173,11 @@ jobs:
           else
             echo "status=unsigned (no APPLE_* secrets configured)" >> "$GITHUB_OUTPUT"
           fi
+          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
+            echo "updater=updater artifacts signed (latest.json + .sig attached)" >> "$GITHUB_OUTPUT"
+          else
+            echo "updater=no updater artifacts (TAURI_SIGNING_PRIVATE_KEY not set)" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build installers (+ draft release on a tag)
         uses: tauri-apps/tauri-action@v0
@@ -185,6 +190,11 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Updater artifact signing (tauri.conf.json plugins.updater.pubkey).
+          # Empty when the secret is unset — tauri-action then just skips
+          # latest.json/.sig, same graceful degradation as the APPLE_* path.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
           args: >-
@@ -199,12 +209,33 @@ jobs:
             (ref `${{ steps.core.outputs.ref }}` of ${{ env.CORE_REPO }})
 
             macOS builds: ${{ steps.sign.outputs.status }}.
+            Updater: ${{ steps.sign.outputs.updater }}.
             Windows is tier 3 — the installer runs and explains itself; the
             bundled runtime cannot serve over a Unix socket (G9).
 
             Draft release — review the attached installers, then publish.
           releaseDraft: true
           prerelease: false
+
+      # docs/PLAN.md §9 — installer under 120 MB per platform (models excluded;
+      # the sidecar is a ~15 MB runtime today). Fails the release if it grows.
+      - name: Bundle-size gate (< 120 MB)
+        shell: bash
+        run: |
+          root="target/${{ matrix.rust_target }}/release/bundle"
+          limit=$((120 * 1024 * 1024))
+          fail=0
+          while IFS= read -r f; do
+            bytes=$(wc -c < "$f")
+            mb=$(( bytes / 1024 / 1024 ))
+            if [ "$bytes" -gt "$limit" ]; then
+              echo "::error file=$f::installer is ${mb} MB (> 120 MB budget)"
+              fail=1
+            else
+              echo "ok: $f — ${mb} MB"
+            fi
+          done < <(find "$root" -type f \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.msi' -o -name '*.exe' -o -name '*.app.tar.gz' \))
+          exit $fail
 
       - name: Upload installers as workflow artifacts
         if: github.ref_type != 'tag'

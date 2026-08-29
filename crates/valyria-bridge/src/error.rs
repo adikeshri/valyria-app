@@ -80,6 +80,9 @@ pub enum BridgeError {
 
     #[error("terminal I/O error: {0}")]
     PtyIo(String),
+
+    #[error("this platform is not supported: {0}")]
+    PlatformUnsupported(String),
 }
 
 impl BridgeError {
@@ -104,6 +107,7 @@ impl BridgeError {
             BridgeError::Config(_) => "bridge.config.write",
             BridgeError::PtySpawn(_) => "bridge.pty.spawn",
             BridgeError::PtyIo(_) => "bridge.pty.io",
+            BridgeError::PlatformUnsupported(_) => "bridge.platform.unsupported",
         }
     }
 

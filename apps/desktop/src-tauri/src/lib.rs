@@ -24,6 +24,7 @@ pub fn run() {
       bridge_host::task_status,
       bridge_host::task_plan,
       bridge_host::task_report,
+      bridge_host::task_rollback,
       bridge_host::task_pause,
       bridge_host::task_resume,
       bridge_host::task_cancel,
@@ -34,6 +35,8 @@ pub fn run() {
       bridge_host::git_status,
       bridge_host::git_log,
       bridge_host::git_diff,
+      bridge_host::git_diff_file,
+      bridge_host::git_show_head,
       bridge_host::git_branch,
     ])
     .run(tauri::generate_context!())

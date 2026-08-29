@@ -4,9 +4,11 @@
 import type {
   ApprovalProjection,
   EventRow,
+  FileChangeProjection,
   PlanProjection,
   StoreState,
   TaskProjection,
+  TestRunProjection,
 } from "./store.js";
 
 export function tasksByRecency(state: StoreState): TaskProjection[] {
@@ -128,6 +130,56 @@ export function activityLine(e: EventRow): string {
 
 export function planFor(state: StoreState, taskId: string): PlanProjection | undefined {
   return state.plans[taskId];
+}
+
+/** The changed-file rail for a task (§4.8), ordered by first touch (`seq`). No
+ *  ownership column — Core's ledger is not on the wire (G8). */
+export function changedFilesForTask(
+  state: StoreState,
+  taskId: string,
+): FileChangeProjection[] {
+  return [...(state.files[taskId] ?? [])].sort((a, b) => a.firstSeq - b.firstSeq);
+}
+
+/** Test runs for a task (§4.11), newest event first. Categories with no run are
+ *  the panel's "NOT RUN" — this returns only what Core emitted. */
+export function testResultsForTask(
+  state: StoreState,
+  taskId: string,
+): TestRunProjection[] {
+  return [...(state.tests[taskId]?.runs ?? [])].sort((a, b) => b.seq - a.seq);
+}
+
+/** A checkpoint boundary a task's plan declares. Sourced from the `plan_created`
+ *  payload's `steps[]` (loose by design). `id` is the **step** id: v1 exposes
+ *  no `checkpoint_id`, so it cannot drive `task_rollback` yet (G13) — the
+ *  Rollback UI shows these boundaries and keeps the action disabled with that
+ *  reason. */
+export interface CheckpointBoundary {
+  stepId: string | null;
+  intent: string | null;
+  rollbackBoundary: boolean;
+}
+
+export function checkpointsForTask(
+  state: StoreState,
+  taskId: string,
+): CheckpointBoundary[] {
+  const plan = state.plans[taskId];
+  const steps = (plan?.payload as { steps?: unknown })?.steps;
+  if (!Array.isArray(steps)) return [];
+  const out: CheckpointBoundary[] = [];
+  for (const raw of steps) {
+    if (!raw || typeof raw !== "object") continue;
+    const s = raw as Record<string, unknown>;
+    if (s.checkpoint !== true && s.rollback_boundary !== true) continue;
+    out.push({
+      stepId: typeof s.id === "string" ? s.id : null,
+      intent: typeof s.intent === "string" ? s.intent : null,
+      rollbackBoundary: s.rollback_boundary === true,
+    });
+  }
+  return out;
 }
 
 /** The pending approval for a task — only while the task is actually blocked on

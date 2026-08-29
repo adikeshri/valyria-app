@@ -60,6 +60,12 @@ export interface TaskReport {
   unverified: string[];
 }
 
+/** `task_rollback` result — reported to the user verbatim (§4.8). */
+export interface RollbackResult {
+  reverted_entries: number;
+  restored_files: string[];
+}
+
 /** Shape of `core://event-batch` — mirrors `valyria_bridge::EventBatch`. */
 export interface CoreEventBatch {
   first_seq: number;
@@ -81,6 +87,8 @@ export const bridge = {
   taskStatus: (taskId: string) => invoke<TaskStatus>("task_status", { taskId }),
   taskPlan: (taskId: string) => invoke<PlanGet>("task_plan", { taskId }),
   taskReport: (taskId: string) => invoke<TaskReport>("task_report", { taskId }),
+  taskRollback: (taskId: string, checkpointId: string) =>
+    invoke<RollbackResult>("task_rollback", { taskId, checkpointId }),
   taskPause: (taskId: string) => invoke<null>("task_pause", { taskId }),
   taskResume: (taskId: string) => invoke<null>("task_resume", { taskId }),
   taskCancel: (taskId: string) => invoke<null>("task_cancel", { taskId }),

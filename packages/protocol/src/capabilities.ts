@@ -71,8 +71,22 @@ export const SURFACE_REQUIREMENTS: readonly SurfaceRequirement[] = [
   },
   {
     surface: "diff-viewer",
-    requires: "rollback",
-    fallback: { kind: "local-read", label: "Ownership unavailable" },
+    // The diff itself is served locally from `git` (G3). The ownership column
+    // (agent / user / pre-existing) needs Core's change ledger, which v1 does
+    // not expose (G8) — it renders "unavailable", never a guess.
+    requires: "method:ledger_changes",
+    gap: "G8",
+    fallback: { kind: "local-read", label: "git diff · ownership unavailable" },
+  },
+  {
+    surface: "rollback",
+    // `task_rollback` + the `rollback` capability exist, but v1 exposes no way
+    // to *discover* a `checkpoint_id` (task_plan reports only `checkpoint: bool`;
+    // no event carries the id). The per-step action stays disabled with that
+    // reason; the wire path is wired and tested against Core's error path.
+    requires: "method:plan_checkpoint_event",
+    gap: "G13",
+    fallback: { kind: "none" },
   },
   {
     surface: "context-inspector",

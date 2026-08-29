@@ -1,6 +1,14 @@
 import { currentTask } from "../data/mock";
+import { useLive } from "../core/liveStore";
+import LiveVerificationInspector from "./LiveVerificationInspector";
 
 export default function VerificationPanel() {
+  const liveSession = useLive((s) => s.session);
+  if (liveSession) return <LiveVerificationInspector />;
+  return <MockVerificationPanel />;
+}
+
+function MockVerificationPanel() {
   const rows = [...currentTask.verified, ...currentTask.unverified];
   return (
     <div className="scroll-y" style={{ height: "100%", padding: "10px 12px" }}>

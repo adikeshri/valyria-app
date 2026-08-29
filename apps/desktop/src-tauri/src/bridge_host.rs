@@ -17,7 +17,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 use valyria_bridge::protocol::{
-  PlanGetResponse, TaskListResponse, TaskReportResponse, TaskStatusResponse,
+  PlanGetResponse, TaskListResponse, TaskReportResponse, TaskRollbackResponse, TaskStatusResponse,
 };
 use valyria_bridge::{
   spawn_or_adopt, BridgeError, CoreBinary, CoreClient, DirEntry, EventPump, FileView, GitCommit,
@@ -208,6 +208,18 @@ pub async fn task_report(
 }
 
 #[tauri::command]
+pub async fn task_rollback(
+  state: State<'_, BridgeState>,
+  task_id: String,
+  checkpoint_id: String,
+) -> Result<TaskRollbackResponse, String> {
+  with_client(&state, |c| async move {
+    c.task_rollback(&task_id, &checkpoint_id).await
+  })
+  .await
+}
+
+#[tauri::command]
 pub async fn task_pause(state: State<'_, BridgeState>, task_id: String) -> Result<(), String> {
   with_client(&state, |c| async move { c.task_pause(&task_id).await }).await
 }
@@ -310,6 +322,29 @@ pub async fn git_diff(
   tokio::task::spawn_blocking(move || git.diff(path.as_deref(), staged))
     .await
     .map_err(|e| e.to_string())?
+    .map_err(err_str)
+}
+
+/// Unified diff for one file, including a synthesized all-additions diff for a
+/// still-untracked file the agent just created (see `GitRepo::diff_file`).
+#[tauri::command]
+pub async fn git_diff_file(state: State<'_, BridgeState>, path: String) -> Result<String, String> {
+  let (_, git) = snapshot(&state).await?;
+  tokio::task::spawn_blocking(move || git.diff_file(&path))
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(err_str)
+}
+
+/// Contents of a path at `HEAD` — the "before" side of a review diff.
+/// Empty string when the path is new (not in `HEAD`).
+#[tauri::command]
+pub async fn git_show_head(state: State<'_, BridgeState>, path: String) -> Result<String, String> {
+  let (_, git) = snapshot(&state).await?;
+  tokio::task::spawn_blocking(move || git.show("HEAD", &path))
+    .await
+    .map_err(|e| e.to_string())?
+    .map(|opt| opt.unwrap_or_default())
     .map_err(err_str)
 }
 

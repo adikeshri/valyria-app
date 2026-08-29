@@ -46,6 +46,12 @@ export const repo = {
   gitLog: (limit: number) => invoke<GitCommit[]>("git_log", { limit }),
   gitDiff: (path: string | null, staged: boolean) =>
     invoke<string>("git_diff", { path, staged }),
+  /** Unified diff for one file, including a synthesized all-additions diff
+   *  when the agent's file is still untracked. */
+  gitDiffFile: (path: string) => invoke<string>("git_diff_file", { path }),
+  /** Contents of a path at HEAD — the "before" side of a review diff.
+   *  Empty string when the file is new. */
+  gitShowHead: (path: string) => invoke<string>("git_show_head", { path }),
   gitBranch: () => invoke<string>("git_branch"),
   /** `core://fs-changed` → batch of paths (relative, forward-slashed). */
   onFsChanged: (cb: (paths: string[]) => void): Promise<UnlistenFn> =>

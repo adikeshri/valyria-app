@@ -255,6 +255,30 @@ and extend `xtask check-protocol` to gate them.
 *Until then:* see PLAN §D5 (tolerant decoders + captured-trace golden fixtures +
 an "unrecognized payload" affordance that shows raw JSON rather than nothing).
 
+### G13 — Rollback checkpoints have no discoverable id (§16)
+
+`task_rollback { task_id, checkpoint_id }` is on the wire and the `rollback`
+capability is advertised, but **nothing lets a client learn a `checkpoint_id`**.
+`task_plan`'s `PlanStepSummary` reports only `checkpoint: bool` /
+`rollback_boundary: bool` per step — not the `ckpt_…` id `task_rollback`
+expects. Core mints that id internally (`valyria-plan`) and records it in a
+`plan_checkpoint` journal entry `{checkpoint_id, step_id}`, but that entry is
+**not** among the 21 projected event kinds. (A *completed* rollback is projected
+— as a `file_changed` with payload `{checkpoint_id, reverted}` — so the id is
+only ever visible *after* you already rolled back.)
+
+*Requested:* project a `plan_checkpoint` event `{ checkpoint_id, step_id,
+plan_revision }`, **or** add `checkpoint_id: Option<String>` to
+`PlanStepSummary`, **or** a `task_checkpoints { task_id }` method.
+
+*Until then:* the Rollback UI lists the checkpoint boundaries from `task_plan`
+and renders the per-step "Roll back" action **disabled**, naming this gap. The
+wire path (`CoreClient::task_rollback` → `TaskRollbackResponse`, result reported
+verbatim, Core's refusal surfaced as a structured error) is built and tested
+against Core's error path (`crates/valyria-bridge/tests/rollback.rs`), plus an
+advanced "roll back by id" field for a developer who has one from Core's logs.
+The app never computes a partial revert itself (PLAN §4.8).
+
 ---
 
 ## 3. The local-read exception

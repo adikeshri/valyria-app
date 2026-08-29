@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { CheckCircle2, XCircle, CircleDashed, ChevronRight, FileCode } from "lucide-react";
 import { useApp } from "../state/store";
+import { useLive } from "../core/liveStore";
+import LiveTestPanel from "./LiveTestPanel";
 
 interface TestRow {
   name: string;
@@ -41,6 +43,12 @@ const groups: { key: TestRow["status"]; label: string; icon: React.ReactNode; co
 ];
 
 export default function TestPanel() {
+  const liveSession = useLive((s) => s.session);
+  if (liveSession) return <LiveTestPanel />;
+  return <MockTestPanel />;
+}
+
+function MockTestPanel() {
   const [openTrace, setOpenTrace] = useState<string | null>("test_webhook_retry_uses_backoff");
   const setSelectedFile = useApp((s) => s.setSelectedFile);
 

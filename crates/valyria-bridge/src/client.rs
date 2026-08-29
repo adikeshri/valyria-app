@@ -14,11 +14,11 @@ use std::time::Duration;
 use futures::stream::BoxStream;
 use valyria_protocol::{
     Client, Empty, PermissionResolveRequest, Request, Response, SocketClient, TaskCreateRequest,
-    TaskIdRequest, TaskStatusRequest, WireError, WireEvent,
+    TaskIdRequest, TaskRollbackRequest, TaskStatusRequest, WireError, WireEvent,
 };
 use valyria_protocol::{
-    HelloResponse, PlanGetResponse, TaskListResponse, TaskReportResponse, TaskStatusResponse,
-    WorkspaceStatusResponse,
+    HelloResponse, PlanGetResponse, TaskListResponse, TaskReportResponse, TaskRollbackResponse,
+    TaskStatusResponse, WorkspaceStatusResponse,
 };
 
 use crate::error::{BridgeError, Result};
@@ -138,6 +138,33 @@ impl CoreClient {
         {
             Response::TaskPlan(r) => Ok(r),
             other => Err(unexpected("TaskPlan", other)),
+        }
+    }
+
+    /// Roll a task's workspace back to a checkpoint taken at a plan step
+    /// boundary (§16). Restores the checkpointed files exactly and refuses on
+    /// any file touched since — that refusal is Core's, surfaced verbatim as a
+    /// `BridgeError::Protocol`. The app never computes a partial revert itself
+    /// (docs/PLAN.md §4.8).
+    ///
+    /// Note (CORE-INTERFACE G13): v1 exposes no way to *discover* a
+    /// `checkpoint_id` — `task_plan` reports only `checkpoint: bool` per step
+    /// and no event carries the id. This method is wired and tested against
+    /// Core's error path so the surface lights up the moment Core emits one.
+    pub async fn task_rollback(
+        &self,
+        task_id: &str,
+        checkpoint_id: &str,
+    ) -> Result<TaskRollbackResponse> {
+        match self
+            .call(Request::TaskRollback(TaskRollbackRequest {
+                task_id: task_id.to_string(),
+                checkpoint_id: checkpoint_id.to_string(),
+            }))
+            .await?
+        {
+            Response::TaskRollback(r) => Ok(r),
+            other => Err(unexpected("TaskRollback", other)),
         }
     }
 

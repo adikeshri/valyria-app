@@ -6,7 +6,7 @@
 
 <p align="center">
   The desktop application for <a href="../valyria">Valyria</a> — a local-first
-  autonomous coding agent + harness that runs entirely on your own machine.
+  autonomous coding harness that runs entirely on your own machine.
 </p>
 
 ## See it

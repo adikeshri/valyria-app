@@ -35,6 +35,26 @@ pub enum BridgeError {
 
     #[error("transport error talking to Core: {0}")]
     Transport(String),
+
+    #[error("could not spawn `{bin} serve`: {source}")]
+    Spawn {
+        bin: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("Core did not become reachable within {waited_ms}ms of spawning")]
+    StartupTimeout { waited_ms: u128 },
+
+    #[error("Core returned an error [{code}]: {message}")]
+    Protocol {
+        code: String,
+        message: String,
+        retryable: bool,
+    },
+
+    #[error("unexpected response from Core: {0}")]
+    UnexpectedResponse(String),
 }
 
 impl BridgeError {
@@ -48,6 +68,19 @@ impl BridgeError {
             BridgeError::ProtocolMismatch { .. } => "bridge.protocol.mismatch",
             BridgeError::Handshake(_) => "bridge.handshake",
             BridgeError::Transport(_) => "bridge.transport",
+            BridgeError::Spawn { .. } => "bridge.spawn",
+            BridgeError::StartupTimeout { .. } => "bridge.startup_timeout",
+            BridgeError::Protocol { .. } => "bridge.protocol.error",
+            BridgeError::UnexpectedResponse(_) => "bridge.protocol.unexpected",
+        }
+    }
+
+    /// Whether retrying the operation might succeed (mirrors `WireError.retryable`).
+    pub fn retryable(&self) -> bool {
+        match self {
+            BridgeError::Transport(_) | BridgeError::StartupTimeout { .. } => true,
+            BridgeError::Protocol { retryable, .. } => *retryable,
+            _ => false,
         }
     }
 }

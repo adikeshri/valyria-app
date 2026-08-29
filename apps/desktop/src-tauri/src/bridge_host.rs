@@ -18,8 +18,8 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 use valyria_bridge::protocol::TaskListResponse;
 use valyria_bridge::{
-  spawn_or_adopt, BridgeError, CoreBinary, CoreClient, EventPump, PumpMessage, Session,
-  SupervisorConfig,
+  spawn_or_adopt, BridgeError, CoreBinary, CoreClient, DirEntry, EventPump, FileView, GitCommit,
+  GitEntry, GitRepo, PumpMessage, Session, SupervisorConfig, WorkspaceFs,
 };
 
 /// Protocol version this build negotiates against (core.lock.json).
@@ -32,6 +32,10 @@ struct Live {
   session: Session,
   client: CoreClient,
   pump_task: tokio::task::JoinHandle<()>,
+  /// Local-read fallbacks, strictly scoped to the authorized root
+  /// (CORE-INTERFACE §3). Deleted per-surface as Core exposes G3.
+  fs: WorkspaceFs,
+  git: GitRepo,
 }
 
 impl Drop for Live {
@@ -102,6 +106,8 @@ pub async fn session_open(
 
   let session = spawn_or_adopt(cfg).await.map_err(err_str)?;
   let client = CoreClient::new(session.socket_path.clone());
+  let fs = WorkspaceFs::new(&workspace_root).map_err(err_str)?;
+  let git = GitRepo::new(&workspace_root);
   let info = SessionInfo::of(workspace_root, &session);
 
   // Fan the workspace event stream out to the renderer.
@@ -128,6 +134,8 @@ pub async fn session_open(
     session,
     client,
     pump_task,
+    fs,
+    git,
   });
   Ok(info)
 }
@@ -185,6 +193,86 @@ pub async fn permission_resolve(
     c.permission_resolve(&task_id, approve).await
   })
   .await
+}
+
+// --- local-read repository surfaces (CORE-INTERFACE §3) ------------------
+//
+// Served locally, scoped to the authorized root, and marked as such in the UI.
+// Each flips to a Core method the moment G3 lands.
+
+async fn snapshot(state: &BridgeState) -> Result<(WorkspaceFs, GitRepo), String> {
+  let guard = state.0.lock().await;
+  let l = guard
+    .as_ref()
+    .ok_or_else(|| "no session is open".to_string())?;
+  Ok((l.fs.clone(), l.git.clone()))
+}
+
+#[tauri::command]
+pub async fn fs_list_dir(
+  state: State<'_, BridgeState>,
+  path: String,
+) -> Result<Vec<DirEntry>, String> {
+  let (fs, _) = snapshot(&state).await?;
+  tokio::task::spawn_blocking(move || fs.list_dir(&path))
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(err_str)
+}
+
+#[tauri::command]
+pub async fn fs_read_file(state: State<'_, BridgeState>, path: String) -> Result<FileView, String> {
+  let (fs, _) = snapshot(&state).await?;
+  tokio::task::spawn_blocking(move || fs.read_file(&path))
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(err_str)
+}
+
+#[tauri::command]
+pub async fn git_status(state: State<'_, BridgeState>) -> Result<Vec<GitEntry>, String> {
+  let (_, git) = snapshot(&state).await?;
+  tokio::task::spawn_blocking(move || git.status())
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(err_str)
+}
+
+#[tauri::command]
+pub async fn git_log(state: State<'_, BridgeState>, limit: u32) -> Result<Vec<GitCommit>, String> {
+  let (_, git) = snapshot(&state).await?;
+  tokio::task::spawn_blocking(move || git.log(limit))
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(err_str)
+}
+
+#[tauri::command]
+pub async fn git_diff(
+  state: State<'_, BridgeState>,
+  path: Option<String>,
+  staged: bool,
+) -> Result<String, String> {
+  let (_, git) = snapshot(&state).await?;
+  tokio::task::spawn_blocking(move || git.diff(path.as_deref(), staged))
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(err_str)
+}
+
+#[tauri::command]
+pub async fn git_branch(state: State<'_, BridgeState>) -> Result<String, String> {
+  let (_, git) = snapshot(&state).await?;
+  tokio::task::spawn_blocking(move || {
+    if git.is_repo() {
+      git.branch()
+    } else {
+      Ok(String::new())
+    }
+  })
+  .await
+  .map_err(|e| e.to_string())?
+  .map_err(err_str)
 }
 
 #[tauri::command]

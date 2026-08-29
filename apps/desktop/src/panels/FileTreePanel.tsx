@@ -3,6 +3,8 @@ import { ChevronRight, Folder, FolderOpen, FileCode, Search, X } from "lucide-re
 import type { FileChangeState, FileNode } from "../types/domain";
 import { fileTree } from "../data/mock";
 import { useApp } from "../state/store";
+import { useLive } from "../core/liveStore";
+import LiveFileTree from "./LiveFileTree";
 
 function changeColor(state?: FileChangeState) {
   switch (state) {
@@ -86,6 +88,12 @@ function Node({ node, depth, filter }: { node: FileNode; depth: number; filter: 
 }
 
 export default function FileTreePanel() {
+  const liveSession = useLive((s) => s.session);
+  if (liveSession) return <LiveFileTree />;
+  return <MockFileTree />;
+}
+
+function MockFileTree() {
   const [filter, setFilter] = useState("");
   const root = fileTree[0];
 

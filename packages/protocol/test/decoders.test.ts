@@ -21,13 +21,15 @@ const vendoredKinds = readFileSync(
   .map((l) => l.trim())
   .filter(Boolean);
 
-const trace: { kind: string }[] = readFileSync(
-  join(here, "../../../fixtures/traces/add-a-function.jsonl"),
-  "utf8",
-)
-  .trim()
-  .split("\n")
-  .map((l) => JSON.parse(l));
+function loadTrace(name: string): { kind: string }[] {
+  return readFileSync(join(here, "../../../fixtures/traces/", name), "utf8")
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+}
+
+const trace = loadTrace("add-a-function.jsonl");
+const bugFixTrace = loadTrace("seeded-bug-fix.jsonl");
 
 test("KNOWN_EVENT_KINDS matches Core's pinned kind list exactly", () => {
   assert.deepEqual([...KNOWN_EVENT_KINDS].sort(), [...vendoredKinds].sort());
@@ -43,6 +45,23 @@ test("every event in the captured trace decodes ok", () => {
   for (const raw of trace) {
     const d = decodeEvent(raw);
     assert.equal(d.ok, true, `${(raw as { kind: string }).kind} -> ${JSON.stringify(d)}`);
+  }
+});
+
+test("every event in the seeded-bug-fix trace decodes ok (test_* + verification_evidence)", () => {
+  for (const raw of bugFixTrace) {
+    const d = decodeEvent(raw);
+    assert.equal(d.ok, true, `${(raw as { kind: string }).kind} -> ${JSON.stringify(d)}`);
+  }
+  // the fold-relevant fields survive decoding
+  const failed = bugFixTrace.find((e) => e.kind === "test_failed")!;
+  const d = decodeEvent(failed);
+  assert.equal(d.ok, true);
+  if (d.ok) {
+    const p = d.payload as { command?: string; failure_count?: number; run_id?: string };
+    assert.equal(p.command, "pytest tests/test_billing.py");
+    assert.equal(p.failure_count, 1);
+    assert.ok(p.run_id?.startsWith("vrun_"));
   }
 });
 

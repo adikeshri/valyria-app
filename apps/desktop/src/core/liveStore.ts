@@ -14,7 +14,7 @@ import {
   type ConnectionState,
   type StoreState,
 } from "@valyria/state";
-import { bridge, inTauri, type SessionInfo } from "./bridge";
+import { bridge, inTauri, type RollbackResult, type SessionInfo } from "./bridge";
 import { repo } from "./repo";
 
 interface LiveState {
@@ -35,6 +35,9 @@ interface LiveState {
   pauseTask: (taskId: string) => Promise<void>;
   resumeTask: (taskId: string) => Promise<void>;
   cancelTask: (taskId: string) => Promise<void>;
+  /** §4.8 — goes through Core's `task_rollback` and nothing else. Returns
+   *  Core's exact result, or null with `error` set. */
+  rollbackTask: (taskId: string, checkpointId: string) => Promise<RollbackResult | null>;
   resolveApproval: (taskId: string, approve: boolean) => Promise<void>;
   dismissResumePrompt: () => void;
 }
@@ -118,6 +121,17 @@ export const useLive = create<LiveState>((set, get) => ({
   pauseTask: (taskId) => guard(() => bridge.taskPause(taskId), set, get),
   resumeTask: (taskId) => guard(() => bridge.taskResume(taskId), set, get),
   cancelTask: (taskId) => guard(() => bridge.taskCancel(taskId), set, get),
+
+  rollbackTask: async (taskId, checkpointId) => {
+    try {
+      const result = await bridge.taskRollback(taskId, checkpointId);
+      void get().refreshTasks();
+      return result;
+    } catch (e) {
+      set({ error: String(e) });
+      return null;
+    }
+  },
   resolveApproval: (taskId, approve) =>
     guard(() => bridge.permissionResolve(taskId, approve), set, get),
 

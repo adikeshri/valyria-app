@@ -19,6 +19,7 @@ export default function CommandPalette() {
   const setRoute = useApp((s) => s.setRoute);
   const setCenterTab = useApp((s) => s.setCenterTab);
   const setDockTab = useApp((s) => s.setDockTab);
+  const setRightTab = useApp((s) => s.setRightTab);
   const setSidebarSection = useApp((s) => s.setSidebarSection);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -29,12 +30,13 @@ export default function CommandPalette() {
     { id: "task", label: "Go to Task panel", icon: <ListChecks size={14} />, run: () => setCenterTab("task") },
     { id: "diff", label: "Show diff", icon: <GitCompareArrows size={14} />, run: () => setDockTab("diff") },
     { id: "tests", label: "Show tests", icon: <FlaskConical size={14} />, run: () => setDockTab("tests") },
+    { id: "verify", label: "Show verification evidence", icon: <ShieldCheck size={14} />, run: () => setRightTab("verify") },
     { id: "terminal", label: "Open terminal", icon: <TerminalSquare size={14} />, run: () => setDockTab("terminal") },
     { id: "models", label: "Open Model Manager", icon: <Boxes size={14} />, run: () => setSidebarSection("models") },
     { id: "settings-security", label: "Open Security settings", icon: <ShieldCheck size={14} />, run: () => setRoute("settings") },
     { id: "settings", label: "Open Settings", icon: <Settings size={14} />, run: () => setRoute("settings") },
     { id: "first-run", label: "Replay first-run experience", icon: <Sparkles size={14} />, run: () => setRoute("first-run") },
-  ], [setCenterTab, setDockTab, setSidebarSection, setRoute]);
+  ], [setCenterTab, setDockTab, setRightTab, setSidebarSection, setRoute]);
 
   const filtered = commands.filter((c) => c.label.toLowerCase().includes(query.toLowerCase()));
 

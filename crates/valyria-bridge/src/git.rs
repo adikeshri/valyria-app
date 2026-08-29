@@ -73,6 +73,63 @@ impl GitRepo {
         self.run(&args)
     }
 
+    /// Unified diff for a single file that also covers the case Core's agent
+    /// hits most on a fresh task: a **newly created, still-untracked** file.
+    /// Plain `git diff` ignores those, so we fall back to `git diff --no-index`
+    /// against an empty tree (exit status 1 with output is the normal "differs"
+    /// result there, not an error).
+    pub fn diff_file(&self, path: &str) -> Result<String> {
+        let tracked = self
+            .run(&["ls-files", "--error-unmatch", "--", path])
+            .is_ok();
+        if tracked {
+            let combined = self.diff(Some(path), false)?;
+            if !combined.trim().is_empty() {
+                return Ok(combined);
+            }
+            // Tracked but no worktree change — show the staged diff if any.
+            return self.diff(Some(path), true);
+        }
+        // Untracked: synthesize an all-additions diff.
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(&self.root)
+            .args(["diff", "--no-color", "--no-index", "--", "/dev/null", path])
+            .output()
+            .map_err(|e| BridgeError::Git(format!("spawning git: {e}")))?;
+        // `--no-index` exits 1 when the files differ (the expected case).
+        match out.status.code() {
+            Some(0) | Some(1) => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),
+            _ => Err(BridgeError::Git(
+                String::from_utf8_lossy(&out.stderr).trim().to_string(),
+            )),
+        }
+    }
+
+    /// Contents of `path` at `rev` (e.g. `HEAD`), for the "before" side of a
+    /// review diff. `Ok(None)` when the path does not exist at that rev (a file
+    /// the agent newly created) — not an error.
+    pub fn show(&self, rev: &str, path: &str) -> Result<Option<String>> {
+        let spec = format!("{rev}:{path}");
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(&self.root)
+            .args(["show", "--textconv", &spec])
+            .output()
+            .map_err(|e| BridgeError::Git(format!("spawning git: {e}")))?;
+        if out.status.success() {
+            Ok(Some(String::from_utf8_lossy(&out.stdout).into_owned()))
+        } else {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            // "exists on disk, but not in 'HEAD'" / "does not exist" → not tracked yet.
+            if stderr.contains("does not exist") || stderr.contains("exists on disk") {
+                Ok(None)
+            } else {
+                Err(BridgeError::Git(stderr.trim().to_string()))
+            }
+        }
+    }
+
     pub fn log(&self, limit: u32) -> Result<Vec<GitCommit>> {
         let n = format!("-{}", limit.max(1));
         // %x1f = unit sep between fields, %x1e = record sep between commits.
@@ -248,5 +305,40 @@ mod tests {
         let diff = g.diff(Some("a.txt"), false).unwrap();
         assert!(diff.contains("+CHANGED"));
         assert!(!diff.contains("b.txt"));
+    }
+
+    #[test]
+    fn show_returns_head_contents_and_none_for_untracked() {
+        let d = repo();
+        std::fs::write(d.path().join("a.txt"), "one\nCHANGED\n").unwrap();
+        std::fs::write(d.path().join("fresh.txt"), "brand new\n").unwrap();
+        let g = GitRepo::new(d.path());
+        assert_eq!(g.show("HEAD", "a.txt").unwrap().as_deref(), Some("one\n"));
+        assert_eq!(g.show("HEAD", "fresh.txt").unwrap(), None);
+    }
+
+    #[test]
+    fn diff_file_covers_a_modified_tracked_file() {
+        let d = repo();
+        std::fs::write(d.path().join("a.txt"), "one\nCHANGED\n").unwrap();
+        let g = GitRepo::new(d.path());
+        let diff = g.diff_file("a.txt").unwrap();
+        assert!(diff.contains("+CHANGED"));
+    }
+
+    #[test]
+    fn diff_file_synthesizes_an_all_additions_diff_for_an_untracked_file() {
+        let d = repo();
+        std::fs::write(d.path().join("fresh.rs"), "fn new_thing() {}\n").unwrap();
+        let g = GitRepo::new(d.path());
+        let diff = g.diff_file("fresh.rs").unwrap();
+        assert!(diff.contains("+fn new_thing() {}"), "diff was: {diff:?}");
+        // No content removal lines — the only `-` is the `--- /dev/null` header.
+        assert!(
+            !diff
+                .lines()
+                .any(|l| l.starts_with('-') && !l.starts_with("---")),
+            "an untracked file has nothing to remove: {diff:?}"
+        );
     }
 }

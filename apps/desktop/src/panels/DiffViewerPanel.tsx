@@ -4,8 +4,16 @@ import { ChevronUp, ChevronDown, FileDiff, GitCompareArrows } from "lucide-react
 import { diffs, modifiedFiles } from "../data/mock";
 import { CodeLine } from "../components/CodeLine";
 import { useApp } from "../state/store";
+import { useLive } from "../core/liveStore";
+import LiveDiffViewer from "./LiveDiffViewer";
 
 export default function DiffViewerPanel() {
+  const liveSession = useLive((s) => s.session);
+  if (liveSession) return <LiveDiffViewer />;
+  return <MockDiffViewerPanel />;
+}
+
+function MockDiffViewerPanel() {
   const selectedFile = useApp((s) => s.selectedFile);
   const setSelectedFile = useApp((s) => s.setSelectedFile);
   const containerRef = useRef<HTMLDivElement>(null);

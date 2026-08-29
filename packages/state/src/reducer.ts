@@ -6,9 +6,12 @@ import { decodeEvent, type DecodedEvent } from "@valyria/protocol";
 import {
   emptyStore,
   type ConnectionState,
+  type FileChangeProjection,
   type StoreState,
   type TaskProjection,
   type TaskState,
+  type TestProjection,
+  type TestRunProjection,
 } from "./store.js";
 
 /** Apply one raw wire event. `raw` is whatever came off the socket. */
@@ -69,8 +72,99 @@ export function applyDecoded(state: StoreState, ev: DecodedEvent): StoreState {
         [ev.taskId]: { taskId: ev.taskId, seq: ev.seq, payload: ev.payload },
       };
     }
+
+    if (ev.ok) {
+      const files = foldFileChange(state.files[ev.taskId], ev);
+      if (files !== state.files[ev.taskId]) {
+        next.files = { ...state.files, [ev.taskId]: files };
+      }
+      const tests = foldTestRun(state.tests[ev.taskId], ev);
+      if (tests && tests !== state.tests[ev.taskId]) {
+        next.tests = { ...state.tests, [ev.taskId]: tests };
+      }
+    }
   }
   return next;
+}
+
+/** `file_changed`, plus write/edit `tool_started` (its `input.path`), folded
+ *  into the changed-file rail. Returns the same reference when nothing changed
+ *  so the caller can skip the copy. */
+function foldFileChange(
+  prev: readonly FileChangeProjection[] | undefined,
+  ev: DecodedEvent & { ok: true },
+): FileChangeProjection[] {
+  const p = (ev.payload ?? {}) as Record<string, unknown>;
+  let path: string | undefined;
+  let change: string | null = null;
+
+  if (ev.kind === "file_changed") {
+    path = typeof p.path === "string" ? p.path : undefined;
+    change = typeof p.change === "string" ? p.change : null;
+  } else if (ev.kind === "tool_started") {
+    const tool = typeof p.tool === "string" ? p.tool : "";
+    const input = p.input;
+    const ipath =
+      input && typeof input === "object" && "path" in input
+        ? (input as { path?: unknown }).path
+        : undefined;
+    if (/write|edit|patch/.test(tool) && typeof ipath === "string") {
+      path = ipath;
+    }
+  }
+  if (!path) return (prev ?? []) as FileChangeProjection[];
+
+  const list = prev ? [...prev] : [];
+  const at = list.findIndex((f) => f.path === path);
+  if (at === -1) {
+    list.push({ path, change, firstSeq: ev.seq, lastSeq: ev.seq });
+  } else {
+    const cur = list[at]!;
+    list[at] = { ...cur, change: change ?? cur.change, lastSeq: ev.seq };
+  }
+  return list;
+}
+
+/** `test_started` / `test_passed` / `test_failed` folded per verification
+ *  command, latest event wins (a `started` row is replaced by its outcome). */
+function foldTestRun(
+  prev: TestProjection | undefined,
+  ev: DecodedEvent & { ok: true },
+): TestProjection | undefined {
+  if (
+    ev.kind !== "test_started" &&
+    ev.kind !== "test_passed" &&
+    ev.kind !== "test_failed"
+  ) {
+    return prev;
+  }
+  const p = (ev.payload ?? {}) as Record<string, unknown>;
+  const command = typeof p.command === "string" ? p.command : "(unnamed run)";
+  const run: TestRunProjection = {
+    command,
+    outcome:
+      ev.kind === "test_passed"
+        ? "passed"
+        : ev.kind === "test_failed"
+          ? "failed"
+          : "started",
+    runId: typeof p.run_id === "string" ? p.run_id : null,
+    failureCount:
+      typeof p.failure_count === "number" ? p.failure_count : null,
+    summary:
+      typeof p.summary === "string"
+        ? p.summary
+        : typeof p.outcome === "string"
+          ? p.outcome
+          : null,
+    seq: ev.seq,
+  };
+
+  const runs = prev ? [...prev.runs] : [];
+  const at = runs.findIndex((r) => r.command === command);
+  if (at === -1) runs.push(run);
+  else runs[at] = run;
+  return { taskId: ev.taskId as string, runs };
 }
 
 function advanceTask(

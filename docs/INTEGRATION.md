@@ -357,6 +357,38 @@ dots, filename search mode, live refresh on `core://fs-changed`), `LiveGitPanel`
 reports it changed, binary + truncation handling). Layering check still green —
 the new modules use `std` + `serde` + `notify` only.
 
+**Phase 4 — changes and verification (complete)**. The projection
+(`@valyria/state`) grew two pure slices — `files` (changed-file rail, folded
+from `file_changed` + write/edit `tool_started`; **no ownership field** — G8)
+and `tests` (per-command outcomes, latest event wins) — with selectors
+`changedFilesForTask` / `testResultsForTask` / `checkpointsForTask`, all
+replay-tested against a new `fixtures/traces/seeded-bug-fix.jsonl` (fail →
+repair → pass, payload shapes mirrored from Core's `driver.rs`). Decoders for
+`test_*` / `verification_evidence` tightened to Core's real VERIFY_RESULT
+fields; the seeded-bug trace joins the `decoders.test.ts` corpus.
+
+`valyria-bridge`: `CoreClient::task_rollback` → `TaskRollbackResponse` (result
+reported verbatim; Core's refusal is a structured `BridgeError::Protocol`, not a
+transport error — `tests/rollback.rs` against real Core), and `git.diff_file`
+(covers a still-untracked new file via `git diff --no-index`) + `git.show`
+(the "before" side at `HEAD`). Host: `task_rollback` / `git_diff_file` /
+`git_show_head`.
+
+Renderer live panels (each a dispatcher over the mock, per the Phase 2/3
+pattern): `LiveDiffViewer` — CodeMirror 6 `unifiedMergeView` (D12), read-only,
+intra-line highlighting, `goToNextChunk`/`goToPreviousChunk` navigation, a
+changed-file rail from `git_status` with agent-touched paths marked (never
+filtered), and a permanent **"ownership unavailable"** column (G8);
+`LiveTestPanel` — passed / failed / running from the `tests` slice, each run
+expandable to Core's `digest`, jump-to-file → diff; `LiveVerificationInspector`
+— `task_report`'s `verified[]` / `unverified[]` verbatim, NOT RUN when empty, no
+synthesizable "verified". Rollback UI lives in `LiveTaskPanel`: checkpoint
+boundaries from `task_plan`, the per-step action **disabled with the G13 reason**
+(no `checkpoint_id` on the wire), plus an advanced roll-back-by-id path that
+exercises the full confirm → `task_rollback` → exact-result flow. New gap
+**G13** filed. CodeMirror 6 added (`codemirror` + `@codemirror/merge` +
+lang-javascript/python/rust); the layering check is unaffected (renderer-only).
+
 **Open:**
 
 - **Single bundled binary vs. split runtime/engine** — resolved by RI1's

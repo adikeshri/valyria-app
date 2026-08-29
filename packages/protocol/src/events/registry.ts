@@ -82,8 +82,15 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
   external_change_detected: z
     .object({ paths: z.array(s).optional() })
     .passthrough(),
+  // `{ path, change }` normally; also reused for a completed rollback, whose
+  // payload is `{ checkpoint_id, reverted }` — passthrough keeps both.
   file_changed: z
-    .object({ path: s.optional(), change: s.optional() })
+    .object({
+      path: s.optional(),
+      change: s.optional(),
+      checkpoint_id: s.optional(),
+      reverted: z.array(s).optional(),
+    })
     .passthrough(),
   memory_written: anyObj,
   // `text` is model output — decoders type it, but selectors must never surface
@@ -102,9 +109,40 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
   task_failed: z.object({ reason: s.optional() }).passthrough(),
   task_paused: anyObj,
   task_started: z.object({ objective: s.optional() }).passthrough(),
-  test_failed: z.object({ passed: z.boolean().optional(), summary: s.optional() }).passthrough(),
-  test_passed: z.object({ passed: z.boolean().optional() }).passthrough(),
-  test_started: anyObj,
+  // `test_passed` / `test_failed` carry Core's VERIFY_RESULT payload verbatim
+  // (valyria-agent driver.rs) — the same shape as `verification_evidence`.
+  test_failed: z
+    .object({
+      command: s.optional(),
+      passed: z.boolean().optional(),
+      outcome: s.optional(),
+      exit_code: z.number().optional(),
+      failure_count: z.number().optional(),
+      run_id: s.optional(),
+      digest: s.optional(),
+      summary: s.optional(),
+    })
+    .passthrough(),
+  test_passed: z
+    .object({
+      command: s.optional(),
+      passed: z.boolean().optional(),
+      outcome: s.optional(),
+      exit_code: z.number().optional(),
+      failure_count: z.number().optional(),
+      run_id: s.optional(),
+      digest: s.optional(),
+    })
+    .passthrough(),
+  // VERIFY effect issued: `{ command, kind, tier, rationale }`.
+  test_started: z
+    .object({
+      command: s.optional(),
+      kind: s.optional(),
+      tier: s.optional(),
+      rationale: s.optional(),
+    })
+    .passthrough(),
   tool_completed: z
     .object({
       tool: s.optional(),
@@ -122,7 +160,10 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
       command: s.optional(),
       kind: s.optional(),
       outcome: s.optional(),
+      exit_code: z.number().optional(),
+      failure_count: z.number().optional(),
       run_id: s.optional(),
+      digest: s.optional(),
     })
     .passthrough(),
 };

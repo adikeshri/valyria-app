@@ -73,6 +73,41 @@ export interface ApprovalProjection {
   payload: unknown;
 }
 
+/** One file the agent touched during a task, folded from `file_changed` and
+ *  write/edit `tool_*` events (§4.8). `firstSeq`/`lastSeq` order the rail on
+ *  `seq`, never wall clock (§3). Ownership (agent / user / pre-existing) is
+ *  deliberately absent — Core's ledger is not on the wire (G8), and the app
+ *  never guesses it from touch order. */
+export interface FileChangeProjection {
+  path: string;
+  /** best-effort from the event: "modified" | "added" | "deleted" | "renamed" */
+  change: string | null;
+  firstSeq: number;
+  lastSeq: number;
+}
+
+/** Test outcomes for a task, folded from `test_started` / `test_passed` /
+ *  `test_failed` (§4.11). One row per distinct command; the latest event for a
+ *  command wins. `NOT RUN` categories are the panel's job — this only records
+ *  what Core actually emitted. */
+export type TestOutcome = "started" | "passed" | "failed";
+
+export interface TestRunProjection {
+  /** the verification command, e.g. `cargo test` — the stable identity */
+  command: string;
+  outcome: TestOutcome;
+  /** VERIFY_RESULT payload fields, when present */
+  runId: string | null;
+  failureCount: number | null;
+  summary: string | null;
+  seq: number;
+}
+
+export interface TestProjection {
+  taskId: string;
+  runs: TestRunProjection[];
+}
+
 export interface StoreState {
   connection: ConnectionState;
   /** contiguity cursor: the highest seq applied. `0` before the first event
@@ -83,6 +118,10 @@ export interface StoreState {
   tasks: Record<string, TaskProjection>;
   plans: Record<string, PlanProjection>;
   approvals: Record<string, ApprovalProjection>;
+  /** per-task changed-file rail (§4.8) */
+  files: Record<string, FileChangeProjection[]>;
+  /** per-task test outcomes (§4.11) */
+  tests: Record<string, TestProjection>;
   /** append-only; corrections arrive as later events, earlier rows never mutate (PLAN §3) */
   events: EventRow[];
 }
@@ -95,6 +134,8 @@ export function emptyStore(): StoreState {
     tasks: {},
     plans: {},
     approvals: {},
+    files: {},
+    tests: {},
     events: [],
   };
 }

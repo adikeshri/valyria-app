@@ -5,7 +5,6 @@ on:
     branches: [main]
   pull_request:
 
-# Cancel superseded runs on the same ref.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -13,33 +12,45 @@ concurrency:
 permissions:
   contents: read
 
-defaults:
-  run:
-    working-directory: apps/desktop
+env:
+  RUST_TOOLCHAIN: "1.97.1"
 
 jobs:
-  frontend:
+  renderer:
     name: Renderer (lint · typecheck · build)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
-
       - run: npm ci
+      - run: npm run lint
+      - run: npm run build
 
-      - name: Lint (oxlint)
-        run: npm run lint
+  packages:
+    name: Packages (protocol · state — codegen · typecheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run codegen
+      # codegen output is committed; fail if it drifted from the schemas.
+      - run: git diff --exit-code packages/protocol/src/generated
+      - run: npm run typecheck
 
-      - name: Typecheck + build (tsc -b && vite build)
-        run: npm run build
-
-  tauri:
-    name: Native shell (fmt · clippy · build)
+  rust:
+    name: Rust (fmt · clippy · test · gates)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,23 +67,21 @@ jobs:
             patchelf \
             build-essential
 
-      - name: Install Rust toolchain
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup component add rustfmt clippy
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: apps/desktop/src-tauri
+          workspaces: . -> target
 
-      - name: Format check (cargo fmt)
-        working-directory: apps/desktop/src-tauri
-        run: cargo fmt --all --check
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      # The walking-skeleton integration test self-skips here: no VALYRIA_BIN and
+      # no ../valyria checkout. It runs in the release pipeline against the
+      # bundled Core binary.
 
-      - name: Lint (cargo clippy)
-        working-directory: apps/desktop/src-tauri
-        run: cargo clippy --all-targets --locked -- -D warnings
-
-      - name: Build
-        working-directory: apps/desktop/src-tauri
-        run: cargo build --locked
+      - name: Gates (check-layering · verify-core · check-protocol)
+        run: cargo run -q -p xtask -- all

@@ -17,4 +17,5 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt", "macros", "test-util"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "test-util"] }
+tempfile = "3"

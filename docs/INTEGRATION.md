@@ -282,8 +282,26 @@ handshake with protocol-major checking), `crates/xtask`
 (`check-layering` / `check-protocol` / `verify-core`, all green, layering
 violation verified to fail), `packages/protocol` (vendored schemas, TS codegen,
 capability registry, tolerant event-decoder registry), `packages/state` (pure
-reducer + store + selectors). Next: the spawn/adopt/backoff supervisor loop and
-the batched event pump (PLAN Phase 1).
+reducer + store + selectors).
+
+**Phase 1 landed** (PLAN Phase 1 — the milestone): `valyria-bridge` gained the
+session supervisor (`spawn_or_adopt`: adopt a live daemon via pid-liveness +
+`hello`, else spawn `valyria serve` and poll-connect with bounded backoff;
+`Session::shutdown_daemon` = SIGKILL + reap), the typed `CoreClient` (one
+timeout-bounded method per protocol call), and the `EventPump` (one held
+subscription, ~16ms coalesced batches with `first_seq`/`last_seq`, contiguity
+flag, reconnect-from-cursor — Core's `since` is exclusive). The Tauri host
+(`src-tauri/src/bridge_host.rs`) exposes `session_open` / `task_*` /
+`permission_resolve` commands and forwards the stream to the renderer as
+`core://event-batch` events. **`tests/walking_skeleton.rs` passes against a
+real `valyria serve`**: spawn → stream gapless to completion → drop the UI →
+adopt the still-running daemon → resume from a mid cursor with an exact,
+hole-free tail → SIGKILL the daemon → re-spawn → task rehydrated from the
+journal. CI gains `rust` (fmt/clippy/test/gates) and `packages`
+(codegen-drift/typecheck) jobs.
+
+Next: wire the renderer's zustand store to `core://event-batch` through the
+`@valyria/state` reducer and swap `mock.ts` for live selectors (PLAN Phase 2).
 
 **Open:**
 

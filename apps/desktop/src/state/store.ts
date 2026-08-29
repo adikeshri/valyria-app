@@ -6,8 +6,25 @@ export type SidebarSection = "files" | "changes" | "tasks" | "git" | "models" | 
 export type CenterTab = "chat" | "task" | "code";
 export type DockTab = "activity" | "timeline" | "terminal" | "tests" | "diff";
 export type RightTab = "context" | "symbols" | "verify";
+export type TerminalSub = "human" | "agent";
 export type Theme = "light" | "dark" | "system";
 export type Route = "workspace" | "settings" | "first-run";
+
+/** A request from one panel to open a file in another (Phase 7 cross-panel
+ *  navigation — the failure → file → diff → change chain). `reveal()` is the
+ *  single carrier; it replaces the ad-hoc `setSelectedFile(p); setDockTab(...)`
+ *  pairs that were duplicated across panels and could not convey a line or a
+ *  reason. */
+export interface RevealTarget {
+  path: string;
+  /** 1-based; the diff viewer scrolls here when present */
+  line?: number;
+  /** where to show it — the diff dock tab (default) or the code viewer */
+  in?: "diff" | "code";
+  /** why this file is implicated — the target panel may surface it; absent when
+   *  the user picked the file directly */
+  reason?: string;
+}
 
 interface AppState {
   theme: Theme;
@@ -34,8 +51,18 @@ interface AppState {
   rightCollapsed: boolean;
   toggleRight: () => void;
 
+  /** Human / agent split inside the Terminal dock panel. In the store (not
+   *  panel-local) so `reveal`-style jumps and the command palette can target
+   *  the agent-command view. */
+  terminalSub: TerminalSub;
+  setTerminalSub: (t: TerminalSub) => void;
+
   selectedFile: string | null;
   setSelectedFile: (p: string | null) => void;
+  /** The most recent cross-panel jump (Phase 7). Panels read `line` / `reason`;
+   *  `null` when nothing has been revealed this session. */
+  revealed: RevealTarget | null;
+  reveal: (t: RevealTarget) => void;
 
   selectedTaskId: string;
   setSelectedTaskId: (id: string) => void;
@@ -86,8 +113,19 @@ export const useApp = create<AppState>((set) => ({
   rightCollapsed: false,
   toggleRight: () => set((s) => ({ rightCollapsed: !s.rightCollapsed })),
 
+  terminalSub: "human",
+  setTerminalSub: (terminalSub) => set({ terminalSub }),
+
   selectedFile: "src/auth/service.py",
   setSelectedFile: (selectedFile) => set({ selectedFile }),
+
+  revealed: null,
+  reveal: (target) =>
+    set(
+      target.in === "code"
+        ? { selectedFile: target.path, revealed: target, centerTab: "code" }
+        : { selectedFile: target.path, revealed: target, dockTab: "diff", dockCollapsed: false },
+    ),
 
   selectedTaskId: currentTask.id,
   setSelectedTaskId: (selectedTaskId) => set({ selectedTaskId }),

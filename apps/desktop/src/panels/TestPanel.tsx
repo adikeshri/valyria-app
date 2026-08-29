@@ -50,6 +50,7 @@ export default function TestPanel() {
 
 function MockTestPanel() {
   const [openTrace, setOpenTrace] = useState<string | null>("test_webhook_retry_uses_backoff");
+  const reveal = useApp((s) => s.reveal);
   const setSelectedFile = useApp((s) => s.setSelectedFile);
 
   return (
@@ -93,7 +94,7 @@ function MockTestPanel() {
               </div>
               <button
                 className="no-native-focus"
-                onClick={() => setSelectedFile(row.file)}
+                onClick={() => reveal({ path: row.file, reason: `implicated by ${row.name}` })}
                 style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 6, color: "var(--text-tertiary)", fontSize: 11.5 }}
               >
                 <FileCode size={11} /> {row.file} <ChevronRight size={11} />

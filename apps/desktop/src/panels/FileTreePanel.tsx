@@ -19,8 +19,7 @@ function changeColor(state?: FileChangeState) {
 function Node({ node, depth, filter }: { node: FileNode; depth: number; filter: string }) {
   const [open, setOpen] = useState(depth < 2);
   const selectedFile = useApp((s) => s.selectedFile);
-  const setSelectedFile = useApp((s) => s.setSelectedFile);
-  const setCenterTab = useApp((s) => s.setCenterTab);
+  const reveal = useApp((s) => s.reveal);
 
   const matches = (n: FileNode): boolean => {
     if (!filter) return true;
@@ -63,7 +62,7 @@ function Node({ node, depth, filter }: { node: FileNode; depth: number; filter: 
   return (
     <button
       className="no-native-focus"
-      onClick={() => { setSelectedFile(node.path.replace(/^\//, "")); setCenterTab("chat"); }}
+      onClick={() => reveal({ path: node.path.replace(/^\//, ""), in: "code" })}
       style={{
         display: "flex", alignItems: "center", gap: 5, width: "100%",
         padding: "3px 10px", paddingLeft: 8 + depth * 14 + 17,

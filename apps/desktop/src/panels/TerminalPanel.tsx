@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { User, Sparkles, TerminalSquare } from "lucide-react";
 import { WORKSPACE_NAME, terminalUserLines } from "../data/mock";
+import { useApp, type TerminalSub } from "../state/store";
+import { useLive } from "../core/liveStore";
+import LiveTerminalPanel from "./LiveTerminalPanel";
+import LiveAgentCommands from "./LiveAgentCommands";
 
-type Sub = "human" | "agent";
+type Sub = TerminalSub;
 
 const MOCK_RESPONSES: Record<string, string[]> = {
   "git status": terminalUserLines.slice(1),
@@ -14,7 +18,7 @@ const MOCK_RESPONSES: Record<string, string[]> = {
   clear: [],
 };
 
-function HumanTerminal() {
+function MockHumanTerminal() {
   const ref = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const lineBuf = useRef("");
@@ -38,7 +42,7 @@ function HumanTerminal() {
 
     const prompt = () => term.write(`\r\n\x1b[38;2;15;157;140m${WORKSPACE_NAME}\x1b[0m \x1b[2m❯\x1b[0m `);
     term.writeln(`Valyria integrated terminal — ${WORKSPACE_NAME}`);
-    term.writeln("This is your shell. Commands you run here are yours, not the agent's.");
+    term.writeln("Sample shell (no workspace open). Commands you run here are yours, not the agent's.");
     prompt();
 
     term.onData((data) => {
@@ -85,7 +89,7 @@ function HumanTerminal() {
   return <div ref={ref} style={{ height: "100%", padding: "6px 4px 0 8px" }} />;
 }
 
-function AgentCommandLog() {
+function MockAgentCommandLog() {
   const commands = [
     { cmd: "ruff format --check src tests", output: "4 files already formatted", ok: true },
     { cmd: "ruff check src tests", output: "All checks passed!", ok: true },
@@ -106,38 +110,80 @@ function AgentCommandLog() {
   );
 }
 
+const SUBS: { key: Sub; label: string; icon: React.ReactNode; accent: string }[] = [
+  { key: "human", label: "Your Terminal", icon: <User size={12} />, accent: "var(--own-user)" },
+  { key: "agent", label: "Agent Commands", icon: <TerminalSquare size={12} />, accent: "var(--accent-strong)" },
+];
+
+/** The dock Terminal panel. The human/agent split is a real tablist — it is the
+ *  one place in the app where confusing the two panes is a security problem
+ *  (D7), so it gets roles and arrow-key navigation the other dock strips don't.
+ *  Each sub-tab dispatches to its live surface when a workspace is open, and to
+ *  a sample one otherwise (the Phase 2–6 mock/Live pattern). */
 export default function TerminalPanel() {
-  const [sub, setSub] = useState<Sub>("human");
+  const sub = useApp((s) => s.terminalSub);
+  const setSub = useApp((s) => s.setTerminalSub);
+  const liveSession = useLive((s) => s.session);
+  const tabsRef = useRef<HTMLDivElement>(null);
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const i = SUBS.findIndex((s) => s.key === sub);
+    const next = e.key === "ArrowRight" ? (i + 1) % SUBS.length : (i - 1 + SUBS.length) % SUBS.length;
+    setSub(SUBS[next]!.key);
+    tabsRef.current?.querySelector<HTMLButtonElement>(`#term-tab-${SUBS[next]!.key}`)?.focus();
+  };
+
+  const focusTabs = () =>
+    tabsRef.current?.querySelector<HTMLButtonElement>(`#term-tab-${sub}`)?.focus();
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: "var(--term-bg)" }}>
-      <div style={{ display: "flex", gap: 2, padding: "6px 8px 0", flexShrink: 0 }}>
-        <button
-          className="no-native-focus"
-          onClick={() => setSub("human")}
-          style={{
-            display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: "6px 6px 0 0",
-            fontSize: 11.5, fontWeight: 600,
-            background: sub === "human" ? "var(--bg-surface)" : "transparent",
-            color: sub === "human" ? "var(--own-user)" : "var(--text-tertiary)",
-          }}
-        >
-          <User size={12} /> Your Terminal
-        </button>
-        <button
-          className="no-native-focus"
-          onClick={() => setSub("agent")}
-          style={{
-            display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: "6px 6px 0 0",
-            fontSize: 11.5, fontWeight: 600,
-            background: sub === "agent" ? "var(--bg-surface)" : "transparent",
-            color: sub === "agent" ? "var(--accent-strong)" : "var(--text-tertiary)",
-          }}
-        >
-          <TerminalSquare size={12} /> Agent Commands
-        </button>
+      <div
+        ref={tabsRef}
+        role="tablist"
+        aria-label="Terminal panes"
+        onKeyDown={onKeyDown}
+        style={{ display: "flex", gap: 2, padding: "6px 8px 0", flexShrink: 0 }}
+      >
+        {SUBS.map((s) => {
+          const active = sub === s.key;
+          return (
+            <button
+              key={s.key}
+              id={`term-tab-${s.key}`}
+              role="tab"
+              aria-selected={active}
+              aria-controls={`term-panel-${s.key}`}
+              tabIndex={active ? 0 : -1}
+              className="no-native-focus"
+              onClick={() => setSub(s.key)}
+              style={{
+                display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: "6px 6px 0 0",
+                fontSize: 11.5, fontWeight: 600,
+                background: active ? "var(--bg-surface)" : "transparent",
+                color: active ? s.accent : "var(--text-tertiary)",
+              }}
+            >
+              {s.icon} {s.label}
+            </button>
+          );
+        })}
       </div>
-      <div style={{ flex: 1, minHeight: 0, background: sub === "human" ? "var(--term-bg)" : "var(--bg-surface)" }}>
-        {sub === "human" ? <HumanTerminal /> : <AgentCommandLog />}
+      <div
+        id={`term-panel-${sub}`}
+        role="tabpanel"
+        aria-labelledby={`term-tab-${sub}`}
+        style={{ flex: 1, minHeight: 0, background: sub === "human" ? "var(--term-bg)" : "var(--bg-surface)" }}
+      >
+        {sub === "human" ? (
+          liveSession ? <LiveTerminalPanel onEscape={focusTabs} /> : <MockHumanTerminal />
+        ) : liveSession ? (
+          <LiveAgentCommands />
+        ) : (
+          <MockAgentCommandLog />
+        )}
       </div>
     </div>
   );

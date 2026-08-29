@@ -38,8 +38,7 @@ export default function LiveFileTree() {
   const [results, setResults] = useState<string[] | null>(null);
   const loading = useRef<Set<string>>(new Set());
 
-  const setSelectedFile = useApp((s) => s.setSelectedFile);
-  const setCenterTab = useApp((s) => s.setCenterTab);
+  const reveal = useApp((s) => s.reveal);
   const selectedFile = useApp((s) => s.selectedFile);
   const fsRev = useLive((s) => s.fsRev);
 
@@ -183,7 +182,7 @@ export default function LiveFileTree() {
                   key={path}
                   className="no-native-focus"
                   title={path}
-                  onClick={() => { setSelectedFile(path); setCenterTab("code"); }}
+                  onClick={() => reveal({ path, in: "code" })}
                   style={{ ...style, ...rowStyle(14, active), background: active ? "var(--bg-active)" : "transparent" }}
                 >
                   <FileCode size={13} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
@@ -215,7 +214,7 @@ export default function LiveFileTree() {
                 key={entry.path}
                 className="no-native-focus"
                 title={entry.path}
-                onClick={() => { setSelectedFile(entry.path); setCenterTab("code"); }}
+                onClick={() => reveal({ path: entry.path, in: "code" })}
                 style={{ ...style, ...rowStyle(pad + 17, active), background: active ? "var(--bg-active)" : "transparent" }}
               >
                 <FileCode size={13} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />

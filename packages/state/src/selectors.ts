@@ -11,6 +11,17 @@ import type {
   TestRunProjection,
 } from "./store.js";
 
+/** Tool names Core uses for "run a shell command" (valyria-agent). The single
+ *  source for this list — `activityLine`'s verb map and `agentCommandsForTask`
+ *  both read it, so the agent-command view and the activity narrative never
+ *  disagree about what counts as a command. */
+export const SHELL_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "run_command",
+  "bash",
+  "shell",
+  "sh",
+]);
+
 export function tasksByRecency(state: StoreState): TaskProjection[] {
   return Object.values(state.tasks).sort((a, b) => b.lastSeq - a.lastSeq);
 }
@@ -63,6 +74,7 @@ export function activityLine(e: EventRow): string {
     return undefined;
   };
   const verb = (tool?: string): string => {
+    if (tool && SHELL_TOOL_NAMES.has(tool)) return "Running";
     switch (tool) {
       case "read_file":
         return "Reading";
@@ -70,10 +82,6 @@ export function activityLine(e: EventRow): string {
       case "edit_file":
       case "apply_patch":
         return "Editing";
-      case "run_command":
-      case "bash":
-      case "shell":
-        return "Running";
       case "search":
       case "grep":
         return "Searching";
@@ -185,6 +193,114 @@ export function checkpointsForTask(
       intent: typeof s.intent === "string" ? s.intent : null,
       rollbackBoundary: s.rollback_boundary === true,
     });
+  }
+  return out;
+}
+
+/** One shell command the agent ran, paired from a `tool_started` (a shell tool)
+ *  and its following `tool_completed` (§4.10). This is the *only* source for the
+ *  read-only "Agent Commands" view — it never touches the human PTY, and D7
+ *  forbids the two ever sharing a buffer.
+ *
+ *  Tolerances (D5): `tool_started` carries no invocation id, so a start is
+ *  paired to the next `tool_completed` before the next `tool_started` — an
+ *  unpaired start stays `pending` rather than borrowing a later result. And
+ *  `tool_completed.rendered` is one undeclared pre-formatted blob
+ *  (`exit=Some(0) reason=Exited\n--- stdout ---\n…\n--- stderr ---\n`, G14) —
+ *  when it does not parse, the whole blob is kept in `raw` and rendered
+ *  verbatim. */
+export interface AgentCommand {
+  seq: number;
+  ts: number;
+  program: string;
+  args: string[];
+  /** null while pending, or when `rendered` gave no `exit=Some(n)` */
+  exitCode: number | null;
+  stdout: string | null;
+  stderr: string | null;
+  /** the `rendered` blob when it did not parse into stdout/stderr */
+  raw: string | null;
+  /** `tool_completed.success`; null while pending */
+  succeeded: boolean | null;
+  pending: boolean;
+}
+
+interface RenderedParts {
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/** Parse Core's `run_command` `rendered` envelope. Returns null on any shape
+ *  mismatch so the caller falls back to the raw blob. */
+function parseRenderedCommand(rendered: string | null): RenderedParts | null {
+  if (rendered == null) return null;
+  const outMarker = "--- stdout ---\n";
+  const errMarker = "--- stderr ---\n";
+  const si = rendered.indexOf(outMarker);
+  const ei = rendered.lastIndexOf(errMarker);
+  if (si === -1 || ei === -1 || ei < si) return null;
+  const head = rendered.slice(0, si);
+  const stdout = rendered.slice(si + outMarker.length, ei);
+  const stderr = rendered.slice(ei + errMarker.length);
+  const m = head.match(/exit=Some\((-?\d+)\)/);
+  return { exitCode: m ? Number(m[1]) : null, stdout, stderr };
+}
+
+export function agentCommandsForTask(state: StoreState, taskId: string): AgentCommand[] {
+  const rows = eventsForTask(state, taskId).sort((a, b) => a.seq - b.seq);
+  const out: AgentCommand[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const e = rows[i]!;
+    if (e.kind !== "tool_started") continue;
+    const p = (e.payload ?? {}) as Record<string, unknown>;
+    const tool = typeof p.tool === "string" ? p.tool : "";
+    if (!SHELL_TOOL_NAMES.has(tool)) continue;
+
+    const input = (p.input ?? {}) as Record<string, unknown>;
+    const program = typeof input.program === "string" ? input.program : "";
+    const args = Array.isArray(input.args)
+      ? (input.args.filter((a) => typeof a === "string") as string[])
+      : [];
+
+    let completion: EventRow | undefined;
+    for (let j = i + 1; j < rows.length; j++) {
+      const n = rows[j]!;
+      if (n.kind === "tool_started") break;
+      if (n.kind === "tool_completed") {
+        completion = n;
+        break;
+      }
+    }
+
+    const cmd: AgentCommand = {
+      seq: e.seq,
+      ts: e.ts,
+      program,
+      args,
+      exitCode: null,
+      stdout: null,
+      stderr: null,
+      raw: null,
+      succeeded: null,
+      pending: completion === undefined,
+    };
+
+    if (completion) {
+      const cp = (completion.payload ?? {}) as Record<string, unknown>;
+      cmd.succeeded = typeof cp.success === "boolean" ? cp.success : null;
+      const rendered = typeof cp.rendered === "string" ? cp.rendered : null;
+      const parts = parseRenderedCommand(rendered);
+      if (parts) {
+        cmd.exitCode = parts.exitCode;
+        cmd.stdout = parts.stdout;
+        cmd.stderr = parts.stderr;
+      } else if (rendered !== null) {
+        cmd.raw = rendered;
+      }
+    }
+
+    out.push(cmd);
   }
   return out;
 }

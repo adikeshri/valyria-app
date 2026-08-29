@@ -15,8 +15,7 @@ import { useApp } from "../state/store";
 export default function LiveTestPanel() {
   const store = useLive((s) => s.store);
   const selectedTaskId = useApp((s) => s.selectedTaskId);
-  const setSelectedFile = useApp((s) => s.setSelectedFile);
-  const setDockTab = useApp((s) => s.setDockTab);
+  const reveal = useApp((s) => s.reveal);
 
   const task = store.tasks[selectedTaskId] ?? currentTask(store);
   const runs = task ? testResultsForTask(store, task.id) : [];
@@ -69,7 +68,9 @@ export default function LiveTestPanel() {
           <RunDetail
             run={openRun}
             events={events}
-            onJumpFile={(p) => { setSelectedFile(p); setDockTab("diff"); }}
+            onJumpFile={(p) =>
+              reveal({ path: p, reason: `last edit before ${openRun.command} (inferred — Core reports no failure location, G15)` })
+            }
           />
         )}
       </div>
@@ -138,7 +139,7 @@ function RunDetail({
   );
   const digest = (outcomeEvent?.payload as { digest?: string })?.digest;
   const rationale = (started?.payload as { rationale?: string })?.rationale;
-  const impliedFile = fileFromEvents(events);
+  const impliedFile = fileImplicatedBy(events, run.seq);
 
   return (
     <div>
@@ -182,13 +183,25 @@ function RunDetail({
   );
 }
 
-/** Last write/edit target in the task — the file a failure most likely implicates. */
-function fileFromEvents(events: EventRow[]): string | null {
+/** The file this specific run most likely implicates: the last `file_changed`
+ *  or write/edit tool target *at or before* the run's own seq. Scoping to
+ *  `runSeq` is what makes two failed runs in one task resolve to different
+ *  files. Still an inference — Core emits no parsed failure location (G15) —
+ *  so the caller labels the jump as inferred. */
+function fileImplicatedBy(events: EventRow[], runSeq: number): string | null {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!;
+    if (e.seq > runSeq) continue;
     if (e.kind === "file_changed") {
       const p = (e.payload as { path?: unknown })?.path;
       if (typeof p === "string") return p;
+    }
+    if (e.kind === "tool_started") {
+      const p = e.payload as { tool?: unknown; input?: { path?: unknown } };
+      if (typeof p.tool === "string" && /write|edit|patch/.test(p.tool)) {
+        const ip = p.input?.path;
+        if (typeof ip === "string") return ip;
+      }
     }
   }
   return null;

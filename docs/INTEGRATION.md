@@ -453,6 +453,55 @@ chip = sole installed model or "not reported", the RAM chip is dropped (G4),
 (`localStorage` `valyria.seenFirstRun`). **Notifications** were delivered in
 Phase 5.
 
+**Phase 7 — terminal and parallel interaction (complete)**.
+
+`valyria-bridge`: new `pty` module — `PtySession::start` opens `$SHELL` (login,
+falling back zsh → bash → sh) at the authorized root, on a named OS thread with
+an `AtomicBool` stop + `Drop`-join, mirroring `watcher`. A 256 KiB scrollback
+ring (UTF-8-boundary-trimmed) is the terminal's source of truth so the shell
+survives the dock unmounting the panel on every tab switch. `portable-pty` is
+crate-level (`check-layering` is name-prefix only, unaffected); the crate keeps
+`#![forbid(unsafe_code)]`. `BridgeError::{PtySpawn, PtyIo}` → `bridge.pty.*`.
+Host: `pty_open { cols, rows }` (returns replayed scrollback; re-attaches a live
+shell), `pty_write` / `pty_resize` / `pty_close`, output on new channels
+`core://pty-output` (String) / `core://pty-exit` (Option<i32>); the `PtySession`
+lives on `Live` so it dies with the session. `crates/valyria-bridge/tests/soak.rs`
+(self-skips without a Core binary): while a real task runs, hammers
+`fs.list_dir` / `git.status` / `fs.read_file` / `task_status` for 4s with a PTY
+alongside, asserting every read cycle stays < 2s and the event stream still
+reaches a terminal state gapless.
+
+Renderer: `TerminalPanel` is now a dispatcher whose human/agent split is a real
+`role="tablist"` with arrow-key roving focus — the one dock strip where
+confusing the panes is a security problem (D7). `terminalSub` moved to the store
+so the command palette's new "Show agent commands" can target it.
+- `LiveTerminalPanel` (the **only** non-mock `@xterm/xterm` importer) — `pty_open`
+  → write scrollback → `core://pty-output`; `term.onData` → `pty_write`; a
+  measured-cell probe drives cols/rows (xterm's FitAddon is still on an xterm-5
+  peer range); xterm colours re-read on a theme flip; **double-Esc** leaves for
+  the tab strip without stealing a single Esc from vim. Unmount tears down xterm
+  but **not** the shell.
+- `LiveAgentCommands` — a plain list, never an xterm, from the new pure selector
+  `agentCommandsForTask` (`@valyria/state`): pairs a shell `tool_started`
+  (`run_command` / `bash` / `shell`, from the shared `SHELL_TOOL_NAMES`) with the
+  next `tool_completed`, parses the `rendered` envelope tolerantly, keeps the raw
+  blob on a parse miss, leaves an unpaired start `pending` (G14).
+- `xtask check-d7` (fourth gate, in `xtask all`) — text-scans `apps/desktop/src`:
+  `@xterm/xterm` only in the two allowlisted terminal files; `LiveAgentCommands`
+  references no PTY plumbing. Fails the build the day someone merges the buffers.
+- Cross-panel nav: `useApp.reveal({ path, line?, in?, reason? })` + `revealed`
+  replace the ~8 duplicated `setSelectedFile(p); setDockTab("diff")` pairs (also
+  fixing the mock file tree jumping to `chat` where the live one jumps to
+  `code`). `LiveDiffViewer` scrolls to `revealed.line`. The test-failure hop is
+  scoped to `seq <= run.seq` (per-run, not per-task) and labelled inferred (G15).
+
+Decoder: `tool_started.input` tightened from `z.unknown()` to
+`{ program?, args?, path? }.passthrough()` (union with `z.unknown()` so a
+non-object `input` degrades rather than blanks); covered by the existing
+`add-a-function.jsonl` seq-16 `run_command` pair, no new fixture. New gaps
+**G14** (no tool-invocation id / structured result) and **G15** (no parsed
+failure location) filed.
+
 **Open:**
 
 - **Single bundled binary vs. split runtime/engine** — resolved by RI1's

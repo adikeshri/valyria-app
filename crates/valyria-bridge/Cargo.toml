@@ -17,6 +17,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 notify = "6"
 toml = "0.8"
+portable-pty = "0.9"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "test-util"] }

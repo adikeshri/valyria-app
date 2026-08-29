@@ -11,8 +11,7 @@ export default function GitPanel() {
 }
 
 function MockGitPanel() {
-  const setSelectedFile = useApp((s) => s.setSelectedFile);
-  const setDockTab = useApp((s) => s.setDockTab);
+  const reveal = useApp((s) => s.reveal);
 
   return (
     <div className="scroll-y" style={{ height: "100%", paddingBottom: 8 }}>
@@ -31,7 +30,7 @@ function MockGitPanel() {
         <button
           key={f.path}
           className="no-native-focus"
-          onClick={() => { setSelectedFile(f.path); setDockTab("diff"); }}
+          onClick={() => reveal({ path: f.path })}
           style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "5px 12px", textAlign: "left", fontSize: "var(--text-sm)" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}

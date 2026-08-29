@@ -21,6 +21,7 @@ export default function CommandPalette() {
   const setDockTab = useApp((s) => s.setDockTab);
   const setRightTab = useApp((s) => s.setRightTab);
   const setSidebarSection = useApp((s) => s.setSidebarSection);
+  const setTerminalSub = useApp((s) => s.setTerminalSub);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -31,12 +32,13 @@ export default function CommandPalette() {
     { id: "diff", label: "Show diff", icon: <GitCompareArrows size={14} />, run: () => setDockTab("diff") },
     { id: "tests", label: "Show tests", icon: <FlaskConical size={14} />, run: () => setDockTab("tests") },
     { id: "verify", label: "Show verification evidence", icon: <ShieldCheck size={14} />, run: () => setRightTab("verify") },
-    { id: "terminal", label: "Open terminal", icon: <TerminalSquare size={14} />, run: () => setDockTab("terminal") },
+    { id: "terminal", label: "Open terminal", icon: <TerminalSquare size={14} />, run: () => { setDockTab("terminal"); setTerminalSub("human"); } },
+    { id: "agent-commands", label: "Show agent commands", hint: "read-only", icon: <Sparkles size={14} />, run: () => { setDockTab("terminal"); setTerminalSub("agent"); } },
     { id: "models", label: "Open Model Manager", icon: <Boxes size={14} />, run: () => setSidebarSection("models") },
     { id: "settings-security", label: "Open Security settings", icon: <ShieldCheck size={14} />, run: () => setRoute("settings") },
     { id: "settings", label: "Open Settings", icon: <Settings size={14} />, run: () => setRoute("settings") },
     { id: "first-run", label: "Replay first-run experience", icon: <Sparkles size={14} />, run: () => setRoute("first-run") },
-  ], [setCenterTab, setDockTab, setRightTab, setSidebarSection, setRoute]);
+  ], [setCenterTab, setDockTab, setRightTab, setSidebarSection, setTerminalSub, setRoute]);
 
   const filtered = commands.filter((c) => c.label.toLowerCase().includes(query.toLowerCase()));
 

@@ -11,6 +11,10 @@ name: Release
 #
 #   push a `v*` tag        -> draft GitHub Release with installers attached
 #   manual dispatch        -> installers kept as workflow artifacts only
+#
+# A release bundles the Core revision pinned in core.lock.json — the one this
+# app was built and tested against (INTEGRATION §3). Only an explicit manual
+# dispatch with core_ref=main (or a SHA) builds against a different Core.
 on:
   push:
     tags: ["v*"]
@@ -18,9 +22,10 @@ on:
     inputs:
       core_ref:
         description: >-
-          Core git ref to build the runtime from. `pinned` reads
-          core.lock.json's git_rev (reproducible).
-        default: main
+          Core git ref to build the runtime from. `pinned` (default) reads
+          core.lock.json's git_rev — reproducible. Pass `main` or a SHA to
+          build against a different Core.
+        default: pinned
         required: true
 
 concurrency:
@@ -67,7 +72,8 @@ jobs:
         id: core
         shell: bash
         run: |
-          ref='${{ github.event.inputs.core_ref || 'main' }}'
+          # Tag pushes carry no inputs -> default to the pinned Core revision.
+          ref='${{ github.event.inputs.core_ref || 'pinned' }}'
           if [ "$ref" = "pinned" ]; then
             ref="$(node -p "require('./core.lock.json').git_rev")"
           fi

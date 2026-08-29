@@ -29,6 +29,7 @@ interface Loaded {
 export default function LiveDiffViewer() {
   const selectedFile = useApp((s) => s.selectedFile);
   const setSelectedFile = useApp((s) => s.setSelectedFile);
+  const revealed = useApp((s) => s.revealed);
   const store = useLive((s) => s.store);
   const selectedTaskId = useApp((s) => s.selectedTaskId);
   const fsRev = useLive((s) => s.fsRev);
@@ -145,6 +146,19 @@ export default function LiveDiffViewer() {
     (dir === 1 ? goToNextChunk : goToPreviousChunk)(v);
     v.focus();
   }
+
+  // A cross-panel jump that carried a line (e.g. from a test failure) scrolls
+  // the diff there once this file's view is built.
+  useEffect(() => {
+    const v = view.current;
+    if (!v || !revealed?.line || revealed.path !== loaded?.path) return;
+    const lineNo = Math.min(Math.max(1, revealed.line), v.state.doc.lines);
+    const pos = v.state.doc.line(lineNo).from;
+    v.dispatch({
+      selection: { anchor: pos },
+      effects: EditorView.scrollIntoView(pos, { y: "center" }),
+    });
+  }, [revealed, loaded]);
 
   if (error) {
     return (

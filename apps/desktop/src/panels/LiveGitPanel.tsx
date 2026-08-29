@@ -10,8 +10,7 @@ export default function LiveGitPanel() {
   const [entries, setEntries] = useState<GitEntry[]>([]);
   const [commits, setCommits] = useState<GitCommit[]>([]);
   const [notRepo, setNotRepo] = useState(false);
-  const setSelectedFile = useApp((s) => s.setSelectedFile);
-  const setDockTab = useApp((s) => s.setDockTab);
+  const reveal = useApp((s) => s.reveal);
   const fsRev = useLive((s) => s.fsRev);
 
   useEffect(() => {
@@ -70,14 +69,14 @@ export default function LiveGitPanel() {
         <>
           <div className="section-label" style={{ padding: "6px 12px 4px" }}>Staged ({staged.length})</div>
           {staged.map((f) => (
-            <ChangeRow key={`s-${f.path}`} f={f} onOpen={() => { setSelectedFile(f.path); setDockTab("diff"); }} />
+            <ChangeRow key={`s-${f.path}`} f={f} onOpen={() => reveal({ path: f.path })} />
           ))}
         </>
       )}
 
       <div className="section-label" style={{ padding: "6px 12px 4px" }}>Unstaged ({unstaged.length})</div>
       {unstaged.map((f) => (
-        <ChangeRow key={`u-${f.path}`} f={f} onOpen={() => { setSelectedFile(f.path); setDockTab("diff"); }} />
+        <ChangeRow key={`u-${f.path}`} f={f} onOpen={() => reveal({ path: f.path })} />
       ))}
 
       <div style={{ padding: "8px 12px" }}>

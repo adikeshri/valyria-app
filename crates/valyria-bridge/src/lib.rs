@@ -2,9 +2,9 @@
 //! protocol.
 //!
 //! Owns: the socket client (`CoreClient`), the session supervisor
-//! (`spawn_or_adopt` — spawn / adopt / health / reap of `valyria serve`), and
-//! the event pump (`EventPump`). Still to come: the workspace registry, the
-//! config-file writer, and the human PTY host.
+//! (`spawn_or_adopt` — spawn / adopt / health / reap of `valyria serve`), the
+//! event pump (`EventPump`), the local-read repository surfaces, and the human
+//! PTY host (`PtySession`).
 //!
 //! **Layering rule (docs/PLAN.md D2):** this crate depends on
 //! `valyria-protocol` and `valyria-types` and nothing else from Core.
@@ -18,6 +18,7 @@ pub mod core_binary;
 pub mod error;
 pub mod event_pump;
 pub mod git;
+pub mod pty;
 pub mod session;
 pub mod supervisor;
 pub mod watcher;
@@ -30,6 +31,7 @@ pub use core_binary::CoreBinary;
 pub use error::{BridgeError, Result};
 pub use event_pump::{EventBatch, EventPump, PumpMessage};
 pub use git::{GitCommit, GitEntry, GitRepo};
+pub use pty::{PtyEvent, PtySession};
 pub use session::{negotiate, ConnectionState, NegotiatedSession, CLIENT_NAME};
 pub use supervisor::{spawn_or_adopt, Origin, Session, SupervisorConfig};
 pub use watcher::WorkspaceWatcher;

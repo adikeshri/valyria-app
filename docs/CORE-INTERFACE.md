@@ -287,6 +287,39 @@ against Core's error path (`crates/valyria-bridge/tests/rollback.rs`), plus an
 advanced "roll back by id" field for a developer who has one from Core's logs.
 The app never computes a partial revert itself (PLAN §4.8).
 
+### G14 — No structured tool-invocation result (§10, §18)
+
+`tool_started` carries no invocation id, so a start and its `tool_completed`
+can only be paired **positionally** (next completion, same task, greater `seq`).
+And `tool_completed.rendered` is a single pre-formatted blob — for a shell
+command it is `exit=Some(0) reason=Exited\n--- stdout ---\n…\n--- stderr ---\n`,
+undeclared anywhere, with no exit code field, no stdout/stderr split, and no
+duration. This is what the read-only agent-command view (PLAN §4.10) has to
+render.
+
+*Requested:* a stable `tool_invocation_id` on `tool_started` that matches the one
+on `tool_completed`; and structured completion fields
+`{ exit_code, stdout, stderr, duration_ms }` alongside `rendered`.
+
+*Until then:* `agentCommandsForTask` (`@valyria/state`) pairs positionally and
+parses the `rendered` envelope tolerantly — on any mismatch it keeps the whole
+blob and renders it verbatim, never blank (D5). An unpaired start stays
+`pending` rather than borrowing a later result.
+
+### G15 — No parsed failure location (§19, §35)
+
+PLAN §4.11 wants a test failure to open "its parsed location where Core's failure
+parsers supply one". `test_failed` / `verification_evidence` carry only `digest`
+and `summary` — no file, no line. Core *has* failure parsers internally; nothing
+is on the wire.
+
+*Requested:* a `location: { path, line? }[]` on the `test_failed` payload when a
+parser matched.
+
+*Until then:* the test panel's "jump to file" is an **inference** — the last
+`file_changed` or write/edit tool target at or before the failing run's `seq` —
+and the jump is labelled as inferred, not reported (`reveal`'s `reason`).
+
 ---
 
 ## 3. The local-read exception

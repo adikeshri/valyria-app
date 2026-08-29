@@ -6,6 +6,9 @@
 //!                    checkout, when one is present next to this repo
 //!   verify-core      core.lock.json is internally consistent and matches
 //!                    the vendored version.txt
+//!   check-d7         the human PTY and the agent-command view never share a
+//!                    buffer: only the terminal panel touches `@xterm/xterm`,
+//!                    and the agent-command view touches no PTY plumbing
 //!
 //! Exit code is non-zero on the first failure so CI fails loudly.
 
@@ -19,13 +22,15 @@ fn main() -> ExitCode {
         Some("check-layering") => check_layering(&repo),
         Some("check-protocol") => check_protocol(&repo),
         Some("verify-core") => verify_core(&repo),
+        Some("check-d7") => check_d7(&repo),
         Some("all") => check_layering(&repo)
             .and_then(|_| verify_core(&repo))
-            .and_then(|_| check_protocol(&repo)),
+            .and_then(|_| check_protocol(&repo))
+            .and_then(|_| check_d7(&repo)),
         other => {
             eprintln!("unknown task: {other:?}");
             eprintln!(
-                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|all>"
+                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|check-d7|all>"
             );
             return ExitCode::from(2);
         }
@@ -215,6 +220,98 @@ fn check_protocol(repo: &Path) -> Result<(), String> {
              If it is ahead, this is an unrecorded Core bump.",
             mismatches.join(", ")
         ))
+    }
+}
+
+// --- check-d7 (docs/PLAN.md D7 / §4.10) --------------------------------
+//
+// The integrated terminal shares a panel between the human's shell and the
+// agent's commands, but never a buffer — confusing the two is a security
+// problem (a user who thinks the agent ran a command it did not run approves
+// the wrong things). This makes that mechanical:
+//
+//   * `@xterm/xterm` — a real writable terminal — is imported by the human
+//     terminal only (the live panel plus its mock/dispatcher).
+//   * the agent-command view is a read-only projection of `tool_*` events and
+//     must not reach for any PTY plumbing.
+
+/// Renderer files allowed to import `@xterm/xterm`.
+const XTERM_ALLOWED: &[&str] = &[
+    "apps/desktop/src/panels/LiveTerminalPanel.tsx",
+    "apps/desktop/src/panels/TerminalPanel.tsx",
+];
+
+/// The agent-command view — must stay a plain list, never a terminal.
+const AGENT_VIEW: &str = "apps/desktop/src/panels/LiveAgentCommands.tsx";
+const AGENT_VIEW_FORBIDDEN: &[&str] =
+    &["@xterm/xterm", "core/pty", "pty_write", "core://pty-output"];
+
+fn check_d7(repo: &Path) -> Result<(), String> {
+    let src = repo.join("apps/desktop/src");
+    let mut files = Vec::new();
+    collect_files(&src, "tsx", &mut files);
+    collect_files(&src, "ts", &mut files);
+
+    let mut offenders = Vec::new();
+
+    for file in &files {
+        let rel = file
+            .strip_prefix(repo)
+            .unwrap_or(file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let text = std::fs::read_to_string(file)
+            .map_err(|e| format!("reading {}: {e}", file.display()))?;
+
+        if text.contains("@xterm/xterm") && !XTERM_ALLOWED.contains(&rel.as_str()) {
+            offenders.push(format!(
+                "{rel} imports @xterm/xterm — only the human terminal may (D7)"
+            ));
+        }
+
+        if rel == AGENT_VIEW {
+            for needle in AGENT_VIEW_FORBIDDEN {
+                if text.contains(needle) {
+                    offenders.push(format!(
+                        "{rel} references {needle:?} — the agent-command view must not touch PTY plumbing (D7)"
+                    ));
+                }
+            }
+        }
+    }
+
+    // The allowlisted files must actually exist, or the guard is dead.
+    for allowed in XTERM_ALLOWED {
+        if !repo.join(allowed).exists() {
+            offenders.push(format!("allowlisted file {allowed} is missing"));
+        }
+    }
+    if !repo.join(AGENT_VIEW).exists() {
+        offenders.push(format!("{AGENT_VIEW} is missing"));
+    }
+
+    if offenders.is_empty() {
+        println!("check-d7: ok — human PTY and agent-command view stay separate buffers");
+        Ok(())
+    } else {
+        Err(format!(
+            "D7 separation violated:\n  {}",
+            offenders.join("\n  ")
+        ))
+    }
+}
+
+fn collect_files(dir: &Path, ext: &str, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files(&path, ext, out);
+        } else if path.extension().and_then(|e| e.to_str()) == Some(ext) {
+            out.push(path);
+        }
     }
 }
 

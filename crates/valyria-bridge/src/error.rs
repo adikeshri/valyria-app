@@ -74,6 +74,12 @@ pub enum BridgeError {
 
     #[error("config file error: {0}")]
     Config(String),
+
+    #[error("could not start a shell: {0}")]
+    PtySpawn(String),
+
+    #[error("terminal I/O error: {0}")]
+    PtyIo(String),
 }
 
 impl BridgeError {
@@ -96,6 +102,8 @@ impl BridgeError {
             BridgeError::Git(_) => "bridge.git",
             BridgeError::Watch(_) => "bridge.fs.watch",
             BridgeError::Config(_) => "bridge.config.write",
+            BridgeError::PtySpawn(_) => "bridge.pty.spawn",
+            BridgeError::PtyIo(_) => "bridge.pty.io",
         }
     }
 

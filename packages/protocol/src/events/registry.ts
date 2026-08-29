@@ -151,8 +151,26 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
       rendered: s.optional(),
     })
     .passthrough(),
+  // `input` shape varies by tool: `{ path }` for read/edit, `{ program, args }`
+  // for `run_command` (the agent-command view reads those), plus tool-specific
+  // extras kept by passthrough. `z.unknown()` on the outer branch keeps a
+  // non-object `input` from degrading the whole event (D5).
   tool_started: z
-    .object({ tool: s.optional(), input: z.unknown().optional() })
+    .object({
+      tool: s.optional(),
+      input: z
+        .union([
+          z
+            .object({
+              program: s.optional(),
+              args: z.array(s).optional(),
+              path: s.optional(),
+            })
+            .passthrough(),
+          z.unknown(),
+        ])
+        .optional(),
+    })
     .passthrough(),
   verification_evidence: z
     .object({

@@ -10,8 +10,7 @@ function ownershipBadge(o: Ownership) {
 }
 
 export default function ChangesPanel() {
-  const setSelectedFile = useApp((s) => s.setSelectedFile);
-  const setDockTab = useApp((s) => s.setDockTab);
+  const reveal = useApp((s) => s.reveal);
 
   const agentCount = modifiedFiles.filter((f) => f.ownership === "agent").length;
 
@@ -26,7 +25,7 @@ export default function ChangesPanel() {
           <button
             key={f.path}
             className="no-native-focus"
-            onClick={() => { setSelectedFile(f.path); setDockTab("diff"); }}
+            onClick={() => reveal({ path: f.path })}
             style={{
               display: "flex", flexDirection: "column", gap: 3, width: "100%",
               padding: "8px 12px", textAlign: "left", borderBottom: "1px solid var(--border-subtle)",

@@ -29,7 +29,7 @@ interface Loaded {
 
 export default function CodeViewerPanel() {
   const selectedFile = useApp((s) => s.selectedFile);
-  const setDockTab = useApp((s) => s.setDockTab);
+  const reveal = useApp((s) => s.reveal);
   const liveSession = useLive((s) => s.session);
   const fsRev = useLive((s) => s.fsRev);
   const fsChangedPaths = useLive((s) => s.fsChangedPaths);
@@ -93,7 +93,7 @@ export default function CodeViewerPanel() {
         <FileCode size={13} style={{ color: "var(--text-tertiary)" }} />
         <span style={{ fontSize: "var(--text-sm)", fontFamily: "var(--font-mono)", flex: 1 }}>{selectedFile}</span>
         {loaded?.truncated && <span className="badge badge--warning">truncated</span>}
-        <button className="btn btn--sm btn--ghost" onClick={() => setDockTab("diff")}>
+        <button className="btn btn--sm btn--ghost" onClick={() => reveal({ path: selectedFile })}>
           <GitCompareArrows size={12} /> View diff
         </button>
         <button className="btn btn--sm btn--ghost" title="Copy"><Copy size={12} /></button>

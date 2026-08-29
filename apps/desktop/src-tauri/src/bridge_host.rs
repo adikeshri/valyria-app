@@ -6,9 +6,13 @@
 //!   `core://event-batch`  → `EventBatch` (coalesced, carries first/last seq)
 //!   `core://reconnected`  → u64 (cursor the subscription resumed from)
 //!   `core://closed`       → u64 (last seq before the stream ended)
+//!   `core://fs-changed`   → Vec<String> (workspace paths that changed)
+//!   `core://pty-output`   → String (a chunk of human-terminal output)
+//!   `core://pty-exit`     → Option<i32> (the human shell ended)
 //!
 //! One `valyria serve` daemon per open workspace; it outlives this process
-//! (`kill_daemon_on_drop = false`).
+//! (`kill_daemon_on_drop = false`). The PTY (`core://pty-*`) is a local shell
+//! the human types into — never a channel for agent commands (D7).
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -22,8 +26,8 @@ use valyria_bridge::protocol::{
 };
 use valyria_bridge::{
   config_path, spawn_or_adopt, write_key, BridgeError, ConfigScope, CoreBinary, CoreClient,
-  DirEntry, EventPump, FileView, GitCommit, GitEntry, GitRepo, PumpMessage, Session,
-  SupervisorConfig, WorkspaceFs, WorkspaceWatcher,
+  DirEntry, EventPump, FileView, GitCommit, GitEntry, GitRepo, PtyEvent, PtySession, PumpMessage,
+  Session, SupervisorConfig, WorkspaceFs, WorkspaceWatcher,
 };
 
 /// Protocol version this build negotiates against (core.lock.json).
@@ -43,6 +47,10 @@ struct Live {
   /// Recursive fs watcher → `core://fs-changed`. Dropped (and its thread
   /// joined) when the session is replaced.
   _watcher: Option<WorkspaceWatcher>,
+  /// The human's shell, opened lazily the first time the Terminal panel mounts
+  /// (`pty_open`). `None` until then. Bound to the authorized root, so it dies
+  /// with the session — dropping it kills the shell and joins its reader.
+  pty: Option<PtySession>,
 }
 
 impl Drop for Live {
@@ -219,6 +227,7 @@ async fn open_and_store(
     fs,
     git,
     _watcher: watcher,
+    pty: None,
   });
   Ok(info)
 }
@@ -367,6 +376,86 @@ pub async fn permission_resolve(
     c.permission_resolve(&task_id, approve).await
   })
   .await
+}
+
+// --- human PTY (docs/PLAN.md §4.10 / CORE-INTERFACE §3) -----------------
+//
+// A shell the human types into, at the authorized root. Sanctioned as a local
+// surface ("render a PTY the human types into"). It is NOT a way to run a
+// command as the agent — that stays Core's (D7). Agent commands are a separate
+// read-only projection of `tool_*` events in the renderer.
+
+/// Open (or re-attach to) the workspace shell and return its replayed
+/// scrollback. Called when the Terminal panel mounts; the dock unmounts the
+/// panel on every tab switch, so a live shell is kept here, not in the WebView.
+#[tauri::command]
+pub async fn pty_open(
+  app: AppHandle,
+  state: State<'_, BridgeState>,
+  cols: u16,
+  rows: u16,
+) -> Result<String, String> {
+  let mut guard = state.0.lock().await;
+  let live = guard
+    .as_mut()
+    .ok_or_else(|| "[bridge.no_session] no session is open".to_string())?;
+
+  if let Some(pty) = live.pty.as_ref() {
+    if pty.is_alive() {
+      let _ = pty.resize(cols, rows);
+      return Ok(pty.scrollback());
+    }
+  }
+
+  let pty_app = app.clone();
+  let pty = PtySession::start(live.fs.root(), cols, rows, move |ev| match ev {
+    PtyEvent::Output(chunk) => {
+      let _ = pty_app.emit("core://pty-output", chunk);
+    }
+    PtyEvent::Exit { code } => {
+      let _ = pty_app.emit("core://pty-exit", code);
+    }
+  })
+  .map_err(err_str)?;
+  let snapshot = pty.scrollback();
+  live.pty = Some(pty);
+  Ok(snapshot)
+}
+
+/// Feed raw keystroke bytes to the shell.
+#[tauri::command]
+pub async fn pty_write(state: State<'_, BridgeState>, data: String) -> Result<(), String> {
+  let guard = state.0.lock().await;
+  let live = guard
+    .as_ref()
+    .ok_or_else(|| "[bridge.no_session] no session is open".to_string())?;
+  match live.pty.as_ref() {
+    Some(pty) => pty.write(&data).map_err(err_str),
+    None => Err("[bridge.pty.io] no terminal is open".to_string()),
+  }
+}
+
+/// Tell the shell its window changed size.
+#[tauri::command]
+pub async fn pty_resize(state: State<'_, BridgeState>, cols: u16, rows: u16) -> Result<(), String> {
+  let guard = state.0.lock().await;
+  let live = guard
+    .as_ref()
+    .ok_or_else(|| "[bridge.no_session] no session is open".to_string())?;
+  match live.pty.as_ref() {
+    Some(pty) => pty.resize(cols, rows).map_err(err_str),
+    None => Ok(()),
+  }
+}
+
+/// End the shell. Dropping the `PtySession` kills it and joins its reader.
+#[tauri::command]
+pub async fn pty_close(state: State<'_, BridgeState>) -> Result<(), String> {
+  let mut guard = state.0.lock().await;
+  if let Some(live) = guard.as_mut() {
+    live.pty = None;
+  }
+  Ok(())
 }
 
 // --- local-read repository surfaces (CORE-INTERFACE §3) ------------------

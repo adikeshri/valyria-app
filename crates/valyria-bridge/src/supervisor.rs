@@ -39,6 +39,11 @@ pub struct SupervisorConfig {
     /// Kill the spawned daemon when the `Session` drops. Off in production
     /// (the daemon outlives the UI); on in tests.
     pub kill_daemon_on_drop: bool,
+    /// Autonomy level to start the daemon with (§25, CORE-INTERFACE G1):
+    /// `manual` | `assisted` | `autonomous`. `None` → let Core apply its own
+    /// default. Passed as `valyria serve --permission-mode <mode>`; changing it
+    /// on a live workspace means restarting the daemon.
+    pub permission_mode: Option<String>,
 }
 
 impl SupervisorConfig {
@@ -50,6 +55,7 @@ impl SupervisorConfig {
             valyria_home: None,
             startup_timeout: Duration::from_secs(20),
             kill_daemon_on_drop: false,
+            permission_mode: None,
         }
     }
 }
@@ -68,6 +74,12 @@ pub struct Session {
     pub socket_path: PathBuf,
     pub negotiated: NegotiatedSession,
     pub origin: Origin,
+    /// Autonomy level the daemon is running under (§25). For a spawned daemon
+    /// this is what we passed on the command line; for an adopted one it is
+    /// read back from `meta.json` and may be `None` if a foreign process wrote
+    /// no meta. The UI shows this and disables the autonomy switch while it is
+    /// unknown or while the daemon is not ours to restart.
+    pub permission_mode: Option<String>,
     /// `Some` only when this process spawned the daemon.
     child: Option<Child>,
     kill_on_drop: bool,
@@ -76,6 +88,12 @@ pub struct Session {
 impl Session {
     pub fn is_adopted(&self) -> bool {
         self.origin == Origin::Adopted
+    }
+
+    /// True when this process spawned the daemon and may therefore stop or
+    /// restart it (the autonomy switch needs this — §25 / G1).
+    pub fn is_owned(&self) -> bool {
+        self.child.is_some()
     }
 
     /// The spawned daemon's pid, if we own it.
@@ -129,6 +147,9 @@ pub async fn spawn_or_adopt(config: SupervisorConfig) -> Result<Session> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    if let Some(mode) = &config.permission_mode {
+        cmd.arg("--permission-mode").arg(mode);
+    }
     if let Some(home) = &config.valyria_home {
         cmd.env("VALYRIA_HOME", home);
     }
@@ -148,6 +169,7 @@ pub async fn spawn_or_adopt(config: SupervisorConfig) -> Result<Session> {
         socket_path: sock,
         negotiated,
         origin: Origin::Spawned,
+        permission_mode: config.permission_mode.clone(),
         child: Some(child),
         kill_on_drop: config.kill_daemon_on_drop,
     })
@@ -176,6 +198,7 @@ async fn try_adopt(id: &WorkspaceId, sock: &Path, config: &SupervisorConfig) -> 
                 socket_path: sock.to_path_buf(),
                 negotiated,
                 origin: Origin::Adopted,
+                permission_mode: read_meta_permission_mode(id),
                 child: None,
                 kill_on_drop: false,
             })
@@ -227,6 +250,7 @@ fn write_pid_and_meta(
         "root": config.workspace_root,
         "runtime_version": negotiated.runtime_version,
         "protocol_version": negotiated.protocol_version,
+        "permission_mode": config.permission_mode,
         "started_at_ms": now_ms(),
     });
     let _ = std::fs::write(
@@ -239,6 +263,15 @@ fn read_pid(id: &WorkspaceId) -> Option<u32> {
     std::fs::read_to_string(pid_path(id))
         .ok()
         .and_then(|s| s.trim().parse().ok())
+}
+
+/// The autonomy level recorded when the daemon was started, if a `meta.json`
+/// with that field exists (a daemon spawned by an older app, or by hand, will
+/// have none — the UI then shows the mode as unknown).
+fn read_meta_permission_mode(id: &WorkspaceId) -> Option<String> {
+    let text = std::fs::read_to_string(meta_path(id)).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&text).ok()?;
+    json.get("permission_mode")?.as_str().map(str::to_string)
 }
 
 #[cfg(unix)]

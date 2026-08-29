@@ -45,6 +45,20 @@ interface AppState {
 
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (v: boolean) => void;
+
+  /** Master switch for OS notifications (§31). Per-category opt-in lives in
+   *  core/notify.ts. Persisted to localStorage. */
+  notificationsEnabled: boolean;
+  setNotificationsEnabled: (v: boolean) => void;
+}
+
+const NOTIF_LS_KEY = "valyria.notify.master";
+function readNotifMaster(): boolean {
+  try {
+    return localStorage.getItem(NOTIF_LS_KEY) !== "off";
+  } catch {
+    return true;
+  }
 }
 
 export const useApp = create<AppState>((set) => ({
@@ -83,4 +97,14 @@ export const useApp = create<AppState>((set) => ({
 
   commandPaletteOpen: false,
   setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
+
+  notificationsEnabled: readNotifMaster(),
+  setNotificationsEnabled: (notificationsEnabled) => {
+    try {
+      localStorage.setItem(NOTIF_LS_KEY, notificationsEnabled ? "on" : "off");
+    } catch {
+      /* ignore */
+    }
+    set({ notificationsEnabled });
+  },
 }));

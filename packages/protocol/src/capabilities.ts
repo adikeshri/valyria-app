@@ -107,6 +107,23 @@ export const SURFACE_REQUIREMENTS: readonly SurfaceRequirement[] = [
     fallback: { kind: "local-read", label: "From doctor_run only" },
   },
   { surface: "settings", requires: null, gap: "G6", fallback: { kind: "none" } },
+  {
+    surface: "autonomy",
+    // The mode is a daemon-start flag, not a `task_create` param (G1). The
+    // control works — by restarting the workspace daemon — but is disabled
+    // while a task runs and when the daemon was adopted from another process.
+    requires: "method:task_create_permission_mode",
+    gap: "G1",
+    fallback: { kind: "local-read", label: "Applied by restarting Core" },
+  },
+  {
+    surface: "security-overview",
+    // Rendered from `doctor_run` + `config_show`; no capability gates those,
+    // but the socket the app connects over is not authenticated (G10).
+    requires: "doctor",
+    gap: "G10",
+    fallback: { kind: "none" },
+  },
   { surface: "first-run", requires: "doctor", fallback: { kind: "none" } },
   { surface: "terminal", requires: null, fallback: { kind: "none" } }, // app-owned PTY (PLAN §10.4)
 ] as const;

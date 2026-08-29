@@ -4,7 +4,12 @@ import {
   Check, Lock, Unlock, Info,
 } from "lucide-react";
 import { useApp } from "../state/store";
+import { useLive } from "../core/liveStore";
 import { modelList, hardware } from "../data/mock";
+import LiveAutonomyControl from "./LiveAutonomyControl";
+import LiveSecurityOverview from "./LiveSecurityOverview";
+import LiveRepoInstructions from "./LiveRepoInstructions";
+import { NOTIFY_CATEGORIES, loadPrefs, savePrefs, type NotifyPrefs } from "../core/notify";
 
 type Section = "agent" | "models" | "security" | "repository" | "application";
 
@@ -29,6 +34,12 @@ function Field({ label, origin, children }: { label: string; origin?: string; ch
 }
 
 function AutonomySetting() {
+  const liveSession = useLive((s) => s.session);
+  if (liveSession) return <LiveAutonomyControl />;
+  return <MockAutonomySetting />;
+}
+
+function MockAutonomySetting() {
   const [level, setLevel] = useState<"manual" | "assisted" | "autonomous">("assisted");
   const options: { key: typeof level; title: string; desc: string }[] = [
     { key: "manual", title: "Manual", desc: "Ask before every mutating action." },
@@ -103,9 +114,18 @@ function SecurityRow({ ok, label }: { ok: boolean; label: string }) {
 
 export default function SettingsView() {
   const setRoute = useApp((s) => s.setRoute);
+  const liveSession = useLive((s) => s.session);
+  const notifications = useApp((s) => s.notificationsEnabled);
+  const setNotifications = useApp((s) => s.setNotificationsEnabled);
   const [section, setSection] = useState<Section>("agent");
-  const [notifications, setNotifications] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState<NotifyPrefs>(() => loadPrefs());
+
+  function toggleCategory(key: keyof NotifyPrefs, v: boolean) {
+    const next = { ...notifPrefs, [key]: v };
+    setNotifPrefs(next);
+    savePrefs(next);
+  }
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "var(--bg-canvas)", zIndex: 100, display: "flex", flexDirection: "column" }}>
@@ -181,36 +201,46 @@ export default function SettingsView() {
             {section === "security" && (
               <>
                 <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 650, marginBottom: 16 }}>Security</h2>
-                <p style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)", marginBottom: 14 }}>
-                  What the agent is authorized to do in this workspace — sourced from Core's policy floor and effective config.
-                </p>
-                <div style={{ padding: 14, background: "var(--bg-sunken)", borderRadius: 8 }}>
-                  <div className="section-label" style={{ marginBottom: 4 }}>Workspace</div>
-                  <SecurityRow ok label="~/dev/northwind-api" />
-                  <div className="section-label" style={{ margin: "12px 0 4px" }}>Filesystem</div>
-                  <SecurityRow ok label="Read/write within workspace" />
-                  <SecurityRow ok={false} label="Home directory" />
-                  <div className="section-label" style={{ margin: "12px 0 4px" }}>Network</div>
-                  <SecurityRow ok={false} label="Disabled by default" />
-                  <div className="section-label" style={{ margin: "12px 0 4px" }}>Credentials</div>
-                  <SecurityRow ok={false} label="Blocked from model context and logs" />
-                  <div className="section-label" style={{ margin: "12px 0 4px" }}>Destructive commands</div>
-                  <SecurityRow ok={false} label="Blocked — requires explicit approval" />
-                </div>
+                {liveSession ? (
+                  <LiveSecurityOverview />
+                ) : (
+                  <>
+                    <p style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)", marginBottom: 14 }}>
+                      What the agent is authorized to do in this workspace — sourced from Core's policy floor and effective config.
+                    </p>
+                    <div style={{ padding: 14, background: "var(--bg-sunken)", borderRadius: 8 }}>
+                      <div className="section-label" style={{ marginBottom: 4 }}>Workspace</div>
+                      <SecurityRow ok label="~/dev/northwind-api" />
+                      <div className="section-label" style={{ margin: "12px 0 4px" }}>Filesystem</div>
+                      <SecurityRow ok label="Read/write within workspace" />
+                      <SecurityRow ok={false} label="Home directory" />
+                      <div className="section-label" style={{ margin: "12px 0 4px" }}>Network</div>
+                      <SecurityRow ok={false} label="Disabled by default" />
+                      <div className="section-label" style={{ margin: "12px 0 4px" }}>Credentials</div>
+                      <SecurityRow ok={false} label="Blocked from model context and logs" />
+                      <div className="section-label" style={{ margin: "12px 0 4px" }}>Destructive commands</div>
+                      <SecurityRow ok={false} label="Blocked — requires explicit approval" />
+                    </div>
+                  </>
+                )}
               </>
             )}
             {section === "repository" && (
               <>
                 <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 650, marginBottom: 16 }}>Repository</h2>
                 <Field label="Recognized instructions">
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--accent-soft)", borderRadius: 6 }}>
-                      <Unlock size={13} style={{ color: "var(--accent-strong)" }} />
-                      <span style={{ fontSize: "var(--text-sm)", fontFamily: "var(--font-mono)", flex: 1 }}>AGENTS.md</span>
-                      <span className="badge badge--accent">authorized</span>
+                  {liveSession ? (
+                    <LiveRepoInstructions />
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--accent-soft)", borderRadius: 6 }}>
+                        <Unlock size={13} style={{ color: "var(--accent-strong)" }} />
+                        <span style={{ fontSize: "var(--text-sm)", fontFamily: "var(--font-mono)", flex: 1 }}>AGENTS.md</span>
+                        <span className="badge badge--accent">authorized</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", paddingLeft: 4 }}>VALYRIA.md not present in this repository.</div>
                     </div>
-                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", paddingLeft: 4 }}>VALYRIA.md not present in this repository.</div>
-                  </div>
+                  )}
                 </Field>
                 <Field label="Indexing">
                   <Toggle checked onChange={() => {}} label="Keep the repository index up to date automatically" />
@@ -228,7 +258,22 @@ export default function SettingsView() {
               <>
                 <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 650, marginBottom: 16 }}>Application</h2>
                 <Field label="Notifications">
-                  <Toggle checked={notifications} onChange={setNotifications} label="Notify on task completed, blocked, or waiting" />
+                  <Toggle checked={notifications} onChange={setNotifications} label="Show OS notifications for this app" />
+                  {notifications && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10, paddingLeft: 42 }}>
+                      {NOTIFY_CATEGORIES.map((c) => (
+                        <label key={c.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
+                          <input
+                            type="checkbox"
+                            className="no-native-focus"
+                            checked={notifPrefs[c.key]}
+                            onChange={(e) => toggleCategory(c.key, e.target.checked)}
+                          />
+                          {c.label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </Field>
                 <Field label="Reduced motion">
                   <Toggle checked={reducedMotion} onChange={setReducedMotion} label="Minimize animation throughout the app" />

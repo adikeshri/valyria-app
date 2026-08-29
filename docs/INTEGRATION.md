@@ -389,6 +389,40 @@ exercises the full confirm → `task_rollback` → exact-result flow. New gap
 **G13** filed. CodeMirror 6 added (`codemirror` + `@codemirror/merge` +
 lang-javascript/python/rust); the layering check is unaffected (renderer-only).
 
+**Phase 5 — approvals, security, autonomy (complete)**.
+
+`valyria-bridge`: `CoreClient::{doctor_run, config_show}`; `SupervisorConfig`
+gained `permission_mode` — passed as `valyria serve --permission-mode <mode>`,
+recorded in `run/<id>/meta.json`, and **read back on adopt** so an adopted
+session still knows its autonomy level (`hello` never carries it). `Session`
+exposes `permission_mode` + `is_owned()`. `tests/autonomy.rs` proves the
+spawn → record → adopt round-trip against real Core.
+
+Host: `doctor_run` / `config_show` commands; `session_open` takes an optional
+`permissionMode`; new `session_restart { permissionMode }` — rejected for an
+**adopted** daemon (`[bridge.autonomy.not_owned]`), otherwise
+`shutdown_daemon` + respawn (task state rebuilds from the journal). Added
+`tauri-plugin-notification` + its capability.
+
+`@valyria/state`: `blockedTasks` (tasks in `waiting_for_permission`) and the
+pure **G2 supersession guard** `approvalIsCurrent(state, taskId, seenSeq)` —
+`phase5.test.ts` covers both.
+
+Renderer: `LiveApprovalCard` records the `approval.seq` it rendered; the store's
+`resolveApproval(taskId, approve, seenSeq)` refuses to answer a superseded
+prompt (returns `"superseded"`, the card re-prompts). Destructive / network
+requests need a deliberate second confirm. New settings dispatchers —
+`LiveAutonomyControl` (restart-to-apply, disabled while a task runs or the
+daemon is adopted), `LiveSecurityOverview` (`doctor_run` + `config_show`,
+every row Core-sourced or marked unreported — D8; notes the G10 socket
+boundary), `LiveRepoInstructions` (`VALYRIA.md` / `AGENTS.md` read locally,
+trust position labelled *per Core policy*, not Core-confirmed). OS notifications
+(`core/notify.ts`, opt-in per category in `localStorage`, master switch in
+`useApp`) fire on completed / failed / blocked / permission / tests-failed
+transitions, computed by diffing the projection in `liveStore`. `session_open`
+never yet passes a mode from the UI — the app opens at Core's default and the
+switch restarts into a chosen one.
+
 **Open:**
 
 - **Single bundled binary vs. split runtime/engine** — resolved by RI1's

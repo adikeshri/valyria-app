@@ -9,13 +9,26 @@ import { create } from "zustand";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import {
   applyBatch,
+  approvalIsCurrent,
   emptyStore,
   mergeTaskSummaries,
   type ConnectionState,
   type StoreState,
 } from "@valyria/state";
-import { bridge, inTauri, type RollbackResult, type SessionInfo } from "./bridge";
+import {
+  bridge,
+  inTauri,
+  type PermissionMode,
+  type RollbackResult,
+  type SessionInfo,
+} from "./bridge";
 import { repo } from "./repo";
+import { notify } from "./notify";
+import { useApp } from "../state/store";
+
+/** Outcome of trying to answer an approval — the card uses it to decide whether
+ *  to close or show a "this request changed" banner (G2). */
+export type ResolveOutcome = "sent" | "superseded" | "error";
 
 interface LiveState {
   available: boolean;
@@ -38,7 +51,13 @@ interface LiveState {
   /** §4.8 — goes through Core's `task_rollback` and nothing else. Returns
    *  Core's exact result, or null with `error` set. */
   rollbackTask: (taskId: string, checkpointId: string) => Promise<RollbackResult | null>;
-  resolveApproval: (taskId: string, approve: boolean) => Promise<void>;
+  /** §4.7 / G2 — refuses to answer a prompt a newer `approval_requested` has
+   *  superseded (returns `"superseded"`; the card re-prompts). `seenSeq` is the
+   *  `approval.seq` the card last rendered. */
+  resolveApproval: (taskId: string, approve: boolean, seenSeq: number) => Promise<ResolveOutcome>;
+  /** §25 / G1 — restart the workspace daemon under a new autonomy level.
+   *  Rejected (error set) when the daemon was adopted from another process. */
+  restartSession: (mode: PermissionMode) => Promise<boolean>;
   dismissResumePrompt: () => void;
 }
 
@@ -75,7 +94,11 @@ export const useLive = create<LiveState>((set, get) => ({
       await teardown();
       unlisteners.push(
         await bridge.onEventBatch((b) => {
-          set((s) => ({ store: applyBatch(s.store, b.events) }));
+          set((s) => {
+            const next = applyBatch(s.store, b.events);
+            emitNotifications(s.store, next, b.events);
+            return { store: next };
+          });
         }),
       );
       unlisteners.push(
@@ -132,11 +155,75 @@ export const useLive = create<LiveState>((set, get) => ({
       return null;
     }
   },
-  resolveApproval: (taskId, approve) =>
-    guard(() => bridge.permissionResolve(taskId, approve), set, get),
+
+  resolveApproval: async (taskId, approve, seenSeq) => {
+    if (!approvalIsCurrent(get().store, taskId, seenSeq)) {
+      set({ error: "The agent's request changed before you answered — review it again." });
+      return "superseded";
+    }
+    try {
+      await bridge.permissionResolve(taskId, approve);
+      void get().refreshTasks();
+      return "sent";
+    } catch (e) {
+      set({ error: String(e) });
+      return "error";
+    }
+  },
+
+  restartSession: async (mode) => {
+    set({ connection: "connecting", error: null });
+    try {
+      const session = await bridge.sessionRestart(mode);
+      set({ session, connection: "ready" });
+      await get().refreshTasks();
+      return true;
+    } catch (e) {
+      // The old daemon is gone; the workspace has no session until reopened.
+      set({ connection: "failed", error: String(e) });
+      return false;
+    }
+  },
 
   dismissResumePrompt: () => set({ resumePromptDismissed: true }),
 }));
+
+/** Raise OS notifications for the transitions between two projections (§31).
+ *  Pure comparison; `notify` itself is a no-op when the category is off, the
+ *  master switch is off, or we're outside the Tauri shell. */
+function emitNotifications(
+  prev: StoreState,
+  next: StoreState,
+  rawBatch: readonly unknown[],
+): void {
+  const master = useApp.getState().notificationsEnabled;
+  if (!master) return;
+
+  const was = (id: string) => prev.tasks[id];
+  for (const t of Object.values(next.tasks)) {
+    const before = was(t.id);
+    const obj = t.objective ?? "Task";
+    if (t.state === "completed" && before?.state !== "completed") {
+      void notify("completed", "Task completed", obj, master);
+    } else if (t.state === "failed" && before?.state !== "failed") {
+      void notify("failed", "Task failed", obj, master);
+    } else if (
+      t.state === "waiting_for_permission" &&
+      before?.state !== "waiting_for_permission"
+    ) {
+      void notify("permission", "Permission required", obj, master);
+      void notify("blocked", "Task blocked", obj, master);
+    }
+  }
+
+  for (const raw of rawBatch) {
+    if ((raw as { kind?: string })?.kind === "test_failed") {
+      const p = (raw as { payload?: { summary?: string; command?: string } }).payload ?? {};
+      void notify("tests-failed", "Tests failed", p.summary ?? p.command ?? "A verification run failed", master);
+      break;
+    }
+  }
+}
 
 async function guard(
   fn: () => Promise<unknown>,

@@ -1,0 +1,31 @@
+# Cargo workspace for the app's Rust side: the Tauri host and the protocol
+# bridge. The Core tree at ../valyria is a SEPARATE workspace and is never a
+# member here — the bridge reaches Core only through the `valyria-protocol`
+# git dependency pinned in core.lock.json (docs/PLAN.md D2).
+[workspace]
+resolver = "2"
+members = [
+    "apps/desktop/src-tauri",
+    "crates/valyria-bridge",
+    "crates/xtask",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+license = "Apache-2.0"
+repository = "https://github.com/adikeshri/valyria-app"
+
+[workspace.dependencies]
+# Core wire contract. The ONLY Core crates the app may depend on (D2).
+# Pinned to core.lock.json's git_rev; a bump moves this rev in the same PR.
+valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "9203d23a6afbd12456281a51a7451576f51854bd" }
+valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "9203d23a6afbd12456281a51a7451576f51854bd" }
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "net"] }
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"

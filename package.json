@@ -1,0 +1,14 @@
+{
+  "name": "valyria-app",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Desktop application for Valyria. This root hosts the npm workspace (packages/*) and the Cargo workspace (Cargo.toml).",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "codegen": "npm run codegen --workspace @valyria/protocol",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check:rust": "cargo run -q -p xtask -- all"
+  }
+}

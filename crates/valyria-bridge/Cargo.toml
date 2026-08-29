@@ -1,0 +1,20 @@
+[package]
+name = "valyria-bridge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The only code in valyria-app that speaks the Core protocol: socket client, session supervisor, event pump, PTY host. Depends on valyria-protocol + valyria-types ONLY (docs/PLAN.md D2, enforced by `cargo run -p xtask -- check-layering`)."
+
+[dependencies]
+valyria-protocol = { workspace = true }
+valyria-types = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }

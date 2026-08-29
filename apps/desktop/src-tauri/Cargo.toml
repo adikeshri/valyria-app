@@ -6,7 +6,9 @@ authors = ["Valyria"]
 license = "Apache-2.0"
 repository = "https://github.com/adikeshri/valyria-app"
 edition = "2021"
-rust-version = "1.77.2"
+# Matches Core's pinned toolchain — the bundled `valyria` sidecar is built from
+# Core, so the host build tracks it too. See docs/INTEGRATION.md RI3.
+rust-version = "1.97.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

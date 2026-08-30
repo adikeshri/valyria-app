@@ -71,12 +71,68 @@ export type Request =
       params: Empty;
     }
   | {
+      method: "config_set";
+      params: ConfigSetRequest;
+    }
+  | {
       method: "memory_list";
       params: MemoryListRequest;
     }
   | {
       method: "model_list";
       params: Empty;
+    }
+  | {
+      method: "git_status";
+      params: Empty;
+    }
+  | {
+      method: "git_diff";
+      params: GitDiffRequest;
+    }
+  | {
+      method: "git_log";
+      params: GitLogRequest;
+    }
+  | {
+      method: "git_branches";
+      params: Empty;
+    }
+  | {
+      method: "search_query";
+      params: SearchQueryRequest;
+    }
+  | {
+      method: "index_status";
+      params: Empty;
+    }
+  | {
+      method: "hardware_probe";
+      params: Empty;
+    }
+  | {
+      method: "model_recommend";
+      params: ModelRecommendRequest;
+    }
+  | {
+      method: "model_install";
+      params: ModelIdRequest;
+    }
+  | {
+      method: "model_remove";
+      params: ModelIdRequest;
+    }
+  | {
+      method: "model_activate";
+      params: ModelActivateRequest;
+    }
+  | {
+      method: "model_inspect";
+      params: ModelIdRequest;
+    }
+  | {
+      method: "ledger_changes";
+      params: LedgerChangesRequest;
     };
 
 export interface HelloRequest {
@@ -84,6 +140,10 @@ export interface HelloRequest {
 }
 export interface TaskCreateRequest {
   objective: string;
+  /**
+   * Optional per-task autonomy override (§25). One of `manual` | `assisted` | `autonomous`. When absent, the task inherits the daemon's start-time mode. Additive as of protocol 1.1.0 — an older client omits it and gets the daemon default, unchanged.
+   */
+  permission_mode?: string | null;
 }
 export interface TaskStatusRequest {
   task_id: string;
@@ -100,11 +160,26 @@ export interface TaskRollbackRequest {
   task_id: string;
 }
 export interface PermissionResolveRequest {
+  /**
+   * Legacy approve/deny (protocol 1.0). Ignored when `decision` is set.
+   */
   approve: boolean;
+  /**
+   * `once` (approve this call), `task` (approve and grant for the rest of the task — "Allow for Task"), or `deny`. Overrides `approve` when set. Additive as of protocol 1.8.0.
+   */
+  decision?: string | null;
+  /**
+   * The `request_id` from the `approval_requested` payload (G2). When present it is asserted against the daemon's current pending request; a stale id is rejected with `approval.superseded` rather than resolving the wrong prompt.
+   */
+  request_id?: string | null;
   task_id: string;
 }
 export interface EventsSubscribeRequest {
   since: number;
+  /**
+   * Restrict the stream to this task's events plus workspace-global (task-less) events (protocol 1.7.0, G11). Absent = the full stream.
+   */
+  task_id?: string | null;
 }
 export interface StoragePurgeRequest {
   /**
@@ -116,7 +191,79 @@ export interface StoragePurgeRequest {
    */
   scope: string;
 }
+/**
+ * Write one dotted config leaf to a Core-owned config file, then report the re-resolved effective view (§24). Additive as of protocol 1.1.0.
+ *
+ * The write is validated against the policy floor (`valyria_config::validate_floor`) *before* it touches disk: a value that would loosen access past the compiled-in ceiling is rejected with `config.policy_floor_violation` and nothing is written.
+ */
+export interface ConfigSetRequest {
+  /**
+   * Dotted key, e.g. `permission.mode`, `log.format`, `network.internet`. Must be a key `config_show` already reports.
+   */
+  key: string;
+  /**
+   * `workspace` writes `<repo>/.valyria/config.toml`; `user` writes `~/.valyria/config.toml`. Anything else is `config.invalid_scope`.
+   */
+  scope: string;
+  /**
+   * The new value, as the string form `config_show` would display.
+   */
+  value: string;
+}
 export interface MemoryListRequest {
   limit?: number | null;
   query?: string | null;
+}
+export interface GitDiffRequest {
+  /**
+   * Restrict the diff to this exact repo-relative path.
+   */
+  path?: string | null;
+  /**
+   * `false` → worktree vs index (`git diff`); `true` → index vs HEAD (`git diff --staged`).
+   */
+  staged?: boolean;
+}
+export interface GitLogRequest {
+  /**
+   * Newest-first commits from HEAD. Defaults to 50, capped at 500.
+   */
+  limit?: number | null;
+}
+export interface SearchQueryRequest {
+  /**
+   * Files the current task is anchored on — they seed dependency-mode traversal and pull nearby files up the ranking.
+   */
+  anchors?: string[];
+  /**
+   * Max hits. Defaults to 20, capped at 200.
+   */
+  limit?: number | null;
+  /**
+   * Mode names (`lexical`, `symbol`, `semantic`, `regex`, `ast`, `dependency`, `git`). Empty runs the engine's default set. An unknown name is `search.unknown_mode`.
+   */
+  modes?: string[];
+  /**
+   * The query phrase, or a pattern for `regex` / `ast` modes.
+   */
+  query: string;
+}
+export interface ModelRecommendRequest {
+  /**
+   * A `ModelRole` name: `primary_coder`, `fast_coder`, `planner`, `reviewer`, `embedder`, `reranker`, `autocomplete`, `summarizer`.
+   */
+  role: string;
+}
+export interface ModelIdRequest {
+  id: string;
+}
+export interface ModelActivateRequest {
+  id: string;
+  /**
+   * The role to bind `id` to (a `ModelRole` name).
+   */
+  role: string;
+}
+export interface LedgerChangesRequest {
+  task_id: string;
 }

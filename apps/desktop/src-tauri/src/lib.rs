@@ -52,6 +52,23 @@ pub fn run() {
       bridge_host::git_diff_file,
       bridge_host::git_show_head,
       bridge_host::git_branch,
+      // CORE-INTERFACE gap closure (protocol 1.9.0)
+      bridge_host::task_create_with_mode,
+      bridge_host::permission_resolve_scoped,
+      bridge_host::config_set,
+      bridge_host::core_git_status,
+      bridge_host::core_git_diff,
+      bridge_host::core_git_log,
+      bridge_host::core_git_branches,
+      bridge_host::search_query,
+      bridge_host::index_status,
+      bridge_host::hardware_probe,
+      bridge_host::model_recommend,
+      bridge_host::model_install,
+      bridge_host::model_remove,
+      bridge_host::model_activate,
+      bridge_host::model_inspect,
+      bridge_host::ledger_changes,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

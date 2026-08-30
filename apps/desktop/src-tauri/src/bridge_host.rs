@@ -21,8 +21,11 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 use valyria_bridge::protocol::{
-  ConfigShowResponse, DoctorRunResponse, ModelListResponse, PlanGetResponse, TaskListResponse,
-  TaskReportResponse, TaskRollbackResponse, TaskStatusResponse, WorkspaceStatusResponse,
+  ConfigShowResponse, DoctorRunResponse, GitBranchesResponse, GitDiffResponse, GitLogResponse,
+  GitStatusResponse, HardwareProbeResponse, IndexStatusResponse, LedgerChangesResponse,
+  ModelInspectResponse, ModelListResponse, ModelRecommendResponse, ModelRemoveResponse,
+  PlanGetResponse, SearchQueryResponse, TaskListResponse, TaskReportResponse,
+  TaskRollbackResponse, TaskStatusResponse, WorkspaceStatusResponse,
 };
 use valyria_bridge::{
   config_path, spawn_or_adopt, write_key, BridgeError, ConfigScope, CoreBinary, CoreClient,
@@ -31,7 +34,7 @@ use valyria_bridge::{
 };
 
 /// Protocol version this build negotiates against (core.lock.json).
-const EXPECTED_PROTOCOL: &str = "1.0.0";
+const EXPECTED_PROTOCOL: &str = "1.9.0";
 
 #[derive(Default)]
 pub struct BridgeState(Arc<Mutex<Option<Live>>>);
@@ -316,6 +319,144 @@ pub async fn workspace_status(
 #[tauri::command]
 pub async fn model_list(state: State<'_, BridgeState>) -> Result<ModelListResponse, String> {
   with_client(&state, |c| async move { c.model_list().await }).await
+}
+
+// --- CORE-INTERFACE gap closure: repo surface (G3), hardware/models
+// (G4, G5), ledger (G8), config write (G6) served by Core now -----------
+
+#[tauri::command]
+pub async fn task_create_with_mode(
+  state: State<'_, BridgeState>,
+  objective: String,
+  permission_mode: Option<String>,
+) -> Result<String, String> {
+  with_client(&state, |c| async move {
+    c.task_create_with_mode(objective, permission_mode).await
+  })
+  .await
+}
+
+#[tauri::command]
+pub async fn permission_resolve_scoped(
+  state: State<'_, BridgeState>,
+  task_id: String,
+  request_id: Option<String>,
+  decision: String,
+) -> Result<(), String> {
+  with_client(&state, |c| async move {
+    c.permission_resolve_scoped(&task_id, request_id, &decision)
+      .await
+  })
+  .await
+}
+
+#[tauri::command]
+pub async fn config_set(
+  state: State<'_, BridgeState>,
+  scope: String,
+  key: String,
+  value: String,
+) -> Result<ConfigShowResponse, String> {
+  with_client(&state, |c| async move { c.config_set(&key, &value, &scope).await }).await
+}
+
+#[tauri::command]
+pub async fn core_git_status(state: State<'_, BridgeState>) -> Result<GitStatusResponse, String> {
+  with_client(&state, |c| async move { c.git_status().await }).await
+}
+
+#[tauri::command]
+pub async fn core_git_diff(
+  state: State<'_, BridgeState>,
+  path: Option<String>,
+  staged: bool,
+) -> Result<GitDiffResponse, String> {
+  with_client(&state, |c| async move { c.git_diff(path, staged).await }).await
+}
+
+#[tauri::command]
+pub async fn core_git_log(
+  state: State<'_, BridgeState>,
+  limit: Option<u32>,
+) -> Result<GitLogResponse, String> {
+  with_client(&state, |c| async move { c.git_log(limit).await }).await
+}
+
+#[tauri::command]
+pub async fn core_git_branches(state: State<'_, BridgeState>) -> Result<GitBranchesResponse, String> {
+  with_client(&state, |c| async move { c.git_branches().await }).await
+}
+
+#[tauri::command]
+pub async fn search_query(
+  state: State<'_, BridgeState>,
+  query: String,
+  modes: Vec<String>,
+  anchors: Vec<String>,
+  limit: Option<u32>,
+) -> Result<SearchQueryResponse, String> {
+  with_client(&state, |c| async move {
+    c.search_query(query, modes, anchors, limit).await
+  })
+  .await
+}
+
+#[tauri::command]
+pub async fn index_status(state: State<'_, BridgeState>) -> Result<IndexStatusResponse, String> {
+  with_client(&state, |c| async move { c.index_status().await }).await
+}
+
+#[tauri::command]
+pub async fn hardware_probe(
+  state: State<'_, BridgeState>,
+) -> Result<HardwareProbeResponse, String> {
+  with_client(&state, |c| async move { c.hardware_probe().await }).await
+}
+
+#[tauri::command]
+pub async fn model_recommend(
+  state: State<'_, BridgeState>,
+  role: String,
+) -> Result<ModelRecommendResponse, String> {
+  with_client(&state, |c| async move { c.model_recommend(&role).await }).await
+}
+
+#[tauri::command]
+pub async fn model_install(state: State<'_, BridgeState>, id: String) -> Result<(), String> {
+  with_client(&state, |c| async move { c.model_install(&id).await }).await
+}
+
+#[tauri::command]
+pub async fn model_remove(
+  state: State<'_, BridgeState>,
+  id: String,
+) -> Result<ModelRemoveResponse, String> {
+  with_client(&state, |c| async move { c.model_remove(&id).await }).await
+}
+
+#[tauri::command]
+pub async fn model_activate(
+  state: State<'_, BridgeState>,
+  id: String,
+  role: String,
+) -> Result<(), String> {
+  with_client(&state, |c| async move { c.model_activate(&id, &role).await }).await
+}
+
+#[tauri::command]
+pub async fn model_inspect(
+  state: State<'_, BridgeState>,
+  id: String,
+) -> Result<ModelInspectResponse, String> {
+  with_client(&state, |c| async move { c.model_inspect(&id).await }).await
+}
+
+#[tauri::command]
+pub async fn ledger_changes(
+  state: State<'_, BridgeState>,
+  task_id: String,
+) -> Result<LedgerChangesResponse, String> {
+  with_client(&state, |c| async move { c.ledger_changes(&task_id).await }).await
 }
 
 /// D13 write-then-verify (CORE-INTERFACE G6): edit Core's own `config.toml`,

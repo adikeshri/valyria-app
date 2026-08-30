@@ -1,8 +1,8 @@
 {
   "$comment": "The single pinned Core revision this app is built and tested against. See docs/INTEGRATION.md §3. A bump is a deliberate PR that re-vendors schemas, re-runs TS codegen, re-captures trace fixtures, and moves the valyria-bridge git dep rev.",
   "repository": "https://github.com/adikeshri/valyria.git",
-  "git_rev": "9203d23a6afbd12456281a51a7451576f51854bd",
-  "protocol_version": "1.0.0",
+  "git_rev": "45d4e11c3e619705789b4e9208b69644619c295e",
+  "protocol_version": "1.9.0",
   "runtime_version": null,
   "capabilities": [
     "plan",
@@ -11,7 +11,20 @@
     "memory",
     "models",
     "rollback",
-    "events_resume"
+    "events_resume",
+    "config_write",
+    "task_permission_mode",
+    "repo",
+    "hardware",
+    "model_manage",
+    "context",
+    "ledger",
+    "diagnostics_v2",
+    "client_auth",
+    "stream_filter",
+    "approval_scope",
+    "daemon"
   ],
-  "$runtime_version_note": "null until the first `hello` handshake against the pinned build records it; xtask verify-core fills it in."
+  "$runtime_version_note": "null until the first `hello` handshake against the pinned build records it; xtask verify-core fills it in.",
+  "$gap_closure_note": "Bumped from 9203d23 / protocol 1.0.0 for CORE-INTERFACE gap closure G1-G15. git_rev points at the head of the Core gap-closure branch stack (core/g9-windows) until those land on Core main."
 }

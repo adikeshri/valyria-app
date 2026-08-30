@@ -17,9 +17,13 @@ use valyria_protocol::{
     TaskIdRequest, TaskRollbackRequest, TaskStatusRequest, WireError, WireEvent,
 };
 use valyria_protocol::{
-    ConfigShowResponse, DoctorRunResponse, HelloResponse, ModelListResponse, PlanGetResponse,
-    TaskListResponse, TaskReportResponse, TaskRollbackResponse, TaskStatusResponse,
-    WorkspaceStatusResponse,
+    ConfigSetRequest, ConfigShowResponse, DoctorRunResponse, GitBranchesResponse, GitDiffRequest,
+    GitDiffResponse, GitLogRequest, GitLogResponse, GitStatusResponse, HardwareProbeResponse,
+    HelloResponse, IndexStatusResponse, LedgerChangesRequest, LedgerChangesResponse,
+    ModelActivateRequest, ModelIdRequest, ModelInspectResponse, ModelListResponse,
+    ModelRecommendRequest, ModelRecommendResponse, ModelRemoveResponse, PlanGetResponse,
+    SearchQueryRequest, SearchQueryResponse, TaskListResponse, TaskReportResponse,
+    TaskRollbackResponse, TaskStatusResponse, WorkspaceStatusResponse,
 };
 
 use crate::error::{BridgeError, Result};
@@ -88,9 +92,21 @@ impl CoreClient {
     // --- tasks -------------------------------------------------------
 
     pub async fn task_create(&self, objective: impl Into<String>) -> Result<String> {
+        self.task_create_with_mode(objective, None).await
+    }
+
+    /// Create a task with an optional per-task autonomy override
+    /// (`manual` | `assisted` | `autonomous`) — CORE-INTERFACE G1. With
+    /// `None` the task inherits the daemon's start-time mode.
+    pub async fn task_create_with_mode(
+        &self,
+        objective: impl Into<String>,
+        permission_mode: Option<String>,
+    ) -> Result<String> {
         match self
             .call(Request::TaskCreate(TaskCreateRequest {
                 objective: objective.into(),
+                permission_mode,
             }))
             .await?
         {
@@ -191,9 +207,25 @@ impl CoreClient {
     }
 
     pub async fn permission_resolve(&self, task_id: &str, approve: bool) -> Result<()> {
+        self.permission_resolve_scoped(task_id, None, if approve { "once" } else { "deny" })
+            .await
+    }
+
+    /// Resolve an approval, optionally asserting `request_id` (from the
+    /// `approval_requested` payload) so a stale prompt is refused with
+    /// `approval.superseded` rather than mis-resolved, and choosing a
+    /// `decision` of `once` | `task` | `deny` — CORE-INTERFACE G2.
+    pub async fn permission_resolve_scoped(
+        &self,
+        task_id: &str,
+        request_id: Option<String>,
+        decision: &str,
+    ) -> Result<()> {
         self.ack(Request::PermissionResolve(PermissionResolveRequest {
             task_id: task_id.to_string(),
-            approve,
+            approve: decision != "deny",
+            request_id,
+            decision: Some(decision.to_string()),
         }))
         .await
     }
@@ -220,13 +252,166 @@ impl CoreClient {
         }
     }
 
-    /// The model inventory (`model_list`). Read-only: v1 has no
-    /// install/remove/activate on the wire (CORE-INTERFACE G5), and the app has
-    /// no code path that downloads a model (docs/INTEGRATION.md D-INT-3).
+    /// The model inventory (`model_list`).
     pub async fn model_list(&self) -> Result<ModelListResponse> {
         match self.call(Request::ModelList(Empty {})).await? {
             Response::ModelList(r) => Ok(r),
             other => Err(unexpected("ModelList", other)),
+        }
+    }
+
+    /// Write one config leaf to a Core-owned file, then return the
+    /// re-resolved effective view (`config_set`) — CORE-INTERFACE G6.
+    /// `scope` is `workspace` or `user`.
+    pub async fn config_set(
+        &self,
+        key: &str,
+        value: &str,
+        scope: &str,
+    ) -> Result<ConfigShowResponse> {
+        match self
+            .call(Request::ConfigSet(ConfigSetRequest {
+                key: key.to_string(),
+                value: value.to_string(),
+                scope: scope.to_string(),
+            }))
+            .await?
+        {
+            Response::ConfigShow(r) => Ok(r),
+            other => Err(unexpected("ConfigShow", other)),
+        }
+    }
+
+    // --- repository read surface (CORE-INTERFACE G3) ----------------
+
+    pub async fn git_status(&self) -> Result<GitStatusResponse> {
+        match self.call(Request::GitStatus(Empty {})).await? {
+            Response::GitStatus(r) => Ok(r),
+            other => Err(unexpected("GitStatus", other)),
+        }
+    }
+
+    pub async fn git_diff(&self, path: Option<String>, staged: bool) -> Result<GitDiffResponse> {
+        match self
+            .call(Request::GitDiff(GitDiffRequest { path, staged }))
+            .await?
+        {
+            Response::GitDiff(r) => Ok(r),
+            other => Err(unexpected("GitDiff", other)),
+        }
+    }
+
+    pub async fn git_log(&self, limit: Option<u32>) -> Result<GitLogResponse> {
+        match self.call(Request::GitLog(GitLogRequest { limit })).await? {
+            Response::GitLog(r) => Ok(r),
+            other => Err(unexpected("GitLog", other)),
+        }
+    }
+
+    pub async fn git_branches(&self) -> Result<GitBranchesResponse> {
+        match self.call(Request::GitBranches(Empty {})).await? {
+            Response::GitBranches(r) => Ok(r),
+            other => Err(unexpected("GitBranches", other)),
+        }
+    }
+
+    pub async fn search_query(
+        &self,
+        query: impl Into<String>,
+        modes: Vec<String>,
+        anchors: Vec<String>,
+        limit: Option<u32>,
+    ) -> Result<SearchQueryResponse> {
+        match self
+            .call(Request::SearchQuery(SearchQueryRequest {
+                query: query.into(),
+                modes,
+                anchors,
+                limit,
+            }))
+            .await?
+        {
+            Response::SearchQuery(r) => Ok(r),
+            other => Err(unexpected("SearchQuery", other)),
+        }
+    }
+
+    pub async fn index_status(&self) -> Result<IndexStatusResponse> {
+        match self.call(Request::IndexStatus(Empty {})).await? {
+            Response::IndexStatus(r) => Ok(r),
+            other => Err(unexpected("IndexStatus", other)),
+        }
+    }
+
+    // --- hardware & model management (CORE-INTERFACE G4, G5) --------
+
+    pub async fn hardware_probe(&self) -> Result<HardwareProbeResponse> {
+        match self.call(Request::HardwareProbe(Empty {})).await? {
+            Response::HardwareProbe(r) => Ok(r),
+            other => Err(unexpected("HardwareProbe", other)),
+        }
+    }
+
+    pub async fn model_recommend(&self, role: &str) -> Result<ModelRecommendResponse> {
+        match self
+            .call(Request::ModelRecommend(ModelRecommendRequest {
+                role: role.to_string(),
+            }))
+            .await?
+        {
+            Response::ModelRecommend(r) => Ok(r),
+            other => Err(unexpected("ModelRecommend", other)),
+        }
+    }
+
+    /// Begin a model install. Returns immediately; progress arrives as
+    /// `model_install_progress` / `_completed` / `_failed` events.
+    pub async fn model_install(&self, id: &str) -> Result<()> {
+        self.ack(Request::ModelInstall(ModelIdRequest {
+            id: id.to_string(),
+        }))
+        .await
+    }
+
+    pub async fn model_remove(&self, id: &str) -> Result<ModelRemoveResponse> {
+        match self
+            .call(Request::ModelRemove(ModelIdRequest { id: id.to_string() }))
+            .await?
+        {
+            Response::ModelRemove(r) => Ok(r),
+            other => Err(unexpected("ModelRemove", other)),
+        }
+    }
+
+    pub async fn model_activate(&self, id: &str, role: &str) -> Result<()> {
+        self.ack(Request::ModelActivate(ModelActivateRequest {
+            id: id.to_string(),
+            role: role.to_string(),
+        }))
+        .await
+    }
+
+    pub async fn model_inspect(&self, id: &str) -> Result<ModelInspectResponse> {
+        match self
+            .call(Request::ModelInspect(ModelIdRequest { id: id.to_string() }))
+            .await?
+        {
+            Response::ModelInspect(r) => Ok(r),
+            other => Err(unexpected("ModelInspect", other)),
+        }
+    }
+
+    // --- change ownership (CORE-INTERFACE G8) -----------------------
+
+    pub async fn ledger_changes(&self, task_id: &str) -> Result<LedgerChangesResponse> {
+        match self
+            .call(Request::LedgerChanges(LedgerChangesRequest {
+                task_id: task_id.to_string(),
+            }))
+            .await?
+        {
+            Response::LedgerChanges(r) => Ok(r),
+            other => Err(unexpected("LedgerChanges", other)),
         }
     }
 
@@ -243,6 +428,16 @@ impl CoreClient {
     /// open for the life of the returned stream (CORE-INTERFACE §1).
     pub async fn subscribe(&self, since: u64) -> BoxStream<'static, WireEvent> {
         self.socket.subscribe_events(since).await
+    }
+
+    /// [`Self::subscribe`] scoped to one task's events plus workspace-global
+    /// ones — CORE-INTERFACE G11. `task_id: None` is the full stream.
+    pub async fn subscribe_for_task(
+        &self,
+        since: u64,
+        task_id: Option<String>,
+    ) -> BoxStream<'static, WireEvent> {
+        self.socket.subscribe_events_for_task(since, task_id).await
     }
 }
 

@@ -92,6 +92,59 @@ test("degraded / non-object input does not throw and yields empty program+args",
   assert.equal(cmds[0]?.stdout, "ok\n");
 });
 
+test("G14: structured exit_code / stdout / stderr on tool_completed win over the blob", () => {
+  const s = replay([
+    ev(1, "task_started", {}),
+    ev(2, "tool_started", {
+      tool: "run_command",
+      tool_invocation_id: "tinv_A",
+      input: { program: "cargo", args: ["test"] },
+    }),
+    ev(3, "tool_completed", {
+      tool_invocation_id: "tinv_A",
+      success: false,
+      exit_code: 101,
+      stdout: "running 2 tests\n",
+      stderr: "test tests::adds ... FAILED\n",
+      duration_ms: 4200,
+      rendered: "exit=Some(0) reason=Exited\n--- stdout ---\nWRONG\n--- stderr ---\n",
+    }),
+  ]);
+  const [c] = agentCommandsForTask(s, TASK);
+  assert.equal(c?.invocationId, "tinv_A");
+  assert.equal(c?.exitCode, 101);
+  assert.equal(c?.stdout, "running 2 tests\n");
+  assert.equal(c?.stderr, "test tests::adds ... FAILED\n");
+  assert.equal(c?.durationMs, 4200);
+  assert.equal(c?.raw, null, "the stale rendered blob is not used when structured fields are present");
+});
+
+test("G14: pairing is by tool_invocation_id even when completions arrive out of order", () => {
+  const s = replay([
+    ev(1, "task_started", {}),
+    ev(2, "tool_started", { tool: "bash", tool_invocation_id: "tinv_slow", input: { program: "sleep", args: ["1"] } }),
+    ev(3, "tool_started", { tool: "bash", tool_invocation_id: "tinv_fast", input: { program: "echo", args: ["hi"] } }),
+    ev(4, "tool_completed", { tool_invocation_id: "tinv_fast", success: true, exit_code: 0, stdout: "hi\n", stderr: "" }),
+    ev(5, "tool_completed", { tool_invocation_id: "tinv_slow", success: true, exit_code: 0, stdout: "", stderr: "" }),
+  ]);
+  const cmds = agentCommandsForTask(s, TASK);
+  assert.deepEqual(cmds.map((c) => [c.program, c.pending, c.exitCode]), [
+    ["sleep", false, 0],
+    ["echo", false, 0],
+  ]);
+});
+
+test("G14: a keyed tool_started with no matching completion stays pending", () => {
+  const s = replay([
+    ev(1, "task_started", {}),
+    ev(2, "tool_started", { tool: "bash", tool_invocation_id: "tinv_x", input: { program: "make", args: [] } }),
+    ev(3, "tool_completed", { tool_invocation_id: "tinv_other", success: true, exit_code: 0, stdout: "", stderr: "" }),
+  ]);
+  const [c] = agentCommandsForTask(s, TASK);
+  assert.equal(c?.pending, true);
+  assert.equal(c?.exitCode, null);
+});
+
 test("the selector stays linear over a large store", () => {
   // Large enough that an accidental O(n²) (e.g. re-scanning events per command)
   // blows the budget; small enough that building the store stays a unit test.

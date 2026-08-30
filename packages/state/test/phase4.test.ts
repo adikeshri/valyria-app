@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import {
   applyBatch,
   changedFilesForTask,
+  checkpointIdsForTask,
   checkpointsForTask,
   currentTask,
   replay,
@@ -77,4 +78,76 @@ test("checkpoint boundaries come from the plan payload; step id is not a checkpo
   assert.equal(cps.length, 1);
   assert.equal(cps[0]?.stepId, "step_fix_backoff");
   assert.equal(cps[0]?.rollbackBoundary, true);
+});
+
+test("G13: plan_checkpoint events fold into a step_id → checkpoint_id map", () => {
+  const evt = (seq: number, kind: string, payload: Record<string, unknown>) => ({
+    seq,
+    ts_ms: 1788020000000 + seq,
+    kind,
+    task_id: TASK,
+    payload,
+  });
+  const s = replay([
+    evt(1, "task_started", {}),
+    evt(2, "plan_checkpoint", { checkpoint_id: "ckpt_01AAA", step_id: "step_fix_backoff" }),
+    evt(3, "plan_checkpoint", { checkpoint_id: "ckpt_01BBB", step_id: "step_add_test" }),
+    evt(4, "plan_checkpoint", { checkpoint_id: "malformed" }), // no step_id — ignored
+  ]);
+  assert.deepEqual(checkpointIdsForTask(s, TASK), {
+    step_fix_backoff: "ckpt_01AAA",
+    step_add_test: "ckpt_01BBB",
+  });
+  assert.deepEqual(checkpointIdsForTask(s, "task_other"), {});
+});
+
+test("G15: test_failed failures parse into kind / message / file:line locations", () => {
+  const evt = (seq: number, kind: string, payload: Record<string, unknown>) => ({
+    seq,
+    ts_ms: 1788020000000 + seq,
+    kind,
+    task_id: TASK,
+    payload,
+  });
+  const s = replay([
+    evt(1, "task_started", {}),
+    evt(2, "test_started", { command: "cargo test" }),
+    evt(3, "test_failed", {
+      command: "cargo test",
+      run_id: "vrun_x",
+      failure_count: 2,
+      failures: [
+        {
+          kind: "test_failure",
+          message: "assertion failed: left == right",
+          failing_test: "billing::tests::applies_backoff",
+          location: [{ path: "src/billing.rs", line: 42 }],
+        },
+        {
+          kind: "compile_error",
+          message: "cannot find value `foo`",
+          failing_test: null,
+          location: [
+            { path: "src/lib.rs", line: 7 },
+            { path: "src/lib.rs" },
+          ],
+        },
+      ],
+    }),
+  ]);
+  const [run] = testResultsForTask(s, TASK);
+  assert.equal(run?.outcome, "failed");
+  assert.equal(run?.failures.length, 2);
+  assert.equal(run?.failures[0]?.kind, "test_failure");
+  assert.equal(run?.failures[0]?.failingTest, "billing::tests::applies_backoff");
+  assert.deepEqual(run?.failures[0]?.locations, [{ path: "src/billing.rs", line: 42 }]);
+  assert.deepEqual(run?.failures[1]?.locations, [
+    { path: "src/lib.rs", line: 7 },
+    { path: "src/lib.rs", line: null },
+  ]);
+});
+
+test("G15: a test_failed with no failures[] yields an empty list, never a throw", () => {
+  const runs = testResultsForTask(replay(trace), TASK);
+  assert.deepEqual(runs[0]?.failures, []);
 });

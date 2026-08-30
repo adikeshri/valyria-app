@@ -92,6 +92,17 @@ export interface FileChangeProjection {
  *  what Core actually emitted. */
 export type TestOutcome = "started" | "passed" | "failed";
 
+/** One parsed verification failure (§19, §35, G15). Locations are Core's — the
+ *  app renders them as jump targets and never parses a digest itself. */
+export interface FailureProjection {
+  /** `compile_error` | `test_failure` | `test_panic` | `lint_error` |
+   *  `type_error` | `format_violation` | `timeout` | `unknown` */
+  kind: string | null;
+  message: string | null;
+  failingTest: string | null;
+  locations: { path: string; line: number | null }[];
+}
+
 export interface TestRunProjection {
   /** the verification command, e.g. `cargo test` — the stable identity */
   command: string;
@@ -100,6 +111,9 @@ export interface TestRunProjection {
   runId: string | null;
   failureCount: number | null;
   summary: string | null;
+  /** G15: Core's parsed failures with file/line locations. Empty until a
+   *  `test_failed` / `verification_evidence` event carries them. */
+  failures: FailureProjection[];
   seq: number;
 }
 

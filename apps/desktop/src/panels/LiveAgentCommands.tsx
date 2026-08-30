@@ -48,8 +48,9 @@ export default function LiveAgentCommands() {
             <CommandRow key={c.seq} cmd={c} />
           ))}
           <p style={{ padding: "6px 14px 2px", fontSize: 10, color: "var(--text-tertiary)" }}>
-            Pairing and output split are best-effort — Core sends no invocation id
-            and one pre-formatted output blob (CORE-INTERFACE G14).
+            {cmds.some((c) => c.invocationId)
+              ? "Paired by Core's tool_invocation_id; stdout / stderr / exit code are Core's structured fields (CORE-INTERFACE G14)."
+              : "This task predates structured tool results — pairing and output split are best-effort off the pre-formatted blob (CORE-INTERFACE G14)."}
           </p>
         </div>
       )}
@@ -97,13 +98,20 @@ function Status({ cmd }: { cmd: AgentCommand }) {
   }
   const ok = cmd.succeeded !== false && (cmd.exitCode == null || cmd.exitCode === 0);
   return (
-    <span
-      className={`badge ${ok ? "badge--success" : "badge--danger"}`}
-      style={{ fontSize: 10 }}
-    >
-      {cmd.exitCode != null ? `exit ${cmd.exitCode}` : ok ? "ok" : "failed"}
+    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      {cmd.durationMs != null && (
+        <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{fmtDuration(cmd.durationMs)}</span>
+      )}
+      <span className={`badge ${ok ? "badge--success" : "badge--danger"}`} style={{ fontSize: 10 }}>
+        {cmd.exitCode != null ? `exit ${cmd.exitCode}` : ok ? "ok" : "failed"}
+      </span>
     </span>
   );
+}
+
+function fmtDuration(ms: number): string {
+  if (ms < 1000) return `${ms} ms`;
+  return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
 }
 
 function Pre({ text, tone }: { text: string; tone?: "err" }) {

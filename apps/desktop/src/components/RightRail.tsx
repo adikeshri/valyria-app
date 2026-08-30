@@ -1,7 +1,8 @@
 import { Compass, Hash, ShieldCheck, PanelRightClose } from "lucide-react";
 import { useApp, type RightTab } from "../state/store";
 import TabStrip, { type TabDef } from "./TabStrip";
-import ContextInspectorPanel, { SymbolsStub } from "../panels/ContextInspectorPanel";
+import LiveContextInspector from "../panels/LiveContextInspector";
+import { SymbolsStub } from "../panels/ContextInspectorPanel";
 import VerificationPanel from "../panels/VerificationPanel";
 
 const tabs: TabDef<RightTab>[] = [
@@ -34,7 +35,7 @@ export default function RightRail() {
         </button>
       </div>
       <div style={{ flex: 1, minHeight: 0 }} role="tabpanel" id={`right-panel-${rightTab}`} aria-labelledby={`right-tab-${rightTab}`}>
-        {rightTab === "context" && <ContextInspectorPanel />}
+        {rightTab === "context" && <LiveContextInspector />}
         {rightTab === "symbols" && <SymbolsStub />}
         {rightTab === "verify" && <VerificationPanel />}
       </div>

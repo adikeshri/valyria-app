@@ -11,7 +11,12 @@ import { useApp } from "../state/store";
 /** The Phase 4 test panel (docs/PLAN.md §4.11): passed / failed / not-run built
  *  from `test_*` events, each failure expandable to Core's captured output and a
  *  jump to the implicated file. No verdict the app invents — a category with no
- *  run reads NOT RUN. */
+ *  run reads NOT RUN.
+ *
+ *  G15: Core now parses each failure into `{ kind, message, failing_test,
+ *  location:[{path,line}] }`. When a run carries those, the panel lists them
+ *  with exact file:line jump targets; the old "last edit before the run"
+ *  inference is only the fallback for a run Core could not parse. */
 export default function LiveTestPanel() {
   const store = useLive((s) => s.store);
   const selectedTaskId = useApp((s) => s.selectedTaskId);
@@ -68,8 +73,15 @@ export default function LiveTestPanel() {
           <RunDetail
             run={openRun}
             events={events}
-            onJumpFile={(p) =>
-              reveal({ path: p, reason: `last edit before ${openRun.command} (inferred — Core reports no failure location, G15)` })
+            onJumpLocation={(path, line) =>
+              reveal({
+                path,
+                line: line ?? undefined,
+                reason: `Core parsed this failure from ${openRun.command}`,
+              })
+            }
+            onJumpInferred={(p) =>
+              reveal({ path: p, reason: `last edit before ${openRun.command} (inferred — Core parsed no location for this run, G15)` })
             }
           />
         )}
@@ -123,9 +135,12 @@ function Group({
 }
 
 function RunDetail({
-  run, events, onJumpFile,
+  run, events, onJumpLocation, onJumpInferred,
 }: {
-  run: TestRunProjection; events: EventRow[]; onJumpFile: (p: string) => void;
+  run: TestRunProjection;
+  events: EventRow[];
+  onJumpLocation: (path: string, line: number | null) => void;
+  onJumpInferred: (p: string) => void;
 }) {
   // Core carries a short `digest` on the VERIFY_RESULT payload; surface it
   // verbatim. The full started-event rationale gives context.
@@ -139,7 +154,11 @@ function RunDetail({
   );
   const digest = (outcomeEvent?.payload as { digest?: string })?.digest;
   const rationale = (started?.payload as { rationale?: string })?.rationale;
-  const impliedFile = fileImplicatedBy(events, run.seq);
+  // G15: prefer Core's parsed failures; fall back to the touch-order inference
+  // only when a failed run carried none.
+  const parsed = run.failures ?? [];
+  const impliedFile =
+    run.outcome === "failed" && parsed.length === 0 ? fileImplicatedBy(events, run.seq) : null;
 
   return (
     <div>
@@ -151,10 +170,54 @@ function RunDetail({
         {run.runId && <span style={{ fontSize: 10, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>{run.runId}</span>}
       </div>
 
+      {parsed.length > 0 && (
+        <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 0", display: "flex", flexDirection: "column", gap: 8 }}>
+          {parsed.map((f, i) => (
+            <li
+              key={i}
+              style={{
+                padding: "8px 10px",
+                border: "1px solid var(--danger-border)",
+                borderRadius: 8,
+                background: "var(--code-bg)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                {f.kind && <span className="badge badge--danger" style={{ fontSize: 10 }}>{f.kind.replace(/_/g, " ")}</span>}
+                {f.failingTest && (
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-secondary)" }}>
+                    {f.failingTest}
+                  </span>
+                )}
+              </div>
+              {f.message && (
+                <div style={{ marginTop: 5, fontSize: 12, color: "var(--text-secondary)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                  {f.message}
+                </div>
+              )}
+              {f.locations.length > 0 && (
+                <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {f.locations.map((loc, j) => (
+                    <button
+                      key={j}
+                      className="no-native-focus"
+                      onClick={() => onJumpLocation(loc.path, loc.line)}
+                      style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--accent-strong)", fontSize: 11.5, fontFamily: "var(--font-mono)" }}
+                    >
+                      <FileCode size={11} /> {loc.path}{loc.line != null ? `:${loc.line}` : ""} <ChevronRight size={11} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
       {impliedFile && (
         <button
           className="no-native-focus"
-          onClick={() => onJumpFile(impliedFile)}
+          onClick={() => onJumpInferred(impliedFile)}
           style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 6, color: "var(--text-tertiary)", fontSize: 11.5 }}
         >
           <FileCode size={11} /> {impliedFile} <ChevronRight size={11} />

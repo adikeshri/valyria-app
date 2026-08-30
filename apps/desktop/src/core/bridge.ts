@@ -237,6 +237,10 @@ export interface PlanStep {
   depends_on: string[];
   rollback_boundary: boolean;
   checkpoint: boolean;
+  /** The id `task_rollback` expects for a checkpoint taken at this step, when
+   *  Core has recorded one (G13). Also arrives live as a `plan_checkpoint`
+   *  event; the Rollback UI prefers whichever it sees first. */
+  checkpoint_id?: string | null;
 }
 
 export interface PlanGet {

@@ -18,6 +18,9 @@ export interface SessionInfo {
   permission_mode: "manual" | "assisted" | "autonomous" | null;
   /** False for an adopted daemon — the autonomy switch is disabled then (G1). */
   owns_daemon: boolean;
+  /** True when every frame to Core carries this session's per-instance auth
+   *  token (G10). False only when adopting a daemon started without one. */
+  authenticated: boolean;
 }
 
 export type PermissionMode = "manual" | "assisted" | "autonomous";

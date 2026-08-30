@@ -59,13 +59,31 @@ pub struct EventPump {
 }
 
 impl EventPump {
-    /// Start pumping. `applied_through` is the last `seq` the consumer has
-    /// already applied — `0` for a full replay from the journal, or the
-    /// reducer's `lastSeq` to resume after a UI restart. Core's `since` cursor
-    /// is exclusive (`seq > since`), so this value is passed through as-is.
-    pub fn start(socket_path: PathBuf, applied_through: u64) -> Self {
+    /// Start pumping the full workspace stream. `applied_through` is the last
+    /// `seq` the consumer has already applied — `0` for a full replay from the
+    /// journal, or the reducer's `lastSeq` to resume after a UI restart. Core's
+    /// `since` cursor is exclusive (`seq > since`), so this value is passed
+    /// through as-is.
+    ///
+    /// `auth_token` is the daemon's per-instance client-auth token (G10) — pass
+    /// `Session::auth_token`.
+    pub fn start(socket_path: PathBuf, auth_token: Option<String>, applied_through: u64) -> Self {
+        Self::start_scoped(socket_path, auth_token, applied_through, None)
+    }
+
+    /// Start pumping only one task's events plus workspace-global (task-less)
+    /// ones (CORE-INTERFACE G11). The main desktop session does **not** use
+    /// this — it needs the full, seq-contiguous stream for crash recovery
+    /// (docs/PLAN.md D3). It backs a scoped consumer that does not (a detached
+    /// single-task view), and is covered by `tests/stream_filter.rs`.
+    pub fn start_scoped(
+        socket_path: PathBuf,
+        auth_token: Option<String>,
+        applied_through: u64,
+        task_id: Option<String>,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(64);
-        let handle = tokio::spawn(pump_loop(socket_path, applied_through, tx));
+        let handle = tokio::spawn(pump_loop(socket_path, auth_token, task_id, applied_through, tx));
         Self { rx, handle }
     }
 
@@ -84,8 +102,14 @@ impl Drop for EventPump {
     }
 }
 
-async fn pump_loop(socket_path: PathBuf, applied_through: u64, tx: mpsc::Sender<PumpMessage>) {
-    let client = CoreClient::new(socket_path);
+async fn pump_loop(
+    socket_path: PathBuf,
+    auth_token: Option<String>,
+    task_id: Option<String>,
+    applied_through: u64,
+    tx: mpsc::Sender<PumpMessage>,
+) {
+    let client = CoreClient::with_token(socket_path, auth_token);
 
     // The last seq delivered to the consumer. Core's `since` is exclusive
     // (`seq > since`), so this doubles as the resubscribe cursor. `0` means
@@ -94,7 +118,9 @@ async fn pump_loop(socket_path: PathBuf, applied_through: u64, tx: mpsc::Sender<
     let mut first_connect = true;
 
     loop {
-        let mut stream = client.subscribe(delivered_last).await;
+        let mut stream = client
+            .subscribe_for_task(delivered_last, task_id.clone())
+            .await;
 
         if !first_connect
             && tx
@@ -132,7 +158,7 @@ async fn pump_loop(socket_path: PathBuf, applied_through: u64, tx: mpsc::Sender<
 
         // Stream ended. Try to re-establish; if every attempt fails the daemon
         // is probably gone — tell the owner and stop.
-        if !reconnect(&client, delivered_last).await {
+        if !reconnect(&client, delivered_last, task_id.clone()).await {
             let _ = tx
                 .send(PumpMessage::Closed {
                     last_seq: delivered_last,
@@ -180,11 +206,11 @@ async fn collect(
     Collected::Events(events)
 }
 
-async fn reconnect(client: &CoreClient, cursor: u64) -> bool {
+async fn reconnect(client: &CoreClient, cursor: u64, task_id: Option<String>) -> bool {
     let mut delay = RECONNECT_MIN;
     for _ in 0..RECONNECT_ATTEMPTS {
         tokio::time::sleep(delay).await;
-        let mut probe = client.subscribe(cursor).await;
+        let mut probe = client.subscribe_for_task(cursor, task_id.clone()).await;
         match tokio::time::timeout(Duration::from_millis(200), probe.next()).await {
             Ok(Some(_)) => return true, // got an event
             Ok(None) => {}              // closed again → keep trying

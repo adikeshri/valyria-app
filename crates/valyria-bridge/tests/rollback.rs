@@ -97,8 +97,8 @@ fn is_terminal(task_id: &str, e: &WireEvent) -> bool {
                 )))
 }
 
-async fn run_to_completion(sock: &Path, task_id: &str) {
-    let mut pump = EventPump::start(sock.to_path_buf(), 0);
+async fn run_to_completion(sock: &Path, auth_token: Option<String>, task_id: &str) {
+    let mut pump = EventPump::start(sock.to_path_buf(), auth_token, 0);
     let tid = task_id.to_string();
     loop {
         match timeout(Duration::from_secs(90), pump.recv()).await {
@@ -133,12 +133,12 @@ async fn rollback_wire_path_reports_core_errors_structurally() {
     };
 
     let mut session = spawn_or_adopt(cfg).await.expect("spawn Core");
-    let client = CoreClient::new(session.socket_path.clone());
+    let client = CoreClient::with_token(session.socket_path.clone(), session.auth_token.clone());
     let task_id = client
         .task_create("add a function")
         .await
         .expect("task_create");
-    run_to_completion(&session.socket_path, &task_id).await;
+    run_to_completion(&session.socket_path, session.auth_token.clone(), &task_id).await;
 
     // The completion report round-trips (Phase 4 verification inspector source).
     let report = client.task_report(&task_id).await.expect("task_report");

@@ -80,6 +80,15 @@ pub fn meta_path(id: &WorkspaceId) -> PathBuf {
     run_dir(id).join("meta.json")
 }
 
+/// The per-daemon client-auth token file (CORE-INTERFACE G10). Written `0600`
+/// when this process spawns the daemon (and passed to it as
+/// `--auth-token-file`); read back when adopting a daemon another instance of
+/// this app started. A daemon started by hand with no token simply has no file
+/// here, and the client connects unauthenticated.
+pub fn auth_token_path(id: &WorkspaceId) -> PathBuf {
+    run_dir(id).join("auth.token")
+}
+
 /// Create `run/<id>/` with `0700` permissions, idempotently.
 pub fn ensure_run_dir(id: &WorkspaceId) -> Result<PathBuf> {
     let dir = run_dir(id);

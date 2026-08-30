@@ -47,6 +47,20 @@ impl CoreClient {
         }
     }
 
+    /// A client that authenticates every frame with the daemon's per-instance
+    /// token (CORE-INTERFACE G10). `None` is exactly `new` — an unauthenticated
+    /// client, for a daemon started without a token.
+    pub fn with_token(socket_path: impl Into<PathBuf>, token: Option<String>) -> Self {
+        let socket = match token {
+            Some(t) => SocketClient::with_token(socket_path, t),
+            None => SocketClient::new(socket_path),
+        };
+        Self {
+            socket: Arc::new(socket),
+            timeout: DEFAULT_CALL_TIMEOUT,
+        }
+    }
+
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self

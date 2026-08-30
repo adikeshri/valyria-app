@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
@@ -21,6 +21,11 @@ const vendoredKinds = readFileSync(
   .map((l) => l.trim())
   .filter(Boolean);
 
+const payloadContractStems = readdirSync(join(here, "../schemas/events"))
+  .filter((n) => n.endsWith(".schema.json"))
+  .map((n) => n.replace(/\.schema\.json$/, ""))
+  .sort();
+
 function loadTrace(name: string): { kind: string }[] {
   return readFileSync(join(here, "../../../fixtures/traces/", name), "utf8")
     .trim()
@@ -38,6 +43,17 @@ test("KNOWN_EVENT_KINDS matches Core's pinned kind list exactly", () => {
 test("every known kind has a decoder tightened past z.unknown()", () => {
   for (const { kind, tightened } of coverageReport()) {
     assert.ok(tightened, `no decoder for ${kind}`);
+  }
+});
+
+test("every vendored per-kind payload contract names a known event kind (G12)", () => {
+  // A `schemas/events/<kind>.schema.json` whose stem is not in the registry
+  // means Core added a payload contract this app has not caught up with.
+  for (const stem of payloadContractStems) {
+    assert.ok(
+      hasDecoder(stem),
+      `schemas/events/${stem}.schema.json has no decoder / is not in KNOWN_EVENT_KINDS`,
+    );
   }
 });
 

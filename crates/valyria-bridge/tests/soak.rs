@@ -154,7 +154,7 @@ async fn reads_and_pty_stay_usable_through_a_running_task() {
     };
 
     let mut session = spawn_or_adopt(cfg).await.expect("spawn Core");
-    let client = CoreClient::new(session.socket_path.clone());
+    let client = CoreClient::with_token(session.socket_path.clone(), session.auth_token.clone());
     let fs = WorkspaceFs::new(&repo.root).expect("workspace fs");
     let git_repo = GitRepo::new(&repo.root);
 
@@ -175,7 +175,7 @@ async fn reads_and_pty_stay_usable_through_a_running_task() {
         .task_create("add a function")
         .await
         .expect("task_create");
-    let mut pump = EventPump::start(session.socket_path.clone(), 0);
+    let mut pump = EventPump::start(session.socket_path.clone(), session.auth_token.clone(), 0);
 
     // Hammer the read surfaces for a fixed window, PTY running alongside.
     let deadline = Instant::now() + Duration::from_secs(4);

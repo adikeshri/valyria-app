@@ -77,6 +77,10 @@ pub struct SessionInfo {
   /// ours to perform (CORE-INTERFACE G1).
   pub permission_mode: Option<String>,
   pub owns_daemon: bool,
+  /// True when this session authenticates every frame to the daemon with its
+  /// per-instance token (CORE-INTERFACE G10). False only for a daemon started
+  /// by hand with no `--auth-token-file`.
+  pub authenticated: bool,
 }
 
 impl SessionInfo {
@@ -91,6 +95,7 @@ impl SessionInfo {
       capabilities: s.negotiated.capabilities.clone(),
       permission_mode: s.permission_mode.clone(),
       owns_daemon: s.is_owned(),
+      authenticated: s.auth_token.is_some(),
     }
   }
 }
@@ -189,7 +194,11 @@ async fn open_and_store(
   };
 
   let session = spawn_or_adopt(cfg).await.map_err(err_str)?;
-  let client = CoreClient::new(session.socket_path.clone());
+  // Every call/subscribe to this daemon carries its per-instance auth token
+  // (CORE-INTERFACE G10). `spawn_or_adopt` generated it (spawn) or read it back
+  // from `run/<id>/auth.token` (adopt); `None` only for a daemon started by
+  // hand with no token.
+  let client = CoreClient::with_token(session.socket_path.clone(), session.auth_token.clone());
   let fs = WorkspaceFs::new(&workspace_root).map_err(err_str)?;
   let git = GitRepo::new(&workspace_root);
 
@@ -203,8 +212,10 @@ async fn open_and_store(
 
   let info = SessionInfo::of(workspace_root, &session);
 
-  // Fan the workspace event stream out to the renderer.
-  let mut pump = EventPump::start(session.socket_path.clone(), 0);
+  // Fan the *full* workspace event stream out to the renderer. The desktop
+  // session deliberately does not use G11's per-task filter — the reducer
+  // needs a seq-contiguous stream for crash recovery (docs/PLAN.md D3).
+  let mut pump = EventPump::start(session.socket_path.clone(), session.auth_token.clone(), 0);
   let app = app.clone();
   let pump_task = tokio::spawn(async move {
     while let Some(msg) = pump.recv().await {

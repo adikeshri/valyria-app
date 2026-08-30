@@ -22,7 +22,9 @@ use tokio::process::{Child, Command};
 use crate::core_binary::CoreBinary;
 use crate::error::{BridgeError, Result};
 use crate::session::{negotiate, NegotiatedSession};
-use crate::workspace::{ensure_run_dir, meta_path, pid_path, socket_path, WorkspaceId};
+use crate::workspace::{
+    auth_token_path, ensure_run_dir, meta_path, pid_path, socket_path, WorkspaceId,
+};
 
 #[derive(Clone)]
 pub struct SupervisorConfig {
@@ -74,6 +76,11 @@ pub struct Session {
     pub socket_path: PathBuf,
     pub negotiated: NegotiatedSession,
     pub origin: Origin,
+    /// The client-auth token every call/subscribe to this daemon must carry
+    /// (CORE-INTERFACE G10). `Some` when we spawned the daemon (we generated it)
+    /// or adopted one that has an `auth.token` file; `None` for a daemon started
+    /// with no token. `CoreClient` / `EventPump` are built from this.
+    pub auth_token: Option<String>,
     /// Autonomy level the daemon is running under (§25). For a spawned daemon
     /// this is what we passed on the command line; for an adopted one it is
     /// read back from `meta.json` and may be `None` if a foreign process wrote
@@ -111,6 +118,7 @@ impl Session {
         }
         let _ = std::fs::remove_file(&self.socket_path);
         let _ = std::fs::remove_file(pid_path(&self.id));
+        let _ = std::fs::remove_file(auth_token_path(&self.id));
         Ok(())
     }
 }
@@ -158,12 +166,21 @@ pub async fn spawn_or_adopt(config: SupervisorConfig) -> Result<Session> {
     // Nothing healthy to adopt — clear a stale socket and spawn.
     let _ = std::fs::remove_file(&sock);
 
+    // A fresh per-daemon client-auth token (G10): write it `0600` and hand the
+    // path to `valyria serve`. Every client frame to this daemon then carries
+    // it; a connection from any other local process is refused.
+    let token = generate_auth_token();
+    let token_file = auth_token_path(&id);
+    write_token_file(&token_file, &token)?;
+
     let mut cmd = Command::new(config.core_binary.path());
     cmd.arg("serve")
         .arg("--workspace")
         .arg(&config.workspace_root)
         .arg("--socket")
         .arg(&sock)
+        .arg("--auth-token-file")
+        .arg(&token_file)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -179,8 +196,13 @@ pub async fn spawn_or_adopt(config: SupervisorConfig) -> Result<Session> {
         source,
     })?;
 
-    let negotiated =
-        poll_negotiate(&sock, &config.expected_protocol, config.startup_timeout).await?;
+    let negotiated = poll_negotiate(
+        &sock,
+        &config.expected_protocol,
+        Some(token.as_str()),
+        config.startup_timeout,
+    )
+    .await?;
 
     write_pid_and_meta(&id, child.id(), &config, &negotiated);
 
@@ -189,10 +211,62 @@ pub async fn spawn_or_adopt(config: SupervisorConfig) -> Result<Session> {
         socket_path: sock,
         negotiated,
         origin: Origin::Spawned,
+        auth_token: Some(token),
         permission_mode: config.permission_mode.clone(),
         child: Some(child),
         kill_on_drop: config.kill_daemon_on_drop,
     })
+}
+
+/// 32 hex chars from the OS CSPRNG. `/dev/urandom` is always present on the
+/// unix hosts this crate opens sessions on (`platform_precheck`), so this
+/// avoids pulling in a `rand` dependency for one 16-byte read.
+fn generate_auth_token() -> String {
+    let mut buf = [0u8; 16];
+    match std::fs::File::open("/dev/urandom").and_then(|mut f| {
+        use std::io::Read;
+        f.read_exact(&mut buf)
+    }) {
+        Ok(()) => {}
+        Err(_) => {
+            // Last-resort fallback: still unpredictable enough to not be a
+            // literal constant, though this path should never run.
+            let t = now_ms();
+            buf[..16].copy_from_slice(&[
+                (t >> 120) as u8, (t >> 112) as u8, (t >> 104) as u8, (t >> 96) as u8,
+                (t >> 88) as u8, (t >> 80) as u8, (t >> 72) as u8, (t >> 64) as u8,
+                (t >> 56) as u8, (t >> 48) as u8, (t >> 40) as u8, (t >> 32) as u8,
+                (t >> 24) as u8, (t >> 16) as u8, (t >> 8) as u8, t as u8,
+            ]);
+        }
+    }
+    let mut s = String::with_capacity(32);
+    for b in buf {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
+}
+
+/// Write the token `0600` (create-or-truncate). The `run/<id>/` dir is already
+/// `0700`.
+fn write_token_file(path: &Path, token: &str) -> Result<()> {
+    std::fs::write(path, token).map_err(|e| {
+        BridgeError::Transport(format!("writing {}: {e}", path.display()))
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
+/// Read a token file written by a prior spawn (used when adopting). A missing
+/// file means the daemon was started without one.
+fn read_token_file(id: &WorkspaceId) -> Option<String> {
+    let s = std::fs::read_to_string(auth_token_path(id)).ok()?;
+    let s = s.trim();
+    (!s.is_empty()).then(|| s.to_string())
 }
 
 /// Try to adopt: socket present, pid (if recorded) alive, `hello` succeeds and
@@ -207,7 +281,10 @@ async fn try_adopt(id: &WorkspaceId, sock: &Path, config: &SupervisorConfig) -> 
             return None;
         }
     }
-    match negotiate(sock, &config.expected_protocol).await {
+    // If a prior spawn left an auth token, the daemon we are about to adopt was
+    // started with it (G10) — authenticate the handshake with it too.
+    let token = read_token_file(id);
+    match negotiate(sock, &config.expected_protocol, token.as_deref()).await {
         Ok(negotiated) => {
             tracing::info!(
                 runtime = %negotiated.runtime_version,
@@ -218,6 +295,7 @@ async fn try_adopt(id: &WorkspaceId, sock: &Path, config: &SupervisorConfig) -> 
                 socket_path: sock.to_path_buf(),
                 negotiated,
                 origin: Origin::Adopted,
+                auth_token: token,
                 permission_mode: read_meta_permission_mode(id),
                 child: None,
                 kill_on_drop: false,
@@ -236,12 +314,13 @@ async fn try_adopt(id: &WorkspaceId, sock: &Path, config: &SupervisorConfig) -> 
 async fn poll_negotiate(
     sock: &Path,
     expected_protocol: &str,
+    auth_token: Option<&str>,
     timeout: Duration,
 ) -> Result<NegotiatedSession> {
     let start = Instant::now();
     let mut delay = Duration::from_millis(50);
     loop {
-        match negotiate(sock, expected_protocol).await {
+        match negotiate(sock, expected_protocol, auth_token).await {
             Ok(n) => return Ok(n),
             Err(e @ BridgeError::ProtocolMismatch { .. }) => return Err(e),
             Err(_) => {
@@ -323,6 +402,15 @@ fn now_ms() -> u128 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auth_token_is_32_hex_and_unpredictable() {
+        let a = generate_auth_token();
+        let b = generate_auth_token();
+        assert_eq!(a.len(), 32);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(a, b, "two tokens should not collide");
+    }
 
     #[test]
     fn platform_precheck_gates_only_non_unix() {

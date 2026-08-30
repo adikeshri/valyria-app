@@ -167,7 +167,7 @@ async fn supervise_stream_kill_ui_resume_kill_daemon() {
     );
     let daemon_pid = session.daemon_pid().expect("own the spawned daemon");
 
-    let client = CoreClient::new(session.socket_path.clone());
+    let client = CoreClient::with_token(session.socket_path.clone(), session.auth_token.clone());
     assert_eq!(
         client.workspace_status().await.expect("status").total_tasks,
         0
@@ -178,7 +178,7 @@ async fn supervise_stream_kill_ui_resume_kill_daemon() {
         .expect("task_create");
 
     let full: BTreeSet<u64> = {
-        let mut pump = EventPump::start(session.socket_path.clone(), 0);
+        let mut pump = EventPump::start(session.socket_path.clone(), session.auth_token.clone(), 0);
         let tid = task_id.clone();
         let (seqs, done, gaps) = drain(&mut pump, Duration::from_secs(90), move |e| {
             is_terminal(&tid, e)
@@ -215,7 +215,7 @@ async fn supervise_stream_kill_ui_resume_kill_daemon() {
     // 3. Resume the stream from a mid-run cursor (exclusive): exact tail, no
     //    hole, no dup.
     let mid = lo + (hi - lo) / 2;
-    let mut pump2 = EventPump::start(adopted.socket_path.clone(), mid);
+    let mut pump2 = EventPump::start(adopted.socket_path.clone(), adopted.auth_token.clone(), mid);
     let (tail, _stop, gaps2) = drain(&mut pump2, Duration::from_secs(15), |_| false).await;
     assert!(
         !gaps2.first().copied().unwrap_or(false),
@@ -238,7 +238,7 @@ async fn supervise_stream_kill_ui_resume_kill_daemon() {
         .await
         .expect("respawn after daemon death");
     assert_eq!(respawned.origin, Origin::Spawned);
-    let after = CoreClient::new(respawned.socket_path.clone());
+    let after = CoreClient::with_token(respawned.socket_path.clone(), respawned.auth_token.clone());
     let relisted = after.task_list().await.expect("task_list after respawn");
     assert!(
         relisted.tasks.iter().any(|t| t.task_id == task_id),
@@ -269,10 +269,10 @@ async fn capture_trace() {
         permission_mode: None,
     };
     let mut session = spawn_or_adopt(cfg).await.unwrap();
-    let client = CoreClient::new(session.socket_path.clone());
+    let client = CoreClient::with_token(session.socket_path.clone(), session.auth_token.clone());
     let task_id = client.task_create("add a function").await.unwrap();
 
-    let mut pump = EventPump::start(session.socket_path.clone(), 0);
+    let mut pump = EventPump::start(session.socket_path.clone(), session.auth_token.clone(), 0);
     let mut lines: Vec<String> = Vec::new();
     let tid = task_id.clone();
     loop {

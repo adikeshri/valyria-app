@@ -82,7 +82,7 @@ async fn model_list_and_config_write_then_verify() {
     cfg.kill_daemon_on_drop = true;
 
     let mut session = spawn_or_adopt(cfg).await.expect("spawn Core");
-    let client = CoreClient::new(session.socket_path.clone());
+    let client = CoreClient::with_token(session.socket_path.clone(), session.auth_token.clone());
 
     // Inventory decodes; a clean machine has none.
     let models = client.model_list().await.expect("model_list");

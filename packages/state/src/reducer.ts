@@ -6,6 +6,7 @@ import { decodeEvent, type DecodedEvent } from "@valyria/protocol";
 import {
   emptyStore,
   type ConnectionState,
+  type EventRow,
   type FileChangeProjection,
   type StoreState,
   type TaskProjection,
@@ -19,9 +20,20 @@ export function applyRawEvent(state: StoreState, raw: unknown): StoreState {
   return applyDecoded(state, decodeEvent(raw));
 }
 
-/** Fold a whole batch (the pump's unit of delivery) in one pass. */
+/** Fold a whole batch (the pump's unit of delivery) in one pass. The
+ *  append-only `events` array is copied exactly once for the batch rather than
+ *  once per event — a 512-event pump delivery onto a large store is O(batch),
+ *  not O(batch × store) (docs/PLAN.md §9 event-ingest budget). */
 export function applyBatch(state: StoreState, raws: readonly unknown[]): StoreState {
-  return raws.reduce<StoreState>((s, r) => applyRawEvent(s, r), state);
+  let s = state;
+  const appended: EventRow[] = [];
+  for (const r of raws) {
+    const { state: next, row } = applyDecodedNoAppend(s, decodeEvent(r));
+    s = next;
+    if (row) appended.push(row);
+  }
+  if (appended.length === 0) return s;
+  return { ...s, events: [...state.events, ...appended] };
 }
 
 /** Set the transport-level connection state (not event-derived). */
@@ -31,27 +43,38 @@ export function setConnection(state: StoreState, connection: ConnectionState): S
 
 /** Apply an already-decoded event. Split out so tests can inject decoder output. */
 export function applyDecoded(state: StoreState, ev: DecodedEvent): StoreState {
+  const { state: next, row } = applyDecodedNoAppend(state, ev);
+  if (!row) return next;
+  return { ...next, events: [...state.events, row] };
+}
+
+/** The body of {@link applyDecoded} minus the `events` append: returns the new
+ *  state (with `events` left untouched) plus the row to append, or `null` when
+ *  the event was ignored. Lets {@link applyBatch} copy `events` once per batch
+ *  instead of once per event. */
+function applyDecodedNoAppend(
+  state: StoreState,
+  ev: DecodedEvent,
+): { state: StoreState; row: EventRow | null } {
   const expected = state.lastSeq + 1;
   if (ev.seq < expected) {
-    return state; // already applied (idempotent resume) — ignore
+    return { state, row: null }; // already applied (idempotent resume) — ignore
   }
   const gapDetected = state.gapDetected || ev.seq > expected;
+
+  const row: EventRow = {
+    seq: ev.seq,
+    ts: ev.ts,
+    kind: ev.kind,
+    taskId: ev.taskId,
+    payload: ev.ok ? ev.payload : ev.raw,
+    degraded: !ev.ok,
+  };
 
   const next: StoreState = {
     ...state,
     lastSeq: ev.seq,
     gapDetected,
-    events: [
-      ...state.events,
-      {
-        seq: ev.seq,
-        ts: ev.ts,
-        kind: ev.kind,
-        taskId: ev.taskId,
-        payload: ev.ok ? ev.payload : ev.raw,
-        degraded: !ev.ok,
-      },
-    ],
   };
 
   if (ev.taskId) {
@@ -84,7 +107,7 @@ export function applyDecoded(state: StoreState, ev: DecodedEvent): StoreState {
       }
     }
   }
-  return next;
+  return { state: next, row };
 }
 
 /** `file_changed`, plus write/edit `tool_started` (its `input.path`), folded

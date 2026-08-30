@@ -137,7 +137,10 @@ async fn model_list_and_config_write_then_verify() {
         net.value, "controlled",
         "nested write reflected in the network policy leaf"
     );
-    assert_eq!(net.origin, "global", "the leaf's origin points at the user config");
+    assert_eq!(
+        net.origin, "global",
+        "the leaf's origin points at the user config"
+    );
 
     std::env::remove_var("VALYRIA_HOME");
     let _ = session.shutdown_daemon().await;

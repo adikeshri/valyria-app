@@ -1,18 +1,20 @@
-//! Workspace identity and the socket-path convention.
+//! Workspace identity and the transport-address convention.
 //!
-//! Core defines **no** socket-path convention (CORE-INTERFACE §1) — the app
-//! owns one. One Core daemon per workspace, keyed by a hash of the canonical
-//! workspace root, under `$VALYRIA_HOME/run/<workspace_id>/`:
+//! Core defines **no** transport-address convention (CORE-INTERFACE §1) — the
+//! app owns one. One Core daemon per workspace, keyed by a hash of the
+//! canonical workspace root, under `$VALYRIA_HOME/run/<workspace_id>/`:
 //!
 //! ```text
 //! $VALYRIA_HOME/run/<workspace_id>/
-//!   sock       0600  the Unix domain socket `valyria serve` binds
+//!   sock       0600  the Unix-domain socket `valyria serve` binds (unix only)
 //!   pid        0600  the daemon pid, for liveness checks before adoption
 //!   meta.json  0600  { root, runtime_version, started_at_ms }
+//!   auth.token 0600  the per-daemon client-auth token (G10)
 //! ```
 //!
-//! The `run/` directory is created `0700`. This is also gap G10's holding
-//! position: the socket is a trust boundary the app cannot yet verify.
+//! On Windows there is no socket file — the transport is a named pipe
+//! `\\.\pipe\valyria-<workspace_id>` (CORE-INTERFACE G9), and `socket_path`
+//! returns that name. The rest of `run/<id>/` is unchanged.
 
 use std::path::{Path, PathBuf};
 
@@ -68,9 +70,30 @@ pub fn run_dir(id: &WorkspaceId) -> PathBuf {
     valyria_home().join("run").join(id.as_str())
 }
 
+/// The address `valyria serve` binds and clients connect to for this
+/// workspace: a Unix-domain socket under `run/<id>/` on unix, a named pipe
+/// `\\.\pipe\valyria-<id>` on Windows (CORE-INTERFACE G9). Core's
+/// `SocketClient` and `daemon::serve` both accept the value verbatim on their
+/// respective platforms.
+#[cfg(unix)]
 pub fn socket_path(id: &WorkspaceId) -> PathBuf {
     run_dir(id).join("sock")
 }
+
+#[cfg(windows)]
+pub fn socket_path(id: &WorkspaceId) -> PathBuf {
+    PathBuf::from(format!(r"\\.\pipe\valyria-{}", id.as_str()))
+}
+
+#[cfg(not(any(unix, windows)))]
+pub fn socket_path(id: &WorkspaceId) -> PathBuf {
+    run_dir(id).join("sock")
+}
+
+/// True when `socket_path` is a real filesystem entry that can be `stat`ed and
+/// removed (unix). On Windows the transport is a named pipe with no file, so
+/// staleness is probed by connecting instead.
+pub const SOCKET_IS_FILE: bool = cfg!(unix);
 
 pub fn pid_path(id: &WorkspaceId) -> PathBuf {
     run_dir(id).join("pid")

@@ -72,7 +72,7 @@ export default function AboutView() {
               k="Sessions"
               v={
                 info?.sessions_supported === false
-                  ? "not available on this platform (CORE-INTERFACE G9)"
+                  ? "no supported IPC transport on this platform"
                   : "supported"
               }
               warn={info?.sessions_supported === false}

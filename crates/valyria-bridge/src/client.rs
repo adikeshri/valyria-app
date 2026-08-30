@@ -381,10 +381,8 @@ impl CoreClient {
     /// Begin a model install. Returns immediately; progress arrives as
     /// `model_install_progress` / `_completed` / `_failed` events.
     pub async fn model_install(&self, id: &str) -> Result<()> {
-        self.ack(Request::ModelInstall(ModelIdRequest {
-            id: id.to_string(),
-        }))
-        .await
+        self.ack(Request::ModelInstall(ModelIdRequest { id: id.to_string() }))
+            .await
     }
 
     pub async fn model_remove(&self, id: &str) -> Result<ModelRemoveResponse> {

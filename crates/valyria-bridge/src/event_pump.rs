@@ -83,7 +83,13 @@ impl EventPump {
         task_id: Option<String>,
     ) -> Self {
         let (tx, rx) = mpsc::channel(64);
-        let handle = tokio::spawn(pump_loop(socket_path, auth_token, task_id, applied_through, tx));
+        let handle = tokio::spawn(pump_loop(
+            socket_path,
+            auth_token,
+            task_id,
+            applied_through,
+            tx,
+        ));
         Self { rx, handle }
     }
 

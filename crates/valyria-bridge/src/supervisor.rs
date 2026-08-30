@@ -116,7 +116,10 @@ impl Session {
             let _ = child.start_kill();
             let _ = child.wait().await;
         }
-        let _ = std::fs::remove_file(&self.socket_path);
+        // The Windows pipe has no file to unlink; it goes away with the server.
+        if crate::workspace::SOCKET_IS_FILE {
+            let _ = std::fs::remove_file(&self.socket_path);
+        }
         let _ = std::fs::remove_file(pid_path(&self.id));
         let _ = std::fs::remove_file(auth_token_path(&self.id));
         Ok(())
@@ -134,19 +137,23 @@ impl Drop for Session {
 }
 
 /// Refuse early on a platform with no Core transport, rather than spawning a
-/// daemon that can never bind its socket and timing out (D14 / CORE-INTERFACE
-/// G9). The rest of the app still runs — this only gates sessions.
-#[cfg(unix)]
+/// daemon that can never bind and timing out (D14 / CORE-INTERFACE G9). The
+/// rest of the app still runs — this only gates sessions.
+///
+/// Both unix (Unix-domain socket) and Windows (named pipe) have a transport as
+/// of protocol 1.9.0, so sessions are allowed on both. Anything else (wasm,
+/// unknown) is refused.
+#[cfg(any(unix, windows))]
 fn platform_precheck() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn platform_precheck() -> Result<()> {
     Err(BridgeError::PlatformUnsupported(
-        "Valyria's runtime talks to the app over a Unix domain socket, and this platform \
-         has no transport for it yet (CORE-INTERFACE G9). The app runs and shows version \
-         and compatibility information, but a session cannot start here."
+        "Valyria's runtime talks to the app over a local IPC transport (a Unix-domain \
+         socket or a Windows named pipe), and this platform has neither. The app runs \
+         and shows version and compatibility information, but a session cannot start here."
             .to_string(),
     ))
 }
@@ -163,8 +170,11 @@ pub async fn spawn_or_adopt(config: SupervisorConfig) -> Result<Session> {
         return Ok(session);
     }
 
-    // Nothing healthy to adopt — clear a stale socket and spawn.
-    let _ = std::fs::remove_file(&sock);
+    // Nothing healthy to adopt — clear a stale socket (unix). On Windows the
+    // pipe has no file; a stale pipe simply has no server and connect fails.
+    if crate::workspace::SOCKET_IS_FILE {
+        let _ = std::fs::remove_file(&sock);
+    }
 
     // A fresh per-daemon client-auth token (G10): write it `0600` and hand the
     // path to `valyria serve`. Every client frame to this daemon then carries
@@ -218,26 +228,36 @@ pub async fn spawn_or_adopt(config: SupervisorConfig) -> Result<Session> {
     })
 }
 
-/// 32 hex chars from the OS CSPRNG. `/dev/urandom` is always present on the
-/// unix hosts this crate opens sessions on (`platform_precheck`), so this
-/// avoids pulling in a `rand` dependency for one 16-byte read.
+/// 32 hex chars of token entropy. Uses `/dev/urandom` when it is there (every
+/// unix host), and on Windows — which has no `/dev/urandom` and where this
+/// token is defence-in-depth on top of the named pipe's per-user ACL (G9) —
+/// falls back to a splitmix64 mix of several run-varying sources. Avoids a
+/// `rand` / `getrandom` dependency for one 16-byte value.
 fn generate_auth_token() -> String {
     let mut buf = [0u8; 16];
-    match std::fs::File::open("/dev/urandom").and_then(|mut f| {
+    let filled = {
         use std::io::Read;
-        f.read_exact(&mut buf)
-    }) {
-        Ok(()) => {}
-        Err(_) => {
-            // Last-resort fallback: still unpredictable enough to not be a
-            // literal constant, though this path should never run.
-            let t = now_ms();
-            buf[..16].copy_from_slice(&[
-                (t >> 120) as u8, (t >> 112) as u8, (t >> 104) as u8, (t >> 96) as u8,
-                (t >> 88) as u8, (t >> 80) as u8, (t >> 72) as u8, (t >> 64) as u8,
-                (t >> 56) as u8, (t >> 48) as u8, (t >> 40) as u8, (t >> 32) as u8,
-                (t >> 24) as u8, (t >> 16) as u8, (t >> 8) as u8, t as u8,
-            ]);
+        std::fs::File::open("/dev/urandom")
+            .and_then(|mut f| f.read_exact(&mut buf))
+            .is_ok()
+    };
+    if !filled {
+        let mut seed = now_ns()
+            ^ ((std::process::id() as u64).rotate_left(17))
+            ^ (&buf as *const _ as u64).rotate_left(33)
+            ^ format!("{:?}", std::thread::current().id())
+                .bytes()
+                .fold(0u64, |a, b| a.wrapping_mul(31).wrapping_add(b as u64));
+        for chunk in buf.chunks_mut(8) {
+            // splitmix64
+            seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = seed;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^= z >> 31;
+            for (i, b) in chunk.iter_mut().enumerate() {
+                *b = (z >> (8 * i)) as u8;
+            }
         }
     }
     let mut s = String::with_capacity(32);
@@ -247,12 +267,18 @@ fn generate_auth_token() -> String {
     s
 }
 
+fn now_ns() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0)
+}
+
 /// Write the token `0600` (create-or-truncate). The `run/<id>/` dir is already
 /// `0700`.
 fn write_token_file(path: &Path, token: &str) -> Result<()> {
-    std::fs::write(path, token).map_err(|e| {
-        BridgeError::Transport(format!("writing {}: {e}", path.display()))
-    })?;
+    std::fs::write(path, token)
+        .map_err(|e| BridgeError::Transport(format!("writing {}: {e}", path.display())))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -269,10 +295,15 @@ fn read_token_file(id: &WorkspaceId) -> Option<String> {
     (!s.is_empty()).then(|| s.to_string())
 }
 
-/// Try to adopt: socket present, pid (if recorded) alive, `hello` succeeds and
-/// the protocol major matches. Any miss returns `None` and the caller spawns.
+/// Try to adopt: transport present, pid (if recorded) alive, `hello` succeeds
+/// and the protocol major matches. Any miss returns `None` and the caller
+/// spawns.
+///
+/// On unix "transport present" is `sock.exists()`; on Windows the named pipe
+/// has no filesystem entry, so that pre-check is skipped and a dead pipe is
+/// caught by `negotiate` failing below.
 async fn try_adopt(id: &WorkspaceId, sock: &Path, config: &SupervisorConfig) -> Option<Session> {
-    if !sock.exists() {
+    if crate::workspace::SOCKET_IS_FILE && !sock.exists() {
         return None;
     }
     if let Some(pid) = read_pid(id) {
@@ -376,7 +407,7 @@ fn read_meta_permission_mode(id: &WorkspaceId) -> Option<String> {
 #[cfg(unix)]
 fn pid_is_alive(pid: u32) -> bool {
     // `kill -0` probes existence without sending a signal. Spawning `kill`
-    // avoids a libc dependency; Windows is tier 3 so unix-only is fine here.
+    // avoids a libc dependency.
     std::process::Command::new("kill")
         .arg("-0")
         .arg(pid.to_string())
@@ -387,7 +418,24 @@ fn pid_is_alive(pid: u32) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn pid_is_alive(pid: u32) -> bool {
+    // `tasklist` prints a data row for a live pid and an "INFO: No tasks…"
+    // line otherwise. If the query itself fails, fall back to "assume alive"
+    // so a healthy daemon is still adopted — `negotiate` is the real check.
+    match std::process::Command::new("tasklist")
+        .args(["/NH", "/FI", &format!("PID eq {pid}")])
+        .output()
+    {
+        Ok(out) => {
+            let s = String::from_utf8_lossy(&out.stdout);
+            s.contains(&pid.to_string())
+        }
+        Err(_) => true,
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 fn pid_is_alive(_pid: u32) -> bool {
     false
 }
@@ -413,15 +461,18 @@ mod tests {
     }
 
     #[test]
-    fn platform_precheck_gates_only_non_unix() {
+    fn platform_precheck_allows_unix_and_windows() {
         let r = platform_precheck();
-        if cfg!(unix) {
-            assert!(r.is_ok(), "unix must be allowed to open sessions");
+        if cfg!(any(unix, windows)) {
+            assert!(
+                r.is_ok(),
+                "unix and Windows both have a Core transport (G9) and must allow sessions"
+            );
         } else {
             assert_eq!(
                 r.unwrap_err().code(),
                 "bridge.platform.unsupported",
-                "a non-unix host must refuse sessions with a specific code (D14)"
+                "a host with no IPC transport must refuse sessions with a specific code (D14)"
             );
         }
     }

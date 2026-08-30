@@ -74,6 +74,26 @@ jobs:
       - name: Gates (check-layering · verify-core · check-protocol · check-d7 · check-error-strings · check-a11y)
         run: cargo run -q -p xtask -- all
 
+  rust-windows:
+    name: Rust on Windows (bridge transport · gates)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+      # The Windows-specific paths live in valyria-bridge (named-pipe transport
+      # address, adopt/liveness probes — CORE-INTERFACE G9 / D14). xtask carries
+      # the gates. The full Tauri desktop build for Windows is exercised by the
+      # release pipeline, not here.
+      - run: cargo clippy -p valyria-bridge -p xtask --all-targets --locked -- -D warnings
+      - run: cargo test -p valyria-bridge -p xtask --locked
+      - run: cargo run -q -p xtask -- all
+
   deny:
     name: cargo-deny (advisories · licenses · bans · sources)
     runs-on: ubuntu-latest

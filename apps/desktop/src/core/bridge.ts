@@ -273,13 +273,15 @@ export interface RollbackResult {
 }
 
 /** `about_info` — static build + platform facts for the About / Compatibility
- *  surface (§4.18). No session required; also backs the Windows tier-3 screen. */
+ *  surface (§4.18). No session required; also backs the "no transport on this
+ *  platform" screen. */
 export interface AboutInfo {
   app_version: string;
   expected_protocol: string;
   os: string;
   arch: string;
-  /** false on a platform with no Core transport (Windows, G9). */
+  /** true on macOS, Linux and Windows (named pipe, G9); false only where no
+   *  IPC transport exists. */
   sessions_supported: boolean;
   /** provenance of the bundled Core sidecar; null in a dev build. */
   core_provenance: {

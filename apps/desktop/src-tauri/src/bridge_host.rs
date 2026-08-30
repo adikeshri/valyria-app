@@ -24,8 +24,8 @@ use valyria_bridge::protocol::{
   ConfigShowResponse, DoctorRunResponse, GitBranchesResponse, GitDiffResponse, GitLogResponse,
   GitStatusResponse, HardwareProbeResponse, IndexStatusResponse, LedgerChangesResponse,
   ModelInspectResponse, ModelListResponse, ModelRecommendResponse, ModelRemoveResponse,
-  PlanGetResponse, SearchQueryResponse, TaskListResponse, TaskReportResponse,
-  TaskRollbackResponse, TaskStatusResponse, WorkspaceStatusResponse,
+  PlanGetResponse, SearchQueryResponse, TaskListResponse, TaskReportResponse, TaskRollbackResponse,
+  TaskStatusResponse, WorkspaceStatusResponse,
 };
 use valyria_bridge::{
   config_path, spawn_or_adopt, write_key, BridgeError, ConfigScope, CoreBinary, CoreClient,
@@ -368,7 +368,10 @@ pub async fn config_set(
   key: String,
   value: String,
 ) -> Result<ConfigShowResponse, String> {
-  with_client(&state, |c| async move { c.config_set(&key, &value, &scope).await }).await
+  with_client(&state, |c| async move {
+    c.config_set(&key, &value, &scope).await
+  })
+  .await
 }
 
 #[tauri::command]
@@ -394,7 +397,9 @@ pub async fn core_git_log(
 }
 
 #[tauri::command]
-pub async fn core_git_branches(state: State<'_, BridgeState>) -> Result<GitBranchesResponse, String> {
+pub async fn core_git_branches(
+  state: State<'_, BridgeState>,
+) -> Result<GitBranchesResponse, String> {
   with_client(&state, |c| async move { c.git_branches().await }).await
 }
 
@@ -451,7 +456,11 @@ pub async fn model_activate(
   id: String,
   role: String,
 ) -> Result<(), String> {
-  with_client(&state, |c| async move { c.model_activate(&id, &role).await }).await
+  with_client(
+    &state,
+    |c| async move { c.model_activate(&id, &role).await },
+  )
+  .await
 }
 
 #[tauri::command]
@@ -748,8 +757,9 @@ pub struct AboutInfo {
   expected_protocol: String,
   os: String,
   arch: String,
-  /// Whether a Core session can be started on this platform (false on Windows
-  /// until Core lands a transport — CORE-INTERFACE G9).
+  /// Whether a Core session can be started on this platform. True on unix
+  /// (Unix-domain socket) and Windows (named pipe, CORE-INTERFACE G9) as of
+  /// protocol 1.9.0; false only on a host with no IPC transport.
   sessions_supported: bool,
   /// The bundled Core runtime's build provenance, from the `core-provenance.json`
   /// resource written by the release pipeline. `null` in a `tauri dev` build.
@@ -770,7 +780,7 @@ pub async fn about_info(app: AppHandle) -> Result<AboutInfo, String> {
     expected_protocol: EXPECTED_PROTOCOL.to_string(),
     os: std::env::consts::OS.to_string(),
     arch: std::env::consts::ARCH.to_string(),
-    sessions_supported: cfg!(unix),
+    sessions_supported: cfg!(any(unix, windows)),
     core_provenance,
   })
 }

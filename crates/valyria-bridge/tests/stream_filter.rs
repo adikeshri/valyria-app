@@ -100,7 +100,10 @@ async fn scoped_pump_excludes_other_tasks() {
     let client = CoreClient::with_token(session.socket_path.clone(), session.auth_token.clone());
 
     let task_a = client.task_create("add a function").await.expect("task a");
-    let task_b = client.task_create("add another function").await.expect("task b");
+    let task_b = client
+        .task_create("add another function")
+        .await
+        .expect("task b");
 
     // A pump scoped to task A.
     let mut pump = EventPump::start_scoped(
@@ -149,7 +152,10 @@ async fn scoped_pump_excludes_other_tasks() {
         }
     }
 
-    assert!(seen_for_a, "the scoped pump delivered none of task A's events");
+    assert!(
+        seen_for_a,
+        "the scoped pump delivered none of task A's events"
+    );
     assert!(
         !foreign.contains(&task_b),
         "task B's events leaked onto a stream scoped to task A: {foreign:?}"

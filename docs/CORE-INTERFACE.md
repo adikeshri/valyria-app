@@ -15,6 +15,29 @@ is a change we make to that repository.**
 
 ---
 
+## Status — all 15 gaps closed (protocol 1.9.0)
+
+Core shipped G1–G15 across protocol `1.1.0`–`1.9.0` (ten stacked PRs). Sections
+1–2 below are kept as written against `1.0.0` for the record; each gap heading
+now carries the version that closed it and the app-side integration is
+summarised in `docs/INTEGRATION.md` → **Phase 10**. Two items remain, all
+Core-blocked: an inference runtime linked into the `valyria` bin (RI1), signed
+per-triple Core release artifacts, and a Windows access sandbox (Job Objects) —
+the Windows *transport* landed in `1.9.0`, only the sandbox is deferred.
+
+| Gap | Closed in | Gap | Closed in |
+|---|---|---|---|
+| G1 per-task autonomy | 1.1.0 | G9 Windows transport | 1.9.0 |
+| G2 approval identity/scope | 1.8.0 | G10 client auth | 1.6.0 |
+| G3 repo read surface | 1.2.0 | G11 stream filter | 1.7.0 |
+| G4 hardware probe | 1.3.0 | G12 event payload contracts | 1.7.1 |
+| G5 model management | 1.3.0 | G13 checkpoint id discovery | 1.5.0 |
+| G6 config write | 1.1.0 | G14 structured tool result | 1.5.0 |
+| G7 context provenance | 1.4.0 | G15 parsed failure location | 1.5.0 |
+| G8 change ownership | 1.4.0 | | |
+
+---
+
 ## 1. What v1 actually is
 
 ### Transport
@@ -91,7 +114,8 @@ Two properties matter enormously to us:
 
 Ordered by how much product they block.
 
-### G1 — No per-task permission mode (§25 Autonomy controls)
+### G1 — No per-task permission mode (§25 Autonomy controls)  
+**CLOSED — protocol 1.1.0.**
 
 `TaskCreateRequest` carries only `objective`. Permission mode is fixed on
 `RuntimeConfig` when the daemon starts. The PRD requires a user-facing
@@ -104,7 +128,8 @@ Manual/Assisted/Autonomous switch.
 changing it restarts the daemon. The control is **disabled while any task is
 running**, with the reason stated in the UI.
 
-### G2 — Approvals have no request identity or scope (§13)
+### G2 — Approvals have no request identity or scope (§13)  
+**CLOSED — protocol 1.8.0.**
 
 `permission_resolve { task_id, approve }` resolves whatever Core considers the
 last unresolved ask (`TaskManager::last_unresolved_tool_call`). There is no
@@ -122,7 +147,8 @@ a resolve if a newer `approval_requested` has arrived since the prompt was
 rendered (re-prompts instead), and hides `Allow for Task` behind a capability
 token rather than faking it client-side.
 
-### G3 — No repository read surface (§7, §14, §17, §33)
+### G3 — No repository read surface (§7, §14, §17, §33)  
+**CLOSED — protocol 1.2.0** (filesystem tree / blob read stay local by design).
 
 Core has `valyria-git` (status, diff, log, branches, blame), `valyria-index`
 (files, symbols), and `valyria-search` (seven fused modes with per-hit score
@@ -135,7 +161,8 @@ already names the intended methods (`search.query`, `workspace.index_status`).
 
 *Until then:* see [§3, the local-read exception](#3-the-local-read-exception).
 
-### G4 — No hardware surface (§22, §20, §37)
+### G4 — No hardware surface (§22, §20, §37)  
+**CLOSED — protocol 1.3.0.**
 
 `valyria-hardware::probe()` returns a full `HardwareReport { cpu, gpu, disk }`
 and `fit()` scores a model against it. `doctor_run` exposes only prose strings
@@ -150,7 +177,8 @@ recommendation (§22) without recomputing it (§41).
 everything else "not reported by Core", and first-run cannot recommend — it
 lists what `model_list` returns and asks the user to choose.
 
-### G5 — Model management is read-only (§20, §21)
+### G5 — Model management is read-only (§20, §21)  
+**CLOSED — protocol 1.3.0.**
 
 `model_list` exists. `valyria-model-store` implements verified resumable
 download, license surfacing, probe and GC — with no wire method. The PRD's
@@ -164,7 +192,8 @@ already lists these as `model.install/remove/inspect` "with progress streams".
 says so; it does not shell out to a downloader. **No model is ever fetched by the
 app** (§20).
 
-### G6 — Config is read-only, and narrow (§24)
+### G6 — Config is read-only, and narrow (§24)  
+**CLOSED — protocol 1.1.0.**
 
 `config_show` returns effective values with origin. There is no `config_set`.
 The surface is also **small**: `config_show` reports only three leaves today —
@@ -186,7 +215,8 @@ not the value we wrote. What the app exposes today: `log.format` and
 `network.internet` (written as a nested leaf; read back out of the `network`
 blob). The mock Settings knobs with no Core key are hidden when live.
 
-### G7 — No context provenance (§34)
+### G7 — No context provenance (§34)  
+**CLOSED — protocol 1.4.0.**
 
 The `context_retrieved` event kind exists in the enum but **nothing in Core emits
 it**. `valyria-context` records provenance internally. The Context Inspector has
@@ -200,7 +230,8 @@ trust_level, tokens }], budget_used, budget_total }`, or a `context_explain
 explanation. It is not faked from file-touch events — inferring provenance would
 be exactly the Core-logic duplication §41 forbids.
 
-### G8 — No change-ownership surface (§15, §16)
+### G8 — No change-ownership surface (§15, §16)  
+**CLOSED — protocol 1.4.0.**
 
 `valyria-ledger` classifies every observed file state as agent-authored,
 pre-existing, or a concurrent user modification (`ChangeClassification`).
@@ -213,7 +244,8 @@ step_id, checkpoint_id }]`.
 labels the column "ownership unavailable". Rollback still works — it goes through
 `task_rollback`, which is ledger-backed inside Core.
 
-### G9 — Windows has no transport (§39, §1)
+### G9 — Windows has no transport (§39, §1)  
+**CLOSED — protocol 1.9.0** (named-pipe transport; access sandbox still deferred by Core).
 
 `valyria_app::daemon::serve` binds a `tokio::net::UnixListener`; that module is
 Unix-only. Core also has no Windows sandbox (Phase 1, partial). A Windows build
@@ -225,7 +257,8 @@ of the app has nothing to talk to.
 *Until then:* Windows is **tier 3**: the app builds and installs, and refuses to
 start a session with a specific, actionable message. See PLAN §D14.
 
-### G10 — No local authentication of the client (§43)
+### G10 — No local authentication of the client (§43)  
+**CLOSED — protocol 1.6.0.**
 
 The PRD asks the app to "authenticate the local process relationship". Core's
 daemon accepts any connection to the socket.
@@ -237,7 +270,8 @@ in `hello`; or `SO_PEERCRED` / `LOCAL_PEERPID` uid checks.
 and treats the socket as a trust boundary it cannot verify. Documented in
 `SECURITY.md`.
 
-### G11 — Streaming is coarse
+### G11 — Streaming is coarse  
+**CLOSED — protocol 1.7.0.**
 
 `ClientFrame::Subscribe` is the only server-push channel and it is
 **workspace-global**, not per-task. There is no method-level progress stream
@@ -251,7 +285,8 @@ calls.
 *Until then:* the app subscribes once per workspace and fans out by `task_id`
 client-side. That is a projection, not logic.
 
-### G12 — Event payloads are unversioned
+### G12 — Event payloads are unversioned  
+**CLOSED — protocol 1.7.1.**
 
 Covered above. This is the highest-frequency breakage risk in the whole project,
 because it breaks **silently** — a renamed payload field yields an empty UI cell,
@@ -263,7 +298,8 @@ and extend `xtask check-protocol` to gate them.
 *Until then:* see PLAN §D5 (tolerant decoders + captured-trace golden fixtures +
 an "unrecognized payload" affordance that shows raw JSON rather than nothing).
 
-### G13 — Rollback checkpoints have no discoverable id (§16)
+### G13 — Rollback checkpoints have no discoverable id (§16)  
+**CLOSED — protocol 1.5.0.**
 
 `task_rollback { task_id, checkpoint_id }` is on the wire and the `rollback`
 capability is advertised, but **nothing lets a client learn a `checkpoint_id`**.
@@ -287,7 +323,8 @@ against Core's error path (`crates/valyria-bridge/tests/rollback.rs`), plus an
 advanced "roll back by id" field for a developer who has one from Core's logs.
 The app never computes a partial revert itself (PLAN §4.8).
 
-### G14 — No structured tool-invocation result (§10, §18)
+### G14 — No structured tool-invocation result (§10, §18)  
+**CLOSED — protocol 1.5.0.**
 
 `tool_started` carries no invocation id, so a start and its `tool_completed`
 can only be paired **positionally** (next completion, same task, greater `seq`).
@@ -306,7 +343,8 @@ parses the `rendered` envelope tolerantly — on any mismatch it keeps the whole
 blob and renders it verbatim, never blank (D5). An unpaired start stays
 `pending` rather than borrowing a later result.
 
-### G15 — No parsed failure location (§19, §35)
+### G15 — No parsed failure location (§19, §35)  
+**CLOSED — protocol 1.5.0.**
 
 PLAN §4.11 wants a test failure to open "its parsed location where Core's failure
 parsers supply one". `test_failed` / `verification_evidence` carry only `digest`

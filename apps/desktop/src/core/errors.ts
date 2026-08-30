@@ -111,7 +111,8 @@ const PRESENTATIONS: Record<string, Answers> = {
     what: "Agent sessions aren't available on this platform.",
     agentStopped: true,
     userActionNeeded: false,
-    whatNext: "Run tasks on macOS or Linux. See About & Compatibility (Windows is tier 3, G9).",
+    whatNext:
+      "Sessions run on macOS, Linux, and Windows. This host has no supported IPC transport — see About & Compatibility.",
   },
   "bridge.fs.path_escape": {
     what: "That path is outside the open workspace folder.",

@@ -47,8 +47,7 @@ export interface ConfigReport {
 
 export type ConfigScope = "workspace" | "user";
 
-/** `model_list` — `ModelSummaryWire`. No `role` / `active` / min-RAM on the
- *  wire (CORE-INTERFACE G4/G5). */
+/** `model_list` — `ModelSummaryWire`. */
 export interface ModelSummary {
   id: string;
   family: string;
@@ -60,6 +59,151 @@ export interface ModelSummary {
 export interface ModelReport {
   models: ModelSummary[];
 }
+
+// --- CORE-INTERFACE gap closure (protocol 1.9.0) -----------------------
+
+/** `hardware_probe` — mirrors `valyria_hardware::HardwareReport` (G4). */
+export interface HardwareProbe {
+  os: string;
+  os_version: string | null;
+  arch: string;
+  cpu: {
+    brand: string;
+    physical_cores: number;
+    logical_cores: number;
+    arch: string;
+  };
+  ram_total_bytes: number;
+  ram_available_bytes: number;
+  gpus: {
+    name: string;
+    vendor: string | null;
+    core_count: number | null;
+    vram_bytes: number | null;
+  }[];
+  unified_memory: boolean;
+  accelerator_present: boolean | null;
+  disk_total_bytes: number;
+  disk_available_bytes: number;
+}
+
+/** One scored `model_recommend` candidate (G4). */
+export interface ModelCandidate {
+  id: string;
+  display_name: string;
+  family: string;
+  size_bytes: number;
+  license_name: string;
+  installed: boolean;
+  suitability: number;
+  /** comfortable | tight | will_not_fit */
+  fit_kind: string;
+  fit_detail: string | null;
+  adjusted_score: number | null;
+}
+export interface ModelRecommend {
+  role: string;
+  recommended: ModelCandidate | null;
+  candidates: ModelCandidate[];
+}
+
+/** `model_inspect` (G5). */
+export interface ModelInspect {
+  id: string;
+  display_name: string;
+  family: string;
+  parameters_b: number;
+  quantization: string;
+  context_length: number;
+  size_bytes: number;
+  license_name: string;
+  license_url: string | null;
+  source_url: string;
+  installed: boolean;
+  installed_at_ms: number | null;
+  probe_tokens_per_sec: number | null;
+  active_roles: string[];
+}
+
+export interface ModelRemoveResult {
+  freed_bytes: number;
+}
+
+/** `git_status` (G3). */
+export interface GitStatus {
+  branch: string | null;
+  detached: boolean;
+  head_commit: string | null;
+  files: { path: string; kind: string; staged: boolean }[];
+}
+export interface GitDiffResult {
+  unified: string;
+  truncated: boolean;
+}
+export interface GitCommitWire {
+  sha: string;
+  author_name: string;
+  author_email: string;
+  message: string;
+  time_unix: number;
+  parents: string[];
+}
+export interface GitLogResult {
+  commits: GitCommitWire[];
+}
+export interface GitBranchWire {
+  name: string;
+  commit: string;
+  is_head: boolean;
+}
+export interface GitBranchesResult {
+  branches: GitBranchWire[];
+}
+
+/** `search_query` — fused, explained hits (G3). */
+export interface SearchHit {
+  path: string;
+  symbol_path: string | null;
+  line: number | null;
+  snippet: string | null;
+  score: number;
+  explanation: {
+    stage_scores: { mode: string; rank: number; raw_score: number }[];
+    features: { name: string; value: number; weight: number; contribution: number }[];
+    retrieval_paths: string[];
+  };
+}
+export interface SearchResult {
+  hits: SearchHit[];
+  modes_run: string[];
+  degraded: string[];
+}
+
+export interface IndexStatus {
+  generation: number | null;
+  stage: string | null;
+  file_count: number;
+  symbol_count: number;
+  created_at_ms: number | null;
+}
+
+/** `ledger_changes` — per-file agent/user/pre-existing classification (G8). */
+export interface LedgerChange {
+  path: string;
+  /** agent_authored | pre_existing | concurrent_user_modification | unknown */
+  classification: string;
+  /** write | delete */
+  kind: string;
+  task_id: string;
+  step_id: string;
+  tool_invocation_id: string | null;
+}
+export interface LedgerChanges {
+  changes: LedgerChange[];
+}
+
+/** once — approve this call · task — Allow for Task · deny */
+export type ApprovalDecision = "once" | "task" | "deny";
 
 export interface WorkspaceStatus {
   root: string;
@@ -170,6 +314,38 @@ export const bridge = {
     invoke<ConfigReport>("config_write", { scope, key, value }),
   workspaceStatus: () => invoke<WorkspaceStatus>("workspace_status"),
   modelList: () => invoke<ModelReport>("model_list"),
+
+  // --- gap closure (protocol 1.9.0) ---
+  /** `config_set` — write one leaf to a Core-owned file, get a fresh
+   *  `config_show` back (G6). Supersedes the local `configWrite`. */
+  configSet: (scope: ConfigScope, key: string, value: string) =>
+    invoke<ConfigReport>("config_set", { scope, key, value }),
+  taskCreateWithMode: (objective: string, permissionMode: PermissionMode | null) =>
+    invoke<string>("task_create_with_mode", { objective, permissionMode }),
+  permissionResolveScoped: (
+    taskId: string,
+    requestId: string | null,
+    decision: ApprovalDecision,
+  ) => invoke<null>("permission_resolve_scoped", { taskId, requestId, decision }),
+  coreGitStatus: () => invoke<GitStatus>("core_git_status"),
+  coreGitDiff: (path: string | null, staged: boolean) =>
+    invoke<GitDiffResult>("core_git_diff", { path, staged }),
+  coreGitLog: (limit: number | null) => invoke<GitLogResult>("core_git_log", { limit }),
+  coreGitBranches: () => invoke<GitBranchesResult>("core_git_branches"),
+  searchQuery: (query: string, modes: string[], anchors: string[], limit: number | null) =>
+    invoke<SearchResult>("search_query", { query, modes, anchors, limit }),
+  indexStatus: () => invoke<IndexStatus>("index_status"),
+  hardwareProbe: () => invoke<HardwareProbe>("hardware_probe"),
+  modelRecommend: (role: string) => invoke<ModelRecommend>("model_recommend", { role }),
+  /** Begin a download; progress arrives as `model_install_*` events. */
+  modelInstall: (id: string) => invoke<null>("model_install", { id }),
+  modelRemove: (id: string) => invoke<ModelRemoveResult>("model_remove", { id }),
+  modelActivate: (id: string, role: string) =>
+    invoke<null>("model_activate", { id, role }),
+  modelInspect: (id: string) => invoke<ModelInspect>("model_inspect", { id }),
+  ledgerChanges: (taskId: string) =>
+    invoke<LedgerChanges>("ledger_changes", { taskId }),
+
   taskCreate: (objective: string) => invoke<string>("task_create", { objective }),
   taskList: () => invoke<{ tasks: TaskSummary[] }>("task_list"),
   taskStatus: (taskId: string) => invoke<TaskStatus>("task_status", { taskId }),

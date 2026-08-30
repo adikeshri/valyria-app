@@ -4,6 +4,7 @@ import {
   Boxes, ShieldCheck, Settings, Sparkles, ListChecks, Info, RefreshCw,
 } from "lucide-react";
 import { useApp } from "../state/store";
+import { useOverlayA11y } from "../core/useOverlayA11y";
 
 interface Cmd {
   id: string;
@@ -25,6 +26,8 @@ export default function CommandPalette() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useOverlayA11y(dialogRef, () => setOpen(false), open);
 
   const commands: Cmd[] = useMemo(() => [
     { id: "chat", label: "Go to Agent chat", icon: <MessageSquare size={14} />, run: () => setCenterTab("chat") },
@@ -49,9 +52,8 @@ export default function CommandPalette() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setOpen(!open);
-      } else if (e.key === "Escape" && open) {
-        setOpen(false);
       }
+      // Escape is handled by useOverlayA11y once the dialog is open.
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -80,7 +82,9 @@ export default function CommandPalette() {
       style={{ position: "fixed", inset: 0, background: "var(--bg-overlay)", zIndex: 300, display: "flex", justifyContent: "center", paddingTop: "12vh" }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
+        aria-modal="true"
         aria-label="Command palette"
         onClick={(e) => e.stopPropagation()}
         style={{ width: 480, maxHeight: "60vh", background: "var(--bg-surface-raised)", borderRadius: 12, boxShadow: "var(--shadow-lg)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden" }}

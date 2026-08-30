@@ -2,8 +2,10 @@ import { useEffect } from "react";
 import { useApp } from "./state/store";
 import { useLive } from "./core/liveStore";
 import { useThemeEffect } from "./state/useThemeEffect";
+import { useReducedMotionEffect } from "./state/useReducedMotionEffect";
 import { FIRST_RUN_LS_KEY } from "./components/LiveFirstRun";
 import Header from "./components/Header";
+import LiveRegion from "./components/LiveRegion";
 import ConnectBar from "./components/ConnectBar";
 import ResumePrompt from "./components/ResumePrompt";
 import Sidebar from "./components/Sidebar";
@@ -17,6 +19,7 @@ import CommandPalette from "./components/CommandPalette";
 
 export default function App() {
   useThemeEffect();
+  useReducedMotionEffect();
   const route = useApp((s) => s.route);
   const setRoute = useApp((s) => s.setRoute);
   const available = useLive((s) => s.available);
@@ -56,6 +59,7 @@ export default function App() {
       {route === "first-run" && <FirstRunView />}
       {route === "about" && <AboutView />}
       <CommandPalette />
+      <LiveRegion />
     </>
   );
 }

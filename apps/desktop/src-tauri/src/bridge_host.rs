@@ -242,7 +242,7 @@ where
     guard
       .as_ref()
       .map(|l| l.client.clone())
-      .ok_or_else(|| "no session is open".to_string())?
+      .ok_or_else(|| "[bridge.no_session] no session is open".to_string())?
   };
   f(client).await.map_err(err_str)
 }
@@ -467,7 +467,7 @@ async fn snapshot(state: &BridgeState) -> Result<(WorkspaceFs, GitRepo), String>
   let guard = state.0.lock().await;
   let l = guard
     .as_ref()
-    .ok_or_else(|| "no session is open".to_string())?;
+    .ok_or_else(|| "[bridge.no_session] no session is open".to_string())?;
   Ok((l.fs.clone(), l.git.clone()))
 }
 

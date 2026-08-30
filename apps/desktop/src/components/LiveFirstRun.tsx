@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Sparkles, FolderOpen, CheckCircle2, Loader2, ArrowRight, Check,
   AlertTriangle, XCircle, HelpCircle, Server,
@@ -7,6 +7,7 @@ import { currentTask, eventsForTask } from "@valyria/state";
 import { useApp } from "../state/store";
 import { useLive } from "../core/liveStore";
 import { bridge, type DoctorCheck } from "../core/bridge";
+import { useOverlayA11y } from "../core/useOverlayA11y";
 import logoFull from "../assets/logo-full.png";
 
 export const FIRST_RUN_LS_KEY = "valyria.seenFirstRun";
@@ -32,6 +33,9 @@ export default function LiveFirstRun() {
   const [checks, setChecks] = useState<DoctorCheck[] | null>(null);
   const [root, setRoot] = useState("");
   const [taskId, setTaskId] = useState<string | null>(null);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  useOverlayA11y(rootRef, () => finish());
 
   const idx = order.indexOf(step);
   function finish() {
@@ -62,7 +66,7 @@ export default function LiveFirstRun() {
   const proved = provedTask?.state === "completed";
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "var(--bg-canvas)", zIndex: 200, display: "flex", flexDirection: "column", alignItems: "center" }}>
+    <div ref={rootRef} role="dialog" aria-modal="true" aria-label="First-run setup" style={{ position: "fixed", inset: 0, background: "var(--bg-canvas)", zIndex: 200, display: "flex", flexDirection: "column", alignItems: "center" }}>
       <div style={{ width: "100%", maxWidth: 640, padding: "48px 24px", display: "flex", flexDirection: "column", flex: 1 }}>
         <div style={{ display: "flex", gap: 5, marginBottom: 36 }}>
           {order.map((s, i) => (

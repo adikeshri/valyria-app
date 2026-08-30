@@ -77,6 +77,12 @@ interface AppState {
    *  core/notify.ts. Persisted to localStorage. */
   notificationsEnabled: boolean;
   setNotificationsEnabled: (v: boolean) => void;
+
+  /** Minimize animation throughout the app (D10). Applied to <html> by
+   *  useReducedMotionEffect; persisted to localStorage. Defaults on when the
+   *  OS asks for reduced motion. */
+  reducedMotion: boolean;
+  setReducedMotion: (v: boolean) => void;
 }
 
 const NOTIF_LS_KEY = "valyria.notify.master";
@@ -85,6 +91,22 @@ function readNotifMaster(): boolean {
     return localStorage.getItem(NOTIF_LS_KEY) !== "off";
   } catch {
     return true;
+  }
+}
+
+const REDUCED_MOTION_LS_KEY = "valyria.reducedMotion";
+function readReducedMotion(): boolean {
+  try {
+    const stored = localStorage.getItem(REDUCED_MOTION_LS_KEY);
+    if (stored === "on") return true;
+    if (stored === "off") return false;
+  } catch {
+    /* private mode */
+  }
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
   }
 }
 
@@ -144,5 +166,15 @@ export const useApp = create<AppState>((set) => ({
       /* ignore */
     }
     set({ notificationsEnabled });
+  },
+
+  reducedMotion: readReducedMotion(),
+  setReducedMotion: (reducedMotion) => {
+    try {
+      localStorage.setItem(REDUCED_MOTION_LS_KEY, reducedMotion ? "on" : "off");
+    } catch {
+      /* ignore */
+    }
+    set({ reducedMotion });
   },
 }));

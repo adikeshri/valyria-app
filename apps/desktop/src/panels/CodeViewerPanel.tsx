@@ -5,7 +5,9 @@ import { CodeLine } from "../components/CodeLine";
 import { useApp } from "../state/store";
 import { useLive } from "../core/liveStore";
 import { repo } from "../core/repo";
+import { present } from "../core/errors";
 import ServedLocally from "../components/ServedLocally";
+import ErrorState from "../components/ErrorState";
 
 function langFromPath(p: string): string {
   const ext = p.split(".").pop()?.toLowerCase() ?? "";
@@ -99,7 +101,7 @@ export default function CodeViewerPanel() {
         <button className="btn btn--sm btn--ghost" title="Copy"><Copy size={12} /></button>
       </div>
       {error ? (
-        <div style={{ padding: 16, color: "var(--danger)", fontSize: "var(--text-sm)" }}>{error}</div>
+        <ErrorState presentation={present(error, { context: "Opening the file" })} />
       ) : loaded?.binary ? (
         <div className="panel-empty"><strong>Binary file</strong><span>{loaded.path}</span></div>
       ) : (

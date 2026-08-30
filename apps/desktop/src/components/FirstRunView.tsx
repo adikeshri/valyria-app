@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Cpu, MemoryStick, Zap, Sparkles, FolderOpen, CheckCircle2,
   Loader2, ArrowRight, Server,
 } from "lucide-react";
 import { useApp } from "../state/store";
 import { useLive } from "../core/liveStore";
+import { useOverlayA11y } from "../core/useOverlayA11y";
 import { hardware, modelList, WORKSPACE_NAME } from "../data/mock";
 import logoFull from "../assets/logo-full.png";
 import LiveFirstRun from "./LiveFirstRun";
@@ -23,6 +24,8 @@ function MockFirstRunView() {
   const [step, setStep] = useState<Step>("welcome");
   const [installPct, setInstallPct] = useState(0);
   const [verifyDone, setVerifyDone] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useOverlayA11y(rootRef, () => setRoute("workspace"));
 
   useEffect(() => {
     if (step !== "install") return;
@@ -49,7 +52,7 @@ function MockFirstRunView() {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "var(--bg-canvas)", zIndex: 200, display: "flex", flexDirection: "column", alignItems: "center" }}>
+    <div ref={rootRef} role="dialog" aria-modal="true" aria-label="First-run setup" style={{ position: "fixed", inset: 0, background: "var(--bg-canvas)", zIndex: 200, display: "flex", flexDirection: "column", alignItems: "center" }}>
       <div style={{ width: "100%", maxWidth: 640, padding: "48px 24px", display: "flex", flexDirection: "column", flex: 1 }}>
         <div style={{ display: "flex", gap: 5, marginBottom: 36 }}>
           {order.map((s, i) => (

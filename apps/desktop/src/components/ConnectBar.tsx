@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useLive } from "../core/liveStore";
+import { present } from "../core/errors";
+import ErrorState from "./ErrorState";
 
 const LS_KEY = "valyria.lastWorkspaceRoot";
 
@@ -25,6 +27,7 @@ export default function ConnectBar() {
   if (!available || session) return null;
 
   const busy = connection === "connecting";
+  const failure = connection === "failed" && error ? present(error, { context: "Opening the workspace" }) : null;
 
   const submit = () => {
     const v = root.trim();
@@ -40,15 +43,12 @@ export default function ConnectBar() {
   return (
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "6px 14px",
         borderBottom: "1px solid var(--border-subtle)",
         background: "var(--bg-sunken)",
         fontSize: "var(--text-xs)",
       }}
     >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px" }}>
       <span style={{ color: "var(--text-tertiary)" }}>Workspace</span>
       <input
         aria-label="Workspace root path"
@@ -71,10 +71,11 @@ export default function ConnectBar() {
       <button className="no-native-focus" disabled={busy} onClick={submit} style={{ padding: "4px 12px", borderRadius: 6 }}>
         {busy ? "Starting Core…" : "Open"}
       </button>
-      {connection === "failed" && error && (
-        <span className="badge badge--warning" title={error} style={{ maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {error}
-        </span>
+      </div>
+      {failure && (
+        <div style={{ padding: "0 14px 8px" }}>
+          <ErrorState presentation={failure} compact />
+        </div>
       )}
     </div>
   );

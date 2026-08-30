@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { AlertTriangle } from "lucide-react";
 import { pty } from "../core/pty";
 import { useApp } from "../state/store";
+import { present } from "../core/errors";
+import ErrorState from "../components/ErrorState";
 
 /** The Phase 7 human terminal (docs/PLAN.md §4.10 / §18): a real shell hosted
  *  in valyria-bridge, bound to the authorized workspace root. This is the ONLY
@@ -155,13 +156,7 @@ export default function LiveTerminalPanel({ onEscape }: { onEscape?: () => void 
   }, [theme]);
 
   if (error) {
-    return (
-      <div className="panel-empty" style={{ padding: 24 }}>
-        <AlertTriangle size={22} style={{ color: "var(--danger)" }} />
-        <strong>Could not start a shell</strong>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5 }}>{error}</span>
-      </div>
-    );
+    return <ErrorState presentation={present(error, { context: "Starting the terminal" })} />;
   }
 
   return (

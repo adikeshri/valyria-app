@@ -9,6 +9,12 @@
 //!   check-d7         the human PTY and the agent-command view never share a
 //!                    buffer: only the terminal panel touches `@xterm/xterm`,
 //!                    and the agent-command view touches no PTY plumbing
+//!   check-error-strings  no renderer surface shows a raw error string or a
+//!                    banned generic — every error goes through
+//!                    `core/errors.ts` `present()` + `<ErrorState>` (§3 / §36)
+//!   check-a11y       overlays trap focus (`useOverlayA11y`), the only tab
+//!                    strip implementation is `TabStrip.tsx`, and every image
+//!                    has an `alt`
 //!
 //! Exit code is non-zero on the first failure so CI fails loudly.
 
@@ -23,14 +29,18 @@ fn main() -> ExitCode {
         Some("check-protocol") => check_protocol(&repo),
         Some("verify-core") => verify_core(&repo),
         Some("check-d7") => check_d7(&repo),
+        Some("check-error-strings") => check_error_strings(&repo),
+        Some("check-a11y") => check_a11y(&repo),
         Some("all") => check_layering(&repo)
             .and_then(|_| verify_core(&repo))
             .and_then(|_| check_protocol(&repo))
-            .and_then(|_| check_d7(&repo)),
+            .and_then(|_| check_d7(&repo))
+            .and_then(|_| check_error_strings(&repo))
+            .and_then(|_| check_a11y(&repo)),
         other => {
             eprintln!("unknown task: {other:?}");
             eprintln!(
-                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|check-d7|all>"
+                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|check-d7|check-error-strings|check-a11y|all>"
             );
             return ExitCode::from(2);
         }
@@ -296,6 +306,144 @@ fn check_d7(repo: &Path) -> Result<(), String> {
     } else {
         Err(format!(
             "D7 separation violated:\n  {}",
+            offenders.join("\n  ")
+        ))
+    }
+}
+
+// --- check-error-strings (docs/PLAN.md §3 / PRD §36) ------------------
+//
+// Every user-visible error answers the four §36 questions, via
+// `core/errors.ts` `present()` + `<ErrorState>`. A raw `String(e)` or a bare
+// generic in JSX bypasses that — bar it mechanically.
+
+/// Renderer strings that mean "an error is being rendered raw" or "a generic
+/// stand-in is being shown".
+const ERR_BANNED: &[&str] = &[
+    "{String(e)}",
+    ">{err}",
+    ">{error}",
+    "{err}<",
+    "{error}<",
+    "title={err}",
+    "title={error}",
+    "title={String(",
+    "Something went wrong",
+    "An error occurred",
+    "Unknown error",
+    "went wrong",
+];
+
+/// The one file allowed to render presentation fields directly.
+const ERR_ALLOWED: &[&str] = &["apps/desktop/src/components/ErrorState.tsx"];
+
+fn check_error_strings(repo: &Path) -> Result<(), String> {
+    let src = repo.join("apps/desktop/src");
+    let mut files = Vec::new();
+    collect_files(&src, "tsx", &mut files);
+
+    let mut offenders = Vec::new();
+    for file in &files {
+        let rel = file
+            .strip_prefix(repo)
+            .unwrap_or(file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if ERR_ALLOWED.contains(&rel.as_str()) {
+            continue;
+        }
+        let text = std::fs::read_to_string(file)
+            .map_err(|e| format!("reading {}: {e}", file.display()))?;
+        for needle in ERR_BANNED {
+            if text.contains(needle) {
+                offenders.push(format!("{rel} contains {needle:?}"));
+            }
+        }
+    }
+
+    if !repo.join("apps/desktop/src/core/errors.ts").exists() {
+        offenders.push("apps/desktop/src/core/errors.ts is missing".to_string());
+    }
+
+    if offenders.is_empty() {
+        println!("check-error-strings: ok — errors go through present() + <ErrorState>");
+        Ok(())
+    } else {
+        Err(format!(
+            "raw / generic error strings in the renderer (§36):\n  {}\n\
+             Route them through `present()` from core/errors.ts and render <ErrorState>.",
+            offenders.join("\n  ")
+        ))
+    }
+}
+
+// --- check-a11y (docs/PLAN.md §5 Phase 9 / D10) -----------------------
+//
+// Static structural checks. The manual VoiceOver/NVDA + axe pass is
+// docs/ACCESSIBILITY.md — this gate just holds the invariants a grep can hold.
+
+/// Full-screen overlays: each must trap focus / handle Escape via the shared
+/// hook, or keyboard users get stuck behind them.
+const OVERLAY_FILES: &[&str] = &[
+    "apps/desktop/src/components/SettingsView.tsx",
+    "apps/desktop/src/components/AboutView.tsx",
+    "apps/desktop/src/components/CommandPalette.tsx",
+    "apps/desktop/src/components/LiveFirstRun.tsx",
+    "apps/desktop/src/components/FirstRunView.tsx",
+];
+
+fn check_a11y(repo: &Path) -> Result<(), String> {
+    let src = repo.join("apps/desktop/src");
+    let mut files = Vec::new();
+    collect_files(&src, "tsx", &mut files);
+
+    let mut offenders = Vec::new();
+
+    for overlay in OVERLAY_FILES {
+        let path = repo.join(overlay);
+        match std::fs::read_to_string(&path) {
+            Ok(text) => {
+                if !text.contains("useOverlayA11y") {
+                    offenders.push(format!(
+                        "{overlay} does not use useOverlayA11y (focus trap / Escape)"
+                    ));
+                }
+            }
+            Err(_) => offenders.push(format!("{overlay} is missing (overlay allowlist stale)")),
+        }
+    }
+
+    for file in &files {
+        let rel = file
+            .strip_prefix(repo)
+            .unwrap_or(file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let text = std::fs::read_to_string(file)
+            .map_err(|e| format!("reading {}: {e}", file.display()))?;
+
+        // Only TabStrip defines the tablist role.
+        if text.contains("role=\"tablist\"") && rel != "apps/desktop/src/components/TabStrip.tsx" {
+            offenders.push(format!(
+                "{rel} hand-rolls role=\"tablist\" — use <TabStrip>"
+            ));
+        }
+        // Every <img> carries an alt.
+        for (i, line) in text.lines().enumerate() {
+            if line.contains("<img ") && !line.contains("alt=") {
+                offenders.push(format!("{rel}:{} <img> without alt=", i + 1));
+            }
+        }
+    }
+
+    if offenders.is_empty() {
+        println!(
+            "check-a11y: ok — overlays trap focus, TabStrip is the only tab strip, images have alt"
+        );
+        Ok(())
+    } else {
+        Err(format!(
+            "accessibility invariants broken:\n  {}",
             offenders.join("\n  ")
         ))
     }

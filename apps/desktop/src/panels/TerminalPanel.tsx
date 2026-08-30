@@ -5,6 +5,7 @@ import { User, Sparkles, TerminalSquare } from "lucide-react";
 import { WORKSPACE_NAME, terminalUserLines } from "../data/mock";
 import { useApp, type TerminalSub } from "../state/store";
 import { useLive } from "../core/liveStore";
+import TabStrip, { type TabDef } from "../components/TabStrip";
 import LiveTerminalPanel from "./LiveTerminalPanel";
 import LiveAgentCommands from "./LiveAgentCommands";
 
@@ -110,67 +111,33 @@ function MockAgentCommandLog() {
   );
 }
 
-const SUBS: { key: Sub; label: string; icon: React.ReactNode; accent: string }[] = [
+const SUBS: TabDef<Sub>[] = [
   { key: "human", label: "Your Terminal", icon: <User size={12} />, accent: "var(--own-user)" },
   { key: "agent", label: "Agent Commands", icon: <TerminalSquare size={12} />, accent: "var(--accent-strong)" },
 ];
 
-/** The dock Terminal panel. The human/agent split is a real tablist — it is the
- *  one place in the app where confusing the two panes is a security problem
- *  (D7), so it gets roles and arrow-key navigation the other dock strips don't.
+/** The dock Terminal panel. The human/agent split is a real tablist (via the
+ *  shared `<TabStrip>`) — confusing the two panes is a security problem (D7).
  *  Each sub-tab dispatches to its live surface when a workspace is open, and to
  *  a sample one otherwise (the Phase 2–6 mock/Live pattern). */
 export default function TerminalPanel() {
   const sub = useApp((s) => s.terminalSub);
   const setSub = useApp((s) => s.setTerminalSub);
   const liveSession = useLive((s) => s.session);
-  const tabsRef = useRef<HTMLDivElement>(null);
-
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    e.preventDefault();
-    const i = SUBS.findIndex((s) => s.key === sub);
-    const next = e.key === "ArrowRight" ? (i + 1) % SUBS.length : (i - 1 + SUBS.length) % SUBS.length;
-    setSub(SUBS[next]!.key);
-    tabsRef.current?.querySelector<HTMLButtonElement>(`#term-tab-${SUBS[next]!.key}`)?.focus();
-  };
 
   const focusTabs = () =>
-    tabsRef.current?.querySelector<HTMLButtonElement>(`#term-tab-${sub}`)?.focus();
+    document.getElementById(`term-tab-${sub}`)?.focus();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: "var(--term-bg)" }}>
-      <div
-        ref={tabsRef}
-        role="tablist"
-        aria-label="Terminal panes"
-        onKeyDown={onKeyDown}
+      <TabStrip
+        tabs={SUBS}
+        active={sub}
+        onSelect={setSub}
+        ariaLabel="Terminal panes"
+        idPrefix="term"
         style={{ display: "flex", gap: 2, padding: "6px 8px 0", flexShrink: 0 }}
-      >
-        {SUBS.map((s) => {
-          const active = sub === s.key;
-          return (
-            <button
-              key={s.key}
-              id={`term-tab-${s.key}`}
-              role="tab"
-              aria-selected={active}
-              aria-controls={`term-panel-${s.key}`}
-              tabIndex={active ? 0 : -1}
-              className="no-native-focus"
-              onClick={() => setSub(s.key)}
-              style={{
-                display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: "6px 6px 0 0",
-                fontSize: 11.5, fontWeight: 600,
-                background: active ? "var(--bg-surface)" : "transparent",
-                color: active ? s.accent : "var(--text-tertiary)",
-              }}
-            >
-              {s.icon} {s.label}
-            </button>
-          );
-        })}
-      </div>
+      />
       <div
         id={`term-panel-${sub}`}
         role="tabpanel"

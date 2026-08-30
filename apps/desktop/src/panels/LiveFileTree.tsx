@@ -4,7 +4,10 @@ import { ChevronRight, Folder, FolderOpen, FileCode, RefreshCw, Search, X } from
 import { repo, type DirEntry } from "../core/repo";
 import { useApp } from "../state/store";
 import { useLive } from "../core/liveStore";
+import { present } from "../core/errors";
+import { flattenTree } from "../core/tree";
 import ServedLocally from "../components/ServedLocally";
+import ErrorState from "../components/ErrorState";
 
 const ROW_H = 24;
 
@@ -24,10 +27,6 @@ function statusColor(s?: string) {
   }
 }
 
-interface FlatRow {
-  entry: DirEntry;
-  depth: number;
-}
 
 export default function LiveFileTree() {
   const [children, setChildren] = useState<Record<string, DirEntry[]>>({});
@@ -103,17 +102,7 @@ export default function LiveFileTree() {
     });
   };
 
-  const flat = useMemo<FlatRow[]>(() => {
-    const out: FlatRow[] = [];
-    const walk = (dir: string, depth: number) => {
-      for (const e of children[dir] ?? []) {
-        out.push({ entry: e, depth });
-        if (e.kind === "dir" && open.has(e.path)) walk(e.path, depth + 1);
-      }
-    };
-    walk("", 0);
-    return out;
-  }, [children, open]);
+  const flat = useMemo(() => flattenTree(children, open), [children, open]);
 
   const searchRows = results ?? [];
   const inSearch = results !== null;
@@ -160,7 +149,11 @@ export default function LiveFileTree() {
         )}
       </div>
 
-      {error && <div style={{ padding: "4px 12px", fontSize: 11, color: "var(--danger)" }}>{error}</div>}
+      {error && (
+        <div style={{ padding: "6px 12px" }}>
+          <ErrorState presentation={present(error, { context: "Reading the workspace" })} compact />
+        </div>
+      )}
       {inSearch && (
         <div style={{ padding: "2px 12px", fontSize: 10.5, color: "var(--text-tertiary)" }}>
           {searchRows.length} match{searchRows.length === 1 ? "" : "es"}{searchRows.length >= 300 ? " (capped)" : ""}

@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ShieldCheck, AlertTriangle, RefreshCw, CheckCircle2 } from "lucide-react";
 import { compatVerdict, type CompatVerdict } from "@valyria/protocol";
 import { useApp } from "../state/store";
 import { useLive } from "../core/liveStore";
+import { useOverlayA11y } from "../core/useOverlayA11y";
 import { bridge, inTauri, type AboutInfo, type ModelSummary } from "../core/bridge";
 import { checkForUpdate, installUpdate, type UpdateStatus } from "../core/updater";
+import { present } from "../core/errors";
 
 /** The Phase 8 About / Compatibility surface (docs/PLAN.md §4.18): app + Core
  *  versions, negotiated protocol and capabilities, the CORE-INTERFACE §4
@@ -18,6 +20,8 @@ export default function AboutView() {
   const [info, setInfo] = useState<AboutInfo | null>(null);
   const [models, setModels] = useState<ModelSummary[] | null>(null);
   const [update, setUpdate] = useState<UpdateStatus>({ kind: "idle" });
+  const rootRef = useRef<HTMLDivElement>(null);
+  useOverlayA11y(rootRef, () => setRoute("workspace"));
 
   useEffect(() => {
     if (!inTauri) return;
@@ -47,7 +51,7 @@ export default function AboutView() {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "var(--bg-canvas)", zIndex: 100, display: "flex", flexDirection: "column" }}>
+    <div ref={rootRef} role="dialog" aria-modal="true" aria-label="About and Compatibility" style={{ position: "fixed", inset: 0, background: "var(--bg-canvas)", zIndex: 100, display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid var(--border-subtle)", background: "var(--bg-surface)" }}>
         <button className="icon-btn no-native-focus" onClick={() => setRoute("workspace")} title="Back">
           <ArrowLeft size={16} />
@@ -201,6 +205,7 @@ function Verdict({ verdict }: { verdict: CompatVerdict }) {
 }
 
 function BlockerBanner({ code, message, expected }: { code: string; message: string; expected: string }) {
+  const p = present(message);
   const gotMatch = /protocol (\d+\.\d+\.\d+)/.exec(message);
   return (
     <div
@@ -217,17 +222,14 @@ function BlockerBanner({ code, message, expected }: { code: string; message: str
     >
       <ShieldCheck size={18} style={{ color: "var(--danger)", flexShrink: 0, marginTop: 1 }} />
       <div>
-        <div style={{ fontSize: "var(--text-sm)", fontWeight: 650, color: "var(--danger)" }}>
-          {code === "bridge.platform.unsupported" ? "Sessions unavailable on this platform" : "Incompatible Core runtime"}
-        </div>
+        <div style={{ fontSize: "var(--text-sm)", fontWeight: 650, color: "var(--danger)" }}>{p.what}</div>
         <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", marginTop: 4, lineHeight: 1.6 }}>
-          {message}
+          What to do: {p.whatNext}
         </div>
         {code === "bridge.protocol.mismatch" && (
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", marginTop: 6, lineHeight: 1.6 }}>
             This build expects protocol <strong>{expected}</strong>
-            {gotMatch ? <> and reached a Core speaking <strong>{gotMatch[1]}</strong></> : null}. Use the Core bundled
-            with this app, or install an app build that matches. See{" "}
+            {gotMatch ? <> and reached a Core speaking <strong>{gotMatch[1]}</strong></> : null}. See{" "}
             <span style={{ fontFamily: "var(--font-mono)" }}>docs/CORE-INTERFACE.md §4</span>.
           </div>
         )}

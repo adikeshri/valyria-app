@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Check, AlertTriangle, XCircle, HelpCircle } from "lucide-react";
 import { bridge, type ConfigEntry, type DoctorCheck } from "../core/bridge";
+import { present } from "../core/errors";
+import ErrorState from "./ErrorState";
 
 /** §26 — the security overview is rendered from `doctor_run` (sandbox,
  *  permission config, …) plus `config_show` entries, and states plainly which
@@ -26,7 +28,7 @@ export default function LiveSecurityOverview() {
   }, []);
 
   if (err) {
-    return <p style={{ fontSize: "var(--text-sm)", color: "var(--danger)" }}>{err}</p>;
+    return <ErrorState presentation={present(err, { context: "Loading the security overview" })} />;
   }
   if (!checks || !entries) {
     return <p style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>Loading Core's checks…</p>;

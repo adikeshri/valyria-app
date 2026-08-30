@@ -548,6 +548,47 @@ offline / no-model-download / local-read / socket-boundary / D7 guarantees) and
 checklist absorbing §7's three formerly-unwired gates). No new CORE-INTERFACE
 gaps.
 
+**Phase 9 — hardening (complete)**.
+
+*Error presentation (§3 / §36).* New `apps/desktop/src/core/errors.ts`:
+`ErrorPresentation` (four required fields — what happened, did the agent stop,
+is action needed, what next), a `code`-keyed audit table for the ~20 real
+`BridgeError` codes, and `present()` with a fallback that still names the code
+and keeps the raw detail. `<ErrorState>` renders it (a `compact` inline
+variant). Every raw `String(e)` / `{err}` render across ~14 `Live*` panels +
+`ConnectBar` + `AboutView` now goes through it. `bridge_host.rs`'s two un-coded
+`"no session is open"` strings gained the `[bridge.no_session]` prefix. New
+`xtask check-error-strings` (in `xtask all`) bars raw error renders and banned
+generics.
+
+*Accessibility.* `core/useOverlayA11y` (focus-in, Tab-trap, Escape,
+focus-restore) on every route overlay — Settings, About, First-run (+ mock),
+command palette. `components/TabStrip` is now the single `role="tablist"`
+implementation (roving tabindex + Arrow/Home/End); Dock, Center, RightRail and
+the Terminal sub-tabs use it. `components/LiveRegion` — one polite `role=
+"status"` announcing connection transitions and approval arrivals. The dead
+"Reduced motion" setting is wired: `state/useReducedMotionEffect` +
+`data-reduced-motion` CSS + a persisted `useApp` flag defaulting to the OS
+preference. New `xtask check-a11y` holds the invariants (overlays trap focus,
+one tab strip, every `<img>` has `alt`). Manual VoiceOver/NVDA + axe pass in new
+`docs/ACCESSIBILITY.md`, run per release.
+
+*Perf budgets (§9).* `flattenTree` extracted from `LiveFileTree` to
+`core/tree.ts`; `countDiffLines` to `core/diffstat.ts`. New `apps/desktop`
+node:test harness (`"test"` script + `tsconfig.test.json`) — `errors.test.ts`,
+`tree.test.ts` (100k-node flatten < 50ms), `diffstat.test.ts` (10k-line diff
+< 20ms). `packages/state/test/phase9.test.ts` — 50k-event fold clears
+5,000 events/s, gapless. The frame-pacing and cold-start budgets stay manual
+(RELEASING.md table + the bridge soak test).
+
+*Release gates.* `deny.toml` + a `cargo-deny` CI job (advisories / licenses /
+bans / sources; the unfixable Tauri/GTK3 transitive advisories are ignored by
+id, with reasons). New `offline` CI job — warm the caches, cut outbound network
+with `iptables`, then run `npm test` + `npm run build` + `cargo test --offline`
++ `xtask all` (§32; a from-scratch offline build is impossible and documented as
+such). `RELEASING.md` gains the visual-regression + a11y manual steps and the
+§9 budget table. No new CORE-INTERFACE gaps.
+
 **Open:**
 
 - **Single bundled binary vs. split runtime/engine** — resolved by RI1's

@@ -3,13 +3,16 @@ import { GitBranch, GitCommitHorizontal, FileDiff } from "lucide-react";
 import { repo, type GitCommit, type GitEntry } from "../core/repo";
 import { useApp } from "../state/store";
 import { useLive } from "../core/liveStore";
+import { present } from "../core/errors";
 import ServedLocally from "../components/ServedLocally";
+import ErrorState from "../components/ErrorState";
 
 export default function LiveGitPanel() {
   const [branch, setBranch] = useState("");
   const [entries, setEntries] = useState<GitEntry[]>([]);
   const [commits, setCommits] = useState<GitCommit[]>([]);
   const [notRepo, setNotRepo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const reveal = useApp((s) => s.reveal);
   const fsRev = useLive((s) => s.fsRev);
 
@@ -26,15 +29,25 @@ export default function LiveGitPanel() {
         setBranch(b);
         setEntries(s);
         setCommits(l);
+        setError(null);
         setNotRepo(b === "" && s.length === 0 && l.length === 0);
-      } catch {
-        if (!cancelled) setNotRepo(true);
+      } catch (e) {
+        if (!cancelled) setError(String(e));
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [fsRev]);
+
+  if (error) {
+    return (
+      <div>
+        <ServedLocally detail="git" />
+        <ErrorState presentation={present(error, { context: "Reading git status" })} />
+      </div>
+    );
+  }
 
   if (notRepo) {
     return (

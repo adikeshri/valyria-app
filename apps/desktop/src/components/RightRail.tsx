@@ -1,13 +1,13 @@
-import { Compass, Hash, ShieldCheck, PanelRightClose } from "lucide-react";
+import { Compass, Search, ShieldCheck, PanelRightClose } from "lucide-react";
 import { useApp, type RightTab } from "../state/store";
 import TabStrip, { type TabDef } from "./TabStrip";
 import LiveContextInspector from "../panels/LiveContextInspector";
-import { SymbolsStub } from "../panels/ContextInspectorPanel";
+import LiveSearchPanel from "../panels/LiveSearchPanel";
 import VerificationPanel from "../panels/VerificationPanel";
 
 const tabs: TabDef<RightTab>[] = [
   { key: "context", label: "Context", icon: <Compass size={13} /> },
-  { key: "symbols", label: "Symbols", icon: <Hash size={13} /> },
+  { key: "search", label: "Search", icon: <Search size={13} /> },
   { key: "verify", label: "Verify", icon: <ShieldCheck size={13} /> },
 ];
 
@@ -36,7 +36,7 @@ export default function RightRail() {
       </div>
       <div style={{ flex: 1, minHeight: 0 }} role="tabpanel" id={`right-panel-${rightTab}`} aria-labelledby={`right-tab-${rightTab}`}>
         {rightTab === "context" && <LiveContextInspector />}
-        {rightTab === "symbols" && <SymbolsStub />}
+        {rightTab === "search" && <LiveSearchPanel />}
         {rightTab === "verify" && <VerificationPanel />}
       </div>
     </aside>

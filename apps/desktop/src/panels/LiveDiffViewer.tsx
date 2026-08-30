@@ -212,7 +212,7 @@ export default function LiveDiffViewer() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <ServedLocally detail="git diff · read-only · ownership from Core's ledger (G8)" />
+      <ServedLocally detail="diff bytes local (Core exposes no blob read) · ownership from Core's ledger (G8)" />
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <div
           role="listbox"

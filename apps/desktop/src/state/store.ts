@@ -5,7 +5,7 @@ import { currentTask, pendingApproval } from "../data/mock";
 export type SidebarSection = "files" | "changes" | "tasks" | "git" | "models" | "hardware";
 export type CenterTab = "chat" | "task" | "code";
 export type DockTab = "activity" | "timeline" | "terminal" | "tests" | "diff";
-export type RightTab = "context" | "symbols" | "verify";
+export type RightTab = "context" | "search" | "verify";
 export type TerminalSub = "human" | "agent";
 export type Theme = "light" | "dark" | "system";
 export type Route = "workspace" | "settings" | "first-run" | "about";

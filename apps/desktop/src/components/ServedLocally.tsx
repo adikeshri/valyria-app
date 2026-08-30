@@ -1,8 +1,12 @@
 import { HardDrive } from "lucide-react";
 
 /** The visible marker every local-read fallback surface must carry
- *  (docs/PLAN.md D6, CORE-INTERFACE §3). Drops away per-surface when Core
- *  exposes the equivalent method (G3). */
+ *  (docs/PLAN.md D6, CORE-INTERFACE §3). Git status/log/branches and code
+ *  search now come from Core (G3), so those surfaces dropped it. What still
+ *  carries it — the filesystem tree, file contents, and the diff merge-view
+ *  bytes — has no Core equivalent: G3 exposes git + search, not a directory
+ *  listing or blob-read RPC, so these stay a workspace-root-scoped local read
+ *  by design. */
 export default function ServedLocally({ detail }: { detail?: string }) {
   return (
     <div

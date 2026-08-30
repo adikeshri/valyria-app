@@ -91,7 +91,7 @@ versions.
 
 | Budget | Target | Check |
 |---|---|---|
-| Event ingest sustained | 5,000 events/s | `packages/state/test/phase9.test.ts` (pure fold rate) + the bridge soak test for frame pacing |
+| Event ingest sustained | 5,000 events/s, no dropped frames | `packages/state/test/phase9.test.ts` (one 512-event pump batch folds < 40ms while a task runs) + `crates/valyria-bridge/tests/soak.rs` for real frame pacing |
 | Workspace open → explorer usable, 100k files | < 2s | `apps/desktop/src/core/tree.test.ts` bounds the pure flatten; time the real open manually on a large repo |
 | Diff render, 10,000-line file | < 150ms | `apps/desktop/src/core/diffstat.test.ts` bounds the pure line count; time the CodeMirror render manually |
 | Keystroke → render, chat input | < 16ms | manual — type in the chat box, no perceptible lag |

@@ -86,12 +86,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
-      # The Windows-specific paths live in valyria-bridge (named-pipe transport
-      # address, adopt/liveness probes — CORE-INTERFACE G9 / D14). xtask carries
-      # the gates. The full Tauri desktop build for Windows is exercised by the
-      # release pipeline, not here.
+      # Scope: prove the Windows-specific code in valyria-bridge *compiles and
+      # lints* clean (named-pipe transport address, adopt/liveness probes —
+      # CORE-INTERFACE G9 / D14) and that the gates run. Not `cargo test`: the
+      # bridge's lib tests spawn a real interactive shell (PTY) and assume a
+      # Unix socket path — that is runtime behaviour a Windows box would have
+      # to validate, and it is not what this job is for. The full Tauri
+      # desktop build for Windows is exercised by the release pipeline.
+      - run: cargo build -p valyria-bridge -p xtask --all-targets --locked
       - run: cargo clippy -p valyria-bridge -p xtask --all-targets --locked -- -D warnings
-      - run: cargo test -p valyria-bridge -p xtask --locked
       - run: cargo run -q -p xtask -- all
 
   deny:

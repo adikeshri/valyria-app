@@ -163,11 +163,25 @@ mod tests {
         assert_ne!(a, b);
     }
 
+    #[cfg(unix)]
     #[test]
     fn paths_hang_off_the_run_dir() {
         let id = WorkspaceId::from_canonical(Path::new("/tmp/x"));
         let sock = socket_path(&id);
         assert!(sock.ends_with("sock"));
         assert!(sock.parent().unwrap().ends_with(id.as_str()));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn socket_path_is_the_named_pipe() {
+        let id = WorkspaceId::from_canonical(Path::new("C:/tmp/x"));
+        let sock = socket_path(&id);
+        let s = sock.to_string_lossy();
+        assert!(
+            s.starts_with(r"\\.\pipe\valyria-"),
+            "unexpected pipe name: {s}"
+        );
+        assert!(s.ends_with(id.as_str()));
     }
 }

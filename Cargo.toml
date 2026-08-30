@@ -24,8 +24,8 @@ repository = "https://github.com/adikeshri/valyria-app"
 # gaps G1-G15). Points at the head of the Core gap-closure branch stack
 # until those PRs land on Core `main`, at which point this rev moves to
 # the merge commit with no other change.
-valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "45d4e11c3e619705789b4e9208b69644619c295e" }
-valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "45d4e11c3e619705789b4e9208b69644619c295e" }
+valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "bb4a04fb99e796f3daccbc8a7f57a38a512389ac" }
+valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "bb4a04fb99e796f3daccbc8a7f57a38a512389ac" }
 
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "net"] }
 futures = "0.3"

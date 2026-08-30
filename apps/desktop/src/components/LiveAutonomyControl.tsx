@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Info, RotateCcw } from "lucide-react";
 import { activeTasks } from "@valyria/state";
 import { useLive } from "../core/liveStore";
+import { present } from "../core/errors";
+import ErrorState from "./ErrorState";
 import type { PermissionMode } from "../core/bridge";
 
 const OPTIONS: { key: PermissionMode; title: string; desc: string }[] = [
@@ -49,7 +51,7 @@ export default function LiveAutonomyControl() {
     const ok = await restartSession(mode);
     setBusy(false);
     setPending(null);
-    if (!ok) setErr(useLive.getState().error ?? "Restart failed.");
+    if (!ok) setErr(useLive.getState().error ?? "[bridge.startup_timeout] the daemon did not restart");
   }
 
   return (
@@ -106,7 +108,7 @@ export default function LiveAutonomyControl() {
           </div>
         </div>
       )}
-      {err && <div style={{ fontSize: 11.5, color: "var(--danger)" }}>{err}</div>}
+      {err && <ErrorState presentation={present(err, { context: "Restarting Core" })} compact />}
     </div>
   );
 }

@@ -65,15 +65,4 @@ export const appEditorTheme: Extension = EditorView.theme({
   ".cm-changeGutter": { width: "3px", backgroundColor: "transparent" },
 });
 
-/** Count `+`/`-` content lines in a unified diff (ignores the `+++`/`---`
- *  file headers and `@@` hunk headers). */
-export function countDiffLines(unified: string): { added: number; removed: number } {
-  let added = 0;
-  let removed = 0;
-  for (const line of unified.split("\n")) {
-    if (line.startsWith("+++") || line.startsWith("---")) continue;
-    if (line.startsWith("+")) added++;
-    else if (line.startsWith("-")) removed++;
-  }
-  return { added, removed };
-}
+export { countDiffLines } from "./diffstat";

@@ -8,6 +8,8 @@ import { useLive } from "../core/liveStore";
 import { useApp } from "../state/store";
 import { bridge, type PlanGet, type RollbackResult, type TaskReport } from "../core/bridge";
 import { stateLabel, stateBadgeClass, isActive, fmtDurationMs } from "../core/view";
+import { present } from "../core/errors";
+import ErrorState from "../components/ErrorState";
 
 export default function LiveTaskPanel() {
   const store = useLive((s) => s.store);
@@ -177,7 +179,7 @@ function RollbackSection({ task, plan }: { task: { id: string; state: string }; 
     setBusy(false);
     setConfirming(false);
     if (r) setResult(r);
-    else setError(useLive.getState().error ?? "Rollback failed.");
+    else setError(useLive.getState().error ?? "[bridge.protocol.error] rollback was refused");
   }
 
   return (
@@ -270,7 +272,9 @@ function RollbackSection({ task, plan }: { task: { id: string; state: string }; 
             </div>
           )}
           {error && (
-            <div style={{ marginTop: 10, fontSize: 12, color: "var(--danger)" }}>{error}</div>
+            <div style={{ marginTop: 10 }}>
+              <ErrorState presentation={present(error, { context: "Rolling back" })} compact />
+            </div>
           )}
         </div>
       )}

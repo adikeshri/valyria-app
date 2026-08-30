@@ -71,5 +71,52 @@ jobs:
       # no ../valyria checkout. It runs in the release pipeline against the
       # bundled Core binary.
 
-      - name: Gates (check-layering · verify-core · check-protocol)
+      - name: Gates (check-layering · verify-core · check-protocol · check-d7 · check-error-strings · check-a11y)
         run: cargo run -q -p xtask -- all
+
+  deny:
+    name: cargo-deny (advisories · licenses · bans · sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          # deny.toml at the repo root; ignores are documented there.
+
+  offline:
+    name: Offline (§32 — unit + build with no network)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+            libgtk-3-dev libssl-dev patchelf build-essential
+
+      # Warm every cache while the network is still up.
+      - run: npm ci
+      - run: cargo fetch --locked
+
+      # Drop outbound network (loopback stays up), then prove the unit / pure /
+      # build layers need nothing more. A from-scratch offline build is
+      # impossible — deps must be fetched once — see docs/RELEASING.md.
+      - name: Cut outbound network
+        run: |
+          sudo iptables -A OUTPUT -o lo -j ACCEPT
+          sudo iptables -A INPUT -i lo -j ACCEPT
+          sudo iptables -P OUTPUT DROP
+      - run: npm test
+      - run: npm run build -w desktop
+      - run: cargo test --workspace --offline --locked
+      - run: cargo run -q -p xtask -- all

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Check, AlertTriangle, XCircle, HelpCircle, Cpu } from "lucide-react";
 import { bridge, type DoctorCheck } from "../core/bridge";
+import { present } from "../core/errors";
+import ErrorState from "../components/ErrorState";
 
 /** §4.13 / CORE-INTERFACE G4 — v1 has no structured hardware surface and no
  *  `model_recommend`. This view renders what `doctor_run` reports (disk, model
@@ -22,7 +24,7 @@ export default function LiveHardwarePanel() {
   }, []);
 
   if (err) {
-    return <div style={{ padding: 14, fontSize: "var(--text-sm)", color: "var(--danger)" }}>{err}</div>;
+    return <ErrorState presentation={present(err, { context: "Running Core's checks" })} />;
   }
   if (!checks) {
     return <div style={{ padding: 14, fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>Running Core's checks…</div>;

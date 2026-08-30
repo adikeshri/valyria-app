@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { bridge, type ConfigEntry } from "../core/bridge";
+import { present } from "../core/errors";
+import ErrorState from "./ErrorState";
 
 /** D13 (CORE-INTERFACE G6) — there is no `config_set` on the wire, so the app
  *  writes Core's own `config.toml` and immediately re-reads `config_show` to
@@ -41,7 +43,7 @@ export default function LiveConfigSettings() {
   }
 
   if (err && !entries) {
-    return <p style={{ fontSize: "var(--text-sm)", color: "var(--danger)" }}>{err}</p>;
+    return <ErrorState presentation={present(err, { context: "Loading settings" })} />;
   }
   if (!entries) {
     return <p style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>Loading config…</p>;
@@ -93,7 +95,7 @@ export default function LiveConfigSettings() {
         Iteration limits, verification policy and model roles aren't in Core's config surface yet (G6) — they can't be
         set from here.
       </p>
-      {err && <div style={{ fontSize: 11.5, color: "var(--danger)" }}>{err}</div>}
+      {err && <ErrorState presentation={present(err, { context: "Saving the setting" })} compact />}
     </div>
   );
 }

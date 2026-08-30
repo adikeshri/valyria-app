@@ -1,0 +1,69 @@
+# cargo-deny — supply-chain gate for the Rust side (docs/PLAN.md §3 CI list,
+# Phase 9). Run `cargo deny check`; wired into .github/workflows/ci.yml.
+#
+# Policy: fail on a real vulnerability, a non-permissive license, or an unknown
+# source. The GUI stack (Tauri / wry / GTK3) drags in a pile of unmaintained
+# transitive crates we cannot fix from here — those are ignored by ID, with the
+# reason, and re-reviewed on every Tauri bump.
+
+[advisories]
+yanked = "deny"
+# Unmaintained transitive deps of the GUI + updater stack. Not exploitable in
+# our usage; no upstream fix until Tauri migrates (GTK4 / urlpattern rewrite).
+ignore = [
+  "RUSTSEC-2024-0370", # proc-macro-error — unmaintained (via tauri macros)
+  "RUSTSEC-2024-0411", # gtk3 bindings — unmaintained (wry, Linux only)
+  "RUSTSEC-2024-0412",
+  "RUSTSEC-2024-0413",
+  "RUSTSEC-2024-0414",
+  "RUSTSEC-2024-0415",
+  "RUSTSEC-2024-0416",
+  "RUSTSEC-2024-0417",
+  "RUSTSEC-2024-0418",
+  "RUSTSEC-2024-0419",
+  "RUSTSEC-2024-0420",
+  "RUSTSEC-2025-0075", # unic-* — unmaintained (urlpattern → tauri-utils)
+  "RUSTSEC-2025-0080",
+  "RUSTSEC-2025-0081",
+  "RUSTSEC-2025-0098",
+  "RUSTSEC-2025-0100",
+]
+
+[licenses]
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "MIT-0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "Unicode-3.0",
+  "CC0-1.0",
+  "CDLA-Permissive-2.0",
+  "MPL-2.0",
+]
+confidence-threshold = 0.9
+
+[[licenses.exceptions]]
+# ring's own license file bundles several permissive terms; scope the allowance
+# to ring alone rather than globally.
+name = "ring"
+allow = ["OpenSSL", "ISC", "MIT"]
+
+[bans]
+multiple-versions = "allow"    # the Tauri + reqwest graph has known dupes
+# Our own crates are path / git deps and are never published — cargo-deny still
+# reads their unpinned refs as wildcards, which is not a supply-chain risk here.
+wildcards = "allow"
+deny = [
+  # Keep the "no system OpenSSL" posture — rustls only.
+  { name = "openssl-sys" },
+  { name = "openssl" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = ["https://github.com/adikeshri/valyria.git"]

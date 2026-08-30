@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Download, Trash2, CheckCircle2, Info, HardDriveDownload } from "lucide-react";
 import { bridge, type ModelSummary } from "../core/bridge";
+import { present } from "../core/errors";
+import ErrorState from "../components/ErrorState";
 
 const gib = (bytes: number) => (bytes / 1024 ** 3).toFixed(1);
 
@@ -25,7 +27,7 @@ export default function LiveModelsPanel() {
   }, []);
 
   if (err) {
-    return <div style={{ padding: 16, fontSize: "var(--text-sm)", color: "var(--danger)" }}>{err}</div>;
+    return <ErrorState presentation={present(err, { context: "Loading the model inventory" })} />;
   }
   if (!models) {
     return <div style={{ padding: 16, fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>Loading inventory…</div>;

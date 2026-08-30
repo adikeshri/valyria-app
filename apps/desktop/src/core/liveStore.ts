@@ -24,7 +24,10 @@ import {
 } from "./bridge";
 import { repo } from "./repo";
 import { notify } from "./notify";
+import { parseErrorCode } from "./errors";
 import { useApp } from "../state/store";
+
+export { parseErrorCode } from "./errors";
 
 /** Outcome of trying to answer an approval — the card uses it to decide whether
  *  to close or show a "this request changed" banner (G2). */
@@ -36,11 +39,6 @@ export type ResolveOutcome = "sent" | "superseded" | "error";
 export interface Blocker {
   code: "bridge.protocol.mismatch" | "bridge.platform.unsupported";
   message: string;
-}
-
-/** Pull a `[bridge.foo.bar]` code off the front of a bridge error string. */
-export function parseErrorCode(s: string): string | null {
-  return /^\[([a-z0-9._]+)\]/.exec(s)?.[1] ?? null;
 }
 
 interface LiveState {

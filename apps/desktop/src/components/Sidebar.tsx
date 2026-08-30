@@ -47,6 +47,7 @@ export default function Sidebar() {
         <button
           className={`sidebar-rail-btn no-native-focus ${section === "hardware" ? "active" : ""}`}
           title="Hardware"
+          aria-pressed={section === "hardware"}
           onClick={() => setSection("hardware")}
         >
           <Cpu size={17} />

@@ -10,7 +10,9 @@ import { repo, type GitEntry } from "../core/repo";
 import { useApp } from "../state/store";
 import { useLive } from "../core/liveStore";
 import { appEditorTheme, countDiffLines, languageFor } from "../core/cm";
+import { present } from "../core/errors";
 import ServedLocally from "../components/ServedLocally";
+import ErrorState from "../components/ErrorState";
 
 interface Loaded {
   path: string;
@@ -164,11 +166,7 @@ export default function LiveDiffViewer() {
     return (
       <div>
         <ServedLocally detail="git diff · read-only" />
-        <div className="panel-empty" style={{ padding: 24 }}>
-          <GitCompareArrows size={24} />
-          <strong>Could not load the diff</strong>
-          <span style={{ color: "var(--danger)" }}>{error}</span>
-        </div>
+        <ErrorState presentation={present(error, { context: "Loading the diff" })} />
       </div>
     );
   }

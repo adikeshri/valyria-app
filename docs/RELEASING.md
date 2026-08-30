@@ -75,6 +75,29 @@ versions.
 - [ ] **Windows** installer runs, opens *About & Compatibility*, shows version +
       "Sessions: not available on this platform", and a workspace-open attempt
       surfaces `[bridge.platform.unsupported]` — no 20-second hang.
+- [ ] **Accessibility manual pass** — run the checklist in
+      [ACCESSIBILITY.md](ACCESSIBILITY.md) (axe DevTools per route, keyboard-only
+      traversal, a screen-reader pass, reduced-motion, 200% zoom). Record OS / SR
+      / findings in the release notes. The structural invariants are already
+      gated by `xtask check-a11y` + `check-error-strings`.
+- [ ] **Visual regression** — on each tier-1 OS (macOS aarch64, Linux x86_64):
+      screenshot every route (workspace, Settings, About, First-run, command
+      palette) in **light and dark**, and eyeball-diff against the previous
+      release's set. D11's WebView renders differently per platform, so this is
+      per-OS. Keep the reference screenshots with the release.
+- [ ] **Performance budgets (§9)** — spot-check against the table below.
+
+### Performance budgets (§9) and how each is checked
+
+| Budget | Target | Check |
+|---|---|---|
+| Event ingest sustained | 5,000 events/s, no dropped frames | `packages/state/test/phase9.test.ts` (one 512-event pump batch folds < 40ms while a task runs) + `crates/valyria-bridge/tests/soak.rs` for real frame pacing |
+| Workspace open → explorer usable, 100k files | < 2s | `apps/desktop/src/core/tree.test.ts` bounds the pure flatten; time the real open manually on a large repo |
+| Diff render, 10,000-line file | < 150ms | `apps/desktop/src/core/diffstat.test.ts` bounds the pure line count; time the CodeMirror render manually |
+| Keystroke → render, chat input | < 16ms | manual — type in the chat box, no perceptible lag |
+| Cold start → interactive / → Ready | < 1.5s / < 3s | manual — stopwatch a cold launch and a workspace open |
+| Idle memory, one workspace | < 400MB (excl. Core) | manual — Activity Monitor / `ps` after 5 min idle |
+| Read-only surfaces usable through a long task | — | `crates/valyria-bridge/tests/soak.rs` (self-skips without a Core binary) |
 
 ## Cutting the release
 

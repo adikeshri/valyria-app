@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ArrowLeft, Bot, Boxes, ShieldCheck, FolderGit2, Palette,
   Check, Lock, Unlock, Info,
 } from "lucide-react";
 import { useApp } from "../state/store";
 import { useLive } from "../core/liveStore";
+import { useOverlayA11y } from "../core/useOverlayA11y";
 import { modelList, hardware } from "../data/mock";
 import LiveAutonomyControl from "./LiveAutonomyControl";
 import LiveSecurityOverview from "./LiveSecurityOverview";
@@ -118,9 +119,12 @@ export default function SettingsView() {
   const liveSession = useLive((s) => s.session);
   const notifications = useApp((s) => s.notificationsEnabled);
   const setNotifications = useApp((s) => s.setNotificationsEnabled);
+  const reducedMotion = useApp((s) => s.reducedMotion);
+  const setReducedMotion = useApp((s) => s.setReducedMotion);
   const [section, setSection] = useState<Section>("agent");
-  const [reducedMotion, setReducedMotion] = useState(false);
   const [notifPrefs, setNotifPrefs] = useState<NotifyPrefs>(() => loadPrefs());
+  const rootRef = useRef<HTMLDivElement>(null);
+  useOverlayA11y(rootRef, () => setRoute("workspace"));
 
   function toggleCategory(key: keyof NotifyPrefs, v: boolean) {
     const next = { ...notifPrefs, [key]: v };
@@ -129,7 +133,7 @@ export default function SettingsView() {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "var(--bg-canvas)", zIndex: 100, display: "flex", flexDirection: "column" }}>
+    <div ref={rootRef} role="dialog" aria-modal="true" aria-label="Settings" style={{ position: "fixed", inset: 0, background: "var(--bg-canvas)", zIndex: 100, display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid var(--border-subtle)", background: "var(--bg-surface)" }}>
         <button className="icon-btn no-native-focus" onClick={() => setRoute("workspace")} title="Back">
           <ArrowLeft size={16} />

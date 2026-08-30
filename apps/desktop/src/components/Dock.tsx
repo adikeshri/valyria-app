@@ -1,13 +1,14 @@
 import { useRef } from "react";
 import { Activity, Clock4, TerminalSquare, FlaskConical, GitCompareArrows, ChevronDown, ChevronUp } from "lucide-react";
 import { useApp, type DockTab } from "../state/store";
+import TabStrip, { type TabDef } from "./TabStrip";
 import ActivityFeed from "../panels/ActivityFeed";
 import TimelinePanel from "../panels/TimelinePanel";
 import TerminalPanel from "../panels/TerminalPanel";
 import TestPanel from "../panels/TestPanel";
 import DiffViewerPanel from "../panels/DiffViewerPanel";
 
-const tabs: { key: DockTab; label: string; icon: React.ReactNode }[] = [
+const tabs: TabDef<DockTab>[] = [
   { key: "activity", label: "Activity", icon: <Activity size={13} /> },
   { key: "timeline", label: "Timeline", icon: <Clock4 size={13} /> },
   { key: "diff", label: "Diff", icon: <GitCompareArrows size={13} /> },
@@ -44,22 +45,19 @@ export default function Dock() {
     <div className={`dock ${collapsed ? "collapsed" : ""}`} ref={dockRef}>
       {!collapsed && <div className="resize-handle" onPointerDown={onResizeStart} title="Drag to resize" />}
       <div className="dock-head">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            className={`tab no-native-focus ${dockTab === t.key ? "active" : ""}`}
-            onClick={() => setDockTab(t.key)}
-            style={{ padding: "6px 10px" }}
-          >
-            {t.icon} {t.label}
-          </button>
-        ))}
-        <div style={{ flex: 1 }} />
+        <TabStrip
+          tabs={tabs}
+          active={dockTab}
+          onSelect={setDockTab}
+          ariaLabel="Dock panels"
+          idPrefix="dock"
+          style={{ display: "flex", flex: 1 }}
+        />
         <button className="icon-btn no-native-focus" title={collapsed ? "Expand" : "Collapse"} onClick={toggleDock}>
           {collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
       </div>
-      <div className="dock-body">
+      <div className="dock-body" role="tabpanel" id={`dock-panel-${dockTab}`} aria-labelledby={`dock-tab-${dockTab}`}>
         {dockTab === "activity" && <ActivityFeed />}
         {dockTab === "timeline" && <TimelinePanel />}
         {dockTab === "diff" && <DiffViewerPanel />}

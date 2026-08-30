@@ -125,6 +125,21 @@ code, pre, .mono { font-family: var(--font-mono); }
   .spin { animation-duration: 2.4s; }
 }
 
+/* The in-app "Reduced motion" setting (D10 / §46). useReducedMotionEffect sets
+   the attribute; this neutralizes every transition and animation. .spin keeps a
+   slow rotation so "working" spinners still read as active. */
+:root[data-reduced-motion="1"] *,
+:root[data-reduced-motion="1"] *::before,
+:root[data-reduced-motion="1"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+:root[data-reduced-motion="1"] .spin {
+  animation: spin 2.4s linear infinite !important;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

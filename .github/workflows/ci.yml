@@ -118,6 +118,7 @@ jobs:
     name: Offline (§32 — unit + build with no network)
     runs-on: ubuntu-latest
     needs: [rust]
+    timeout-minutes: 15
     # Advisory, not a merge gate. Its `cargo fetch` step (pre-network-cut) hangs
     # ~45 min in the hosted runner on the ../valyria git dependency — reproduces
     # on `main`, unaffected by rust-cache sharing / CARGO_NET_GIT_FETCH_WITH_CLI

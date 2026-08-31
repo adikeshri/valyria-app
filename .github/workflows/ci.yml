@@ -14,6 +14,10 @@ permissions:
 
 env:
   RUST_TOOLCHAIN: "1.97.1"
+  # Fetch git dependencies (the ../valyria Core crates) with the system `git`
+  # rather than cargo's built-in fetcher, which stalls for ~45 min on that
+  # repo in the hosted runners (the `Offline` job's cold `cargo fetch`).
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
 jobs:
   node:
@@ -140,14 +144,7 @@ jobs:
 
       # Warm every cache while the network is still up.
       - run: npm ci
-      - name: cargo fetch (retry on transient network errors)
-        run: |
-          for i in 1 2 3; do
-            timeout 300 cargo fetch --locked && exit 0
-            echo "cargo fetch attempt $i failed/stalled; retrying" >&2
-            sleep 10
-          done
-          exit 1
+      - run: cargo fetch --locked
 
       # Drop outbound network (loopback stays up), then prove the unit / pure /
       # build layers need nothing more. A from-scratch offline build is

@@ -120,6 +120,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -127,9 +130,18 @@ jobs:
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
             libgtk-3-dev libssl-dev patchelf build-essential
 
-      # Warm every cache while the network is still up.
+      # Warm every cache while the network is still up. `cargo fetch` pulls the
+      # whole graph plus a git dep (../valyria) from a cold registry here, so
+      # retry to ride out transient crates.io / GitHub errors.
       - run: npm ci
-      - run: cargo fetch --locked
+      - name: cargo fetch (retry on transient network errors)
+        run: |
+          for i in 1 2 3 4 5; do
+            cargo fetch --locked && exit 0
+            echo "cargo fetch attempt $i failed; retrying in $((i*15))s" >&2
+            sleep $((i*15))
+          done
+          exit 1
 
       # Drop outbound network (loopback stays up), then prove the unit / pure /
       # build layers need nothing more. A from-scratch offline build is

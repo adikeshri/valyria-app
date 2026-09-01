@@ -357,6 +357,21 @@ impl CoreClient {
         }
     }
 
+    /// Build (or rebuild) the whole-workspace index + graph (protocol 1.10.0).
+    /// Synchronous in Core; this can take a while on a large repo, so it runs
+    /// with a longer timeout than the default call ceiling.
+    pub async fn index_build(&self) -> Result<IndexStatusResponse> {
+        let fut = self.socket.call(Request::IndexBuild(Empty {}));
+        match tokio::time::timeout(Duration::from_secs(600), fut).await {
+            Err(_) => Err(BridgeError::Transport(
+                "index build timed out after 600s".to_string(),
+            )),
+            Ok(Response::Error(e)) => Err(map_wire_error(e)),
+            Ok(Response::IndexBuild(r)) => Ok(r),
+            Ok(other) => Err(unexpected("IndexBuild", other)),
+        }
+    }
+
     // --- hardware & model management (CORE-INTERFACE G4, G5) --------
 
     pub async fn hardware_probe(&self) -> Result<HardwareProbeResponse> {

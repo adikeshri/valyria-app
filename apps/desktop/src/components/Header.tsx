@@ -60,6 +60,7 @@ export default function Header() {
   // Active model: v1 has no "active" flag on model_list, so the honest best we
   // can do live is name the sole installed model, else say it's not reported.
   const [liveModelName, setLiveModelName] = useState<string | null>(null);
+  const [liveBranch, setLiveBranch] = useState<string | null>(null);
   useEffect(() => {
     if (!liveSession) return;
     let cancelled = false;
@@ -71,8 +72,12 @@ export default function Header() {
         setLiveModelName(inst.length === 1 ? inst[0]!.family : inst.length === 0 ? "offline model" : `${inst.length} models`);
       })
       .catch(() => !cancelled && setLiveModelName(null));
+    bridge
+      .coreGitStatus()
+      .then((s) => !cancelled && setLiveBranch(s.detached ? "(detached)" : s.branch ?? null))
+      .catch(() => !cancelled && setLiveBranch(null));
     return () => { cancelled = true; };
-  }, [liveSession]);
+  }, [liveSession, liveStore.lastSeq]);
 
   const modelLabel = liveSession ? (liveModelName ?? "model: not reported") : mockActiveModel.family;
   const blockedCount = liveSession ? blockedTasks(liveStore).length : currentTask.state === "waiting_for_permission" ? 1 : 0;
@@ -88,7 +93,10 @@ export default function Header() {
 
       <button className="workspace-chip no-native-focus" onClick={() => setRoute("workspace")}>
         <strong>{liveSession ? basename(liveSession.workspace_root) : WORKSPACE_NAME}</strong>
-        <span className="branch"><GitBranch size={11} />{CURRENT_BRANCH}</span>
+        {(() => {
+          const branch = liveSession ? liveBranch : CURRENT_BRANCH;
+          return branch ? <span className="branch"><GitBranch size={11} />{branch}</span> : null;
+        })()}
         <ChevronDown size={12} style={{ color: "var(--text-tertiary)" }} />
       </button>
 

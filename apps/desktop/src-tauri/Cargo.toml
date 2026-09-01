@@ -28,5 +28,6 @@ tauri-plugin-log = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-dialog = "2"
 tokio = { workspace = true }
 valyria-bridge = { path = "../../../crates/valyria-bridge" }

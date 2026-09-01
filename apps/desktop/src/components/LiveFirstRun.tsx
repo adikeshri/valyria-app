@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   Sparkles, FolderOpen, CheckCircle2, Loader2, ArrowRight, Check,
   AlertTriangle, XCircle, HelpCircle, Server,
@@ -136,21 +137,36 @@ export default function LiveFirstRun() {
 
         {step === "workspace" && (
           <Shell title="Open a repository" subtitle="Valyria only reads and writes inside the folder you choose.">
+            <button
+              className="btn btn--primary"
+              disabled={connection === "connecting"}
+              onClick={async () => {
+                const picked = await open({ directory: true, multiple: false, title: "Open a repository" });
+                if (typeof picked === "string") {
+                  setRoot(picked);
+                  void openWorkspace(picked);
+                }
+              }}
+            >
+              <FolderOpen size={14} /> {connection === "connecting" ? "Starting Core…" : session ? "Choose a different folder" : "Choose folder…"}
+            </button>
+            <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "10px 0 4px" }}>or paste a path</p>
             <input
               aria-label="Workspace root path"
               value={root}
               placeholder="/absolute/path/to/a/git/repo"
               spellCheck={false}
               onChange={(e) => setRoot(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && root.trim() && void openWorkspace(root.trim())}
               style={{ width: "100%", fontFamily: "var(--font-mono)", fontSize: 12, padding: "8px 10px", border: "1px solid var(--border-strong)", borderRadius: 6, background: "var(--bg-surface)", color: "var(--text-primary)" }}
             />
             <button
-              className="btn btn--primary"
+              className="btn"
               style={{ marginTop: 10 }}
               disabled={!root.trim() || connection === "connecting"}
               onClick={() => void openWorkspace(root.trim())}
             >
-              <FolderOpen size={14} /> {connection === "connecting" ? "Starting Core…" : session ? "Reopen" : "Open workspace"}
+              {connection === "connecting" ? "Starting Core…" : session ? "Reopen" : "Open this path"}
             </button>
             {session && (
               <p style={{ fontSize: 11.5, color: "var(--success)", marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>

@@ -344,6 +344,9 @@ export const bridge = {
   searchQuery: (query: string, modes: string[], anchors: string[], limit: number | null) =>
     invoke<SearchResult>("search_query", { query, modes, anchors, limit }),
   indexStatus: () => invoke<IndexStatus>("index_status"),
+  /** Build (or rebuild) the workspace index + graph so search is fully useful
+   *  (protocol 1.10.0). Synchronous; resolves with the finished generation. */
+  indexBuild: () => invoke<IndexStatus>("index_build"),
   hardwareProbe: () => invoke<HardwareProbe>("hardware_probe"),
   modelRecommend: (role: string) => invoke<ModelRecommend>("model_recommend", { role }),
   /** Begin a download; progress arrives as `model_install_*` events. */

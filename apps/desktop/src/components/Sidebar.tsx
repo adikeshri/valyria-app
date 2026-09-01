@@ -6,12 +6,11 @@ import TaskHistoryPanel from "../panels/TaskHistoryPanel";
 import GitPanel from "../panels/GitPanel";
 import ModelsPanel from "../panels/ModelsPanel";
 import HardwarePanel from "../panels/HardwarePanel";
-import { modifiedFiles, taskHistory } from "../data/mock";
 
-const items: { key: SidebarSection; icon: React.ReactNode; label: string; count?: number }[] = [
+const items: { key: SidebarSection; icon: React.ReactNode; label: string }[] = [
   { key: "files", icon: <Files size={17} />, label: "Explorer" },
-  { key: "changes", icon: <GitCompareArrows size={17} />, label: "Changes", count: modifiedFiles.length },
-  { key: "tasks", icon: <ListChecks size={17} />, label: "Tasks", count: taskHistory.length },
+  { key: "changes", icon: <GitCompareArrows size={17} />, label: "Changes" },
+  { key: "tasks", icon: <ListChecks size={17} />, label: "Tasks" },
   { key: "git", icon: <GitBranch size={17} />, label: "Git" },
   { key: "models", icon: <Boxes size={17} />, label: "Models" },
 ];

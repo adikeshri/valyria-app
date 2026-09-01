@@ -83,6 +83,10 @@ export type Response =
       value: IndexStatusResponse;
     }
   | {
+      result: "index_build";
+      value: IndexStatusResponse;
+    }
+  | {
       result: "hardware_probe";
       value: HardwareProbeResponse;
     }

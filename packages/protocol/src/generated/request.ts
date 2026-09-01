@@ -107,6 +107,10 @@ export type Request =
       params: Empty;
     }
   | {
+      method: "index_build";
+      params: Empty;
+    }
+  | {
       method: "hardware_probe";
       params: Empty;
     }

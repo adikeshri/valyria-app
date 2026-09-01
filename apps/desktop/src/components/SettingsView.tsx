@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, Bot, Boxes, ShieldCheck, FolderGit2, Palette,
   Check, Lock, Unlock, Info,
@@ -6,7 +6,8 @@ import {
 import { useApp } from "../state/store";
 import { useLive } from "../core/liveStore";
 import { useOverlayA11y } from "../core/useOverlayA11y";
-import { modelList, hardware } from "../data/mock";
+import { bridge, type ModelSummary } from "../core/bridge";
+import { modelList } from "../data/mock";
 import LiveAutonomyControl from "./LiveAutonomyControl";
 import LiveSecurityOverview from "./LiveSecurityOverview";
 import LiveRepoInstructions from "./LiveRepoInstructions";
@@ -114,6 +115,41 @@ function SecurityRow({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
+/** Live "Models" settings — the installed inventory from `model_list`. Role
+ *  binding + inference need a linked model runtime (not in the bundled build
+ *  yet), so this stays a read-only summary; install / remove / activate live in
+ *  the Models side panel. */
+function LiveModelRoles() {
+  const [models, setModels] = useState<ModelSummary[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    bridge.modelList().then((r) => !cancelled && setModels(r.models)).catch(() => !cancelled && setModels([]));
+    return () => { cancelled = true; };
+  }, []);
+
+  const installed = (models ?? []).filter((m) => m.installed);
+  return (
+    <div style={{ fontSize: "var(--text-sm)" }}>
+      <p style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)", marginBottom: 12 }}>
+        {models == null
+          ? "Loading inventory…"
+          : `${installed.length} installed · ${models.length} in Core's registry.`}
+      </p>
+      {installed.map((m) => (
+        <div key={m.id} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "5px 0" }}>
+          <span style={{ fontWeight: 600 }}>{m.family}</span>
+          <span className="badge badge--neutral">{m.quantization}</span>
+          <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>{m.id}</span>
+        </div>
+      ))}
+      <p style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 12 }}>
+        Role binding and inference require a linked model runtime. Install, remove
+        and activate weights from the <strong>Models</strong> panel in the sidebar.
+      </p>
+    </div>
+  );
+}
+
 export default function SettingsView() {
   const setRoute = useApp((s) => s.setRoute);
   const liveSession = useLive((s) => s.session);
@@ -185,30 +221,29 @@ export default function SettingsView() {
             {section === "models" && (
               <>
                 <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 650, marginBottom: 4 }}>Models</h2>
-                <p style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)", marginBottom: 16 }}>Role assignment — which installed model handles which job.</p>
-                {(["coding", "planning", "embedding"] as const).map((role) => {
-                  const active = modelList.find((m) => m.role === role && m.active);
-                  return (
-                    <Field key={role} label={role[0].toUpperCase() + role.slice(1)}>
-                      <select
-                        className="no-native-focus"
-                        defaultValue={active?.id}
-                        style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-surface)" }}
-                      >
-                        {modelList.filter((m) => m.role === role && m.installed).map((m) => (
-                          <option key={m.id} value={m.id}>{m.family} ({m.quantization}) — {m.sizeGb} GB</option>
-                        ))}
-                      </select>
-                    </Field>
-                  );
-                })}
-                <Field label="Context window">
-                  <select className="no-native-focus" defaultValue="32k" style={{ width: 200, padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
-                    <option value="8k">8,000 tokens</option>
-                    <option value="32k">32,000 tokens</option>
-                    <option value="64k">64,000 tokens (may not fit {hardware.ramGb} GB)</option>
-                  </select>
-                </Field>
+                {liveSession ? (
+                  <LiveModelRoles />
+                ) : (
+                  <>
+                    <p style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)", marginBottom: 16 }}>Role assignment — which installed model handles which job.</p>
+                    {(["coding", "planning", "embedding"] as const).map((role) => {
+                      const active = modelList.find((m) => m.role === role && m.active);
+                      return (
+                        <Field key={role} label={role[0].toUpperCase() + role.slice(1)}>
+                          <select
+                            className="no-native-focus"
+                            defaultValue={active?.id}
+                            style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-surface)" }}
+                          >
+                            {modelList.filter((m) => m.role === role && m.installed).map((m) => (
+                              <option key={m.id} value={m.id}>{m.family} ({m.quantization}) — {m.sizeGb} GB</option>
+                            ))}
+                          </select>
+                        </Field>
+                      );
+                    })}
+                  </>
+                )}
               </>
             )}
             {section === "security" && (

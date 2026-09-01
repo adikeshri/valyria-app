@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import type { ConnectionState } from "../types/domain";
-import { currentTask, pendingApproval } from "../data/mock";
 
 export type SidebarSection = "files" | "changes" | "tasks" | "git" | "models" | "hardware";
 export type CenterTab = "chat" | "task" | "code";
@@ -138,7 +137,7 @@ export const useApp = create<AppState>((set) => ({
   terminalSub: "human",
   setTerminalSub: (terminalSub) => set({ terminalSub }),
 
-  selectedFile: "src/auth/service.py",
+  selectedFile: null,
   setSelectedFile: (selectedFile) => set({ selectedFile }),
 
   revealed: null,
@@ -149,10 +148,10 @@ export const useApp = create<AppState>((set) => ({
         : { selectedFile: target.path, revealed: target, dockTab: "diff", dockCollapsed: false },
     ),
 
-  selectedTaskId: currentTask.id,
+  selectedTaskId: "",
   setSelectedTaskId: (selectedTaskId) => set({ selectedTaskId }),
 
-  approvalOpen: Boolean(pendingApproval),
+  approvalOpen: false,
   resolveApproval: () => set({ approvalOpen: false }),
 
   commandPaletteOpen: false,

@@ -18,6 +18,7 @@ pub fn run() {
     .plugin(tauri_plugin_notification::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
+    .plugin(tauri_plugin_dialog::init())
     .manage(BridgeState::default())
     .invoke_handler(tauri::generate_handler![
       bridge_host::session_open,
@@ -62,6 +63,7 @@ pub fn run() {
       bridge_host::core_git_branches,
       bridge_host::search_query,
       bridge_host::index_status,
+      bridge_host::index_build,
       bridge_host::hardware_probe,
       bridge_host::model_recommend,
       bridge_host::model_install,

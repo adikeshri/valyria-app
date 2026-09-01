@@ -34,7 +34,7 @@ use valyria_bridge::{
 };
 
 /// Protocol version this build negotiates against (core.lock.json).
-const EXPECTED_PROTOCOL: &str = "1.9.0";
+const EXPECTED_PROTOCOL: &str = "1.10.0";
 
 #[derive(Default)]
 pub struct BridgeState(Arc<Mutex<Option<Live>>>);
@@ -420,6 +420,14 @@ pub async fn search_query(
 #[tauri::command]
 pub async fn index_status(state: State<'_, BridgeState>) -> Result<IndexStatusResponse, String> {
   with_client(&state, |c| async move { c.index_status().await }).await
+}
+
+/// Build (or rebuild) the whole-workspace index + graph (protocol 1.10.0).
+/// Synchronous — returns the finished generation. Can take a while on a big
+/// repo (`CoreClient::index_build` uses a 600s ceiling).
+#[tauri::command]
+pub async fn index_build(state: State<'_, BridgeState>) -> Result<IndexStatusResponse, String> {
+  with_client(&state, |c| async move { c.index_build().await }).await
 }
 
 #[tauri::command]

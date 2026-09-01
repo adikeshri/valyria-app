@@ -3255,6 +3255,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "rfd"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a15ad77d9e70a92437d8f74c35d99b4e4691128df018833e99f90bcd36152672"
+dependencies = [
+ "block2",
+ "dispatch2",
+ "glib-sys",
+ "gobject-sys",
+ "gtk-sys",
+ "js-sys",
+ "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-foundation",
+ "raw-window-handle",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "windows-sys 0.60.2",
+]
+
+[[package]]
 name = "ring"
 version = "0.17.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4138,6 +4162,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-dialog"
+version = "2.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61854a36651aa48381e5e209f69a01273b77f3f9f91f0c430b1b98d33bd47229"
+dependencies = [
+ "log",
+ "raw-window-handle",
+ "rfd",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "tauri-plugin-fs",
+ "thiserror 2.0.20",
+ "url",
+]
+
+[[package]]
+name = "tauri-plugin-fs"
+version = "2.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de22eef34fd78c0da050e748710edd50bf127e651d02ea1b2bfada1523cc5c51"
+dependencies = [
+ "anyhow",
+ "dunce",
+ "glob",
+ "log",
+ "objc2-foundation",
+ "percent-encoding",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "tauri",
+ "tauri-plugin",
+ "tauri-utils",
+ "thiserror 2.0.20",
+ "toml 1.1.4+spec-1.1.0",
+ "url",
+]
+
+[[package]]
 name = "tauri-plugin-log"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4945,6 +5011,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "tauri-plugin-dialog",
  "tauri-plugin-log",
  "tauri-plugin-notification",
  "tauri-plugin-process",
@@ -4956,7 +5023,7 @@ dependencies = [
 [[package]]
 name = "valyria-protocol"
 version = "0.1.0"
-source = "git+https://github.com/adikeshri/valyria.git?rev=1931dfe0686fc5fd7ff17b92579991d34e3d87a2#1931dfe0686fc5fd7ff17b92579991d34e3d87a2"
+source = "git+https://github.com/adikeshri/valyria.git?rev=865f98e30b05a6950eb5b61656f042b6f248a33d#865f98e30b05a6950eb5b61656f042b6f248a33d"
 dependencies = [
  "async-trait",
  "futures",
@@ -4973,7 +5040,7 @@ dependencies = [
 [[package]]
 name = "valyria-types"
 version = "0.1.0"
-source = "git+https://github.com/adikeshri/valyria.git?rev=1931dfe0686fc5fd7ff17b92579991d34e3d87a2#1931dfe0686fc5fd7ff17b92579991d34e3d87a2"
+source = "git+https://github.com/adikeshri/valyria.git?rev=865f98e30b05a6950eb5b61656f042b6f248a33d#865f98e30b05a6950eb5b61656f042b6f248a33d"
 dependencies = [
  "serde",
  "serde_json",
@@ -4984,7 +5051,7 @@ dependencies = [
 [[package]]
 name = "valyria-util"
 version = "0.1.0"
-source = "git+https://github.com/adikeshri/valyria.git?rev=1931dfe0686fc5fd7ff17b92579991d34e3d87a2#1931dfe0686fc5fd7ff17b92579991d34e3d87a2"
+source = "git+https://github.com/adikeshri/valyria.git?rev=865f98e30b05a6950eb5b61656f042b6f248a33d#865f98e30b05a6950eb5b61656f042b6f248a33d"
 dependencies = [
  "blake3",
  "parking_lot",

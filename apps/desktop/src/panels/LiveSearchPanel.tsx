@@ -31,9 +31,24 @@ export default function LiveSearchPanel() {
     return changedFilesForTask(store, task.id).map((f) => f.path);
   }, [store, selectedTaskId]);
 
+  const [building, setBuilding] = useState(false);
+
   useEffect(() => {
     bridge.indexStatus().then(setIndex).catch(() => setIndex(null));
   }, []);
+
+  async function buildIndex() {
+    setBuilding(true);
+    setError(null);
+    try {
+      setIndex(await bridge.indexBuild());
+      if (submitted) await run(submitted);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBuilding(false);
+    }
+  }
 
   async function run(q: string) {
     const trimmed = q.trim();
@@ -95,7 +110,18 @@ export default function LiveSearchPanel() {
             {index.symbol_count.toLocaleString()} symbols
           </span>
         ) : (
-          <span>workspace not indexed yet — lexical search still works</span>
+          <>
+            <span>not indexed — symbol / semantic / dependency search need an index</span>
+            <button
+              className="btn btn--sm"
+              style={{ marginLeft: "auto", flexShrink: 0 }}
+              disabled={building}
+              onClick={() => void buildIndex()}
+            >
+              {building ? <Loader2 size={11} className="spin" /> : <Database size={11} />}{" "}
+              {building ? "Building…" : "Build index"}
+            </button>
+          </>
         )}
       </div>
 

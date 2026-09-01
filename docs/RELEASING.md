@@ -68,6 +68,18 @@ versions.
       confirmation.
 - [ ] **Bundle size** < 120 MB per platform — also gated in CI, but eyeball the
       draft release's attached files.
+- [ ] **Offline (§32)** — after a warm `cargo fetch --locked` + `npm ci`, cut
+      outbound network and confirm the unit / pure / build layers need nothing
+      more:
+      ```sh
+      cargo fetch --locked && npm ci
+      sudo iptables -A OUTPUT -o lo -j ACCEPT && sudo iptables -A INPUT -i lo -j ACCEPT && sudo iptables -P OUTPUT DROP
+      npm test && npm run build -w desktop && cargo test --workspace --offline --locked && cargo run -q -p xtask -- all
+      sudo iptables -P OUTPUT ACCEPT   # restore
+      ```
+      This was a CI job; it hung ~45 min on every hosted-runner attempt (cause
+      never visible — killed-job logs 404) and was removed. `xtask check-layering`
+      still bars any downloader crate, so no fetch path can regress in silently.
 - [ ] **Compatibility hard block** still works: point `VALYRIA_BIN` at a Core
       that reports a different protocol *major* (or bump `EXPECTED_PROTOCOL`
       locally) → opening a workspace routes to *About & Compatibility* with the

@@ -33,6 +33,10 @@ export default function LiveFirstRun() {
   const [checks, setChecks] = useState<DoctorCheck[] | null>(null);
   const [root, setRoot] = useState("");
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [rec, setRec] = useState<import("../core/bridge").ModelCandidate | null | undefined>(
+    undefined,
+  );
+  const [installing, setInstalling] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
   useOverlayA11y(rootRef, () => finish());
@@ -58,6 +62,16 @@ export default function LiveFirstRun() {
     if (step !== "prove" || !session || taskId) return;
     void createTask("Summarize the top-level modules of this repository.").then((id) => setTaskId(id));
   }, [step, session, taskId, createTask]);
+
+  // Ready step: ask Core which model fits this machine (G4). Its scoring,
+  // not a heuristic — the wizard only renders the answer.
+  useEffect(() => {
+    if (step !== "ready" || !session || rec !== undefined) return;
+    void bridge
+      .modelRecommend("primary_coder")
+      .then((r) => setRec(r.recommended ?? r.candidates[0] ?? null))
+      .catch(() => setRec(null));
+  }, [step, session, rec]);
 
   const provedTask = useMemo(() => {
     if (!taskId) return null;
@@ -182,6 +196,55 @@ export default function LiveFirstRun() {
                 </div>
               </div>
             </div>
+
+            {rec === undefined && (
+              <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-tertiary)" }}>
+                Checking which model fits this machine…
+              </div>
+            )}
+            {rec === null && (
+              <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-tertiary)" }}>
+                Core has no model recommendation for this machine — you can add one later from the
+                Models tab.
+              </div>
+            )}
+            {rec && (
+              <div style={{ marginTop: 12, padding: 12, border: "1px solid var(--border-subtle)", borderRadius: 10 }}>
+                <div style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
+                  Recommended: {rec.display_name}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 3 }}>
+                  {rec.fit_kind === "comfortable"
+                    ? "Fits comfortably"
+                    : rec.fit_kind === "tight"
+                      ? `Fits, but tight (${rec.fit_detail ?? ""})`
+                      : "Would not fit this machine"}{" "}
+                  · {(rec.size_bytes / 1024 ** 3).toFixed(1)} GiB · {rec.license_name} · suitability{" "}
+                  {rec.suitability}/100
+                </div>
+                <div style={{ fontSize: 10.5, color: "var(--text-tertiary)", marginTop: 4 }}>
+                  Core scores this against your hardware — it isn't a guess the app made.
+                </div>
+                <button
+                  className="btn btn--sm btn--primary"
+                  style={{ marginTop: 8 }}
+                  disabled={installing || rec.installed || rec.fit_kind === "will_not_fit"}
+                  onClick={() => {
+                    setInstalling(true);
+                    void bridge
+                      .modelInstall(rec.id)
+                      .catch(() => {})
+                      .finally(() => setInstalling(false));
+                  }}
+                >
+                  {rec.installed
+                    ? "Installed"
+                    : installing
+                      ? "Starting download…"
+                      : "Install now (Core downloads it)"}
+                </button>
+              </div>
+            )}
           </Shell>
         )}
 

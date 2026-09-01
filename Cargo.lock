@@ -4956,7 +4956,7 @@ dependencies = [
 [[package]]
 name = "valyria-protocol"
 version = "0.1.0"
-source = "git+https://github.com/adikeshri/valyria.git?rev=9203d23a6afbd12456281a51a7451576f51854bd#9203d23a6afbd12456281a51a7451576f51854bd"
+source = "git+https://github.com/adikeshri/valyria.git?rev=1931dfe0686fc5fd7ff17b92579991d34e3d87a2#1931dfe0686fc5fd7ff17b92579991d34e3d87a2"
 dependencies = [
  "async-trait",
  "futures",
@@ -4973,7 +4973,7 @@ dependencies = [
 [[package]]
 name = "valyria-types"
 version = "0.1.0"
-source = "git+https://github.com/adikeshri/valyria.git?rev=9203d23a6afbd12456281a51a7451576f51854bd#9203d23a6afbd12456281a51a7451576f51854bd"
+source = "git+https://github.com/adikeshri/valyria.git?rev=1931dfe0686fc5fd7ff17b92579991d34e3d87a2#1931dfe0686fc5fd7ff17b92579991d34e3d87a2"
 dependencies = [
  "serde",
  "serde_json",
@@ -4984,7 +4984,7 @@ dependencies = [
 [[package]]
 name = "valyria-util"
 version = "0.1.0"
-source = "git+https://github.com/adikeshri/valyria.git?rev=9203d23a6afbd12456281a51a7451576f51854bd#9203d23a6afbd12456281a51a7451576f51854bd"
+source = "git+https://github.com/adikeshri/valyria.git?rev=1931dfe0686fc5fd7ff17b92579991d34e3d87a2#1931dfe0686fc5fd7ff17b92579991d34e3d87a2"
 dependencies = [
  "blake3",
  "parking_lot",
@@ -5276,7 +5276,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

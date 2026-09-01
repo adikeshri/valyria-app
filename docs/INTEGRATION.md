@@ -250,10 +250,10 @@ two installer versions; the model-store guarantee is already enforced by
 
 | # | Risk | Mitigation |
 |---|---|---|
-| RI1 | The sidecar binary blows the 120 MB installer budget once a model runtime (llama.cpp / MLX) is statically linked into Core. | Measure a real Core build with the runtime linked *before* committing to a single bundled binary. Fallback: bundle `valyria serve` only; have Core fetch the inference engine as a second on-demand component on first `model_install`. Decision stays data-driven. |
+| RI1 | The sidecar binary blows the 120 MB installer budget once a model runtime (llama.cpp / MLX) is statically linked into Core. | Measure a real Core build with the runtime linked *before* committing to a single bundled binary. Fallback: bundle `valyria serve` only; have Core fetch the inference engine as a second on-demand component on first `model_install`. Decision stays data-driven. **Blocked on Core:** the `valyria` binary links no inference runtime yet (`NullProber` post-install), so there is nothing to measure — the current 15 MB sidecar is the floor. Revisit when Core exposes a `--features llamacpp`/`mlx` build of the `valyria` bin. |
 | RI2 | Unsigned nested executable → macOS Gatekeeper blocks the whole app. | Signing identity configured in the release job; a gate asserts the bundled binary is signed. |
 | RI3 | ~~App Rust toolchain older than Core's~~ | **Done.** Both repos pin `1.97.1` via `rust-toolchain.toml`; the release job installs that one toolchain for both builds. |
-| RI4 | Windows: bundling the binary does not help — no Unix socket, no sandbox (G9). | Tier 3 (D14): installs, shows version/compat, refuses to start a session with the reason. Revisit when Core lands a named-pipe transport. |
+| RI4 | ~~Windows: no Unix socket, so a bundled binary can't serve (G9)~~ | **Transport done.** Core 1.9.0 serves over a named pipe `\\.\pipe\valyria-<id>`; `valyria-bridge` addresses it there on Windows and `platform_precheck` allows Windows sessions (D14 → tier 1). A `windows-latest` CI job builds + tests the bridge transport paths. **Still open:** the Windows access sandbox is permissive (`Confinement::None`) — Core deferred the Job Object / restricted-token work; `doctor_run` surfaces it, and the release notes say so. |
 | RI5 | The release job compiles ~40 Core crates per target (~70 s cached on an M-series; slower cold in CI). | `Swatinem/rust-cache` keyed on the resolved Core SHA + target. Acceptable for a release-only workflow. If it gets painful, split "build Core" into its own job that publishes the binary as an artifact, or consume a Core release artifact once Core publishes them. |
 
 ---
@@ -589,9 +589,49 @@ with `iptables`, then run `npm test` + `npm run build` + `cargo test --offline`
 such). `RELEASING.md` gains the visual-regression + a11y manual steps and the
 §9 budget table. No new CORE-INTERFACE gaps.
 
-**Open:**
+**Phase 10 — CORE-INTERFACE gap closure (complete)**.
 
-- **Single bundled binary vs. split runtime/engine** — resolved by RI1's
-  measurement, not now.
-- **When to switch the interim submodule to downloaded artifacts** — gated on a
-  Core release workflow existing.
+Core shipped G1–G15 (protocol 1.0.0 → 1.9.0, ten stacked PRs). App side:
+
+- **A1** — bump to protocol 1.9.0: re-vendored schemas + `events/*.schema.json`,
+  regenerated `packages/protocol/src/generated`, `KNOWN_CAPABILITIES` +12 tokens,
+  `SURFACE_REQUIREMENTS` moved from `synthetic-fixture` to real capabilities, the
+  bridge + Tauri command surface (~16 new commands) for the closed gaps.
+- **A2** — hardware view off `hardware_probe` (G4); model lifecycle off
+  `model_install`/`_remove`/`_activate`/`_inspect` + `model_install_*` events
+  (G5); `model_recommend` in first-run.
+- **A3** — Context Inspector live off `context_retrieved` (G7); diff-viewer
+  ownership column off `ledger_changes` (G8); per-step rollback via
+  `checkpoint_id` from `task_plan` + `plan_checkpoint` events (G13); structured
+  failure locations in the test panel (G15); `tool_invocation_id` pairing +
+  structured `exit_code`/`stdout`/`stderr` in the agent-command projection (G14).
+- **G3 repo read** — git panel + a new fused-search panel read Core
+  (`git_status`/`log`/`branches`, `search_query`, `index_status`). Filesystem
+  tree / file contents / diff bytes stay local **by design** — G3 is git +
+  search, not a directory-list or blob-read RPC.
+- **A4** — client auth (G10): the supervisor writes a per-daemon token
+  `0600` to `run/<id>/auth.token`, passes `--auth-token-file`, and every
+  `CoreClient` / `EventPump` frame authenticates via `SocketClient::with_token`;
+  adopt reads the token back. `SessionInfo.authenticated` + the Security
+  Overview surface it. Per-task stream filter (G11): `EventPump::start_scoped`
+  over `subscribe_events_for_task` — the desktop session keeps the full stream
+  (D3 seq-contiguity), `tests/stream_filter.rs` covers the scoped path.
+  Payload-contract gate (G12): `xtask check-protocol` diffs
+  `packages/protocol/schemas/events/` against Core byte-for-byte;
+  `decoders.test.ts` asserts every contract has a registry decoder.
+- **A5** — Windows tier 1 (D14): named-pipe transport addressing
+  (`\\.\pipe\valyria-<id>`), Windows adopt/liveness probes, `platform_precheck`
+  and `about_info.sessions_supported` allow Windows. `valyria-bridge`
+  cross-compiles for `x86_64-pc-windows-gnu`; a `windows-latest` CI job builds +
+  tests the transport paths + gates. The Windows **access sandbox** stays
+  permissive (Core deferred Job Objects) — `doctor_run` reports it.
+
+**Open (all Core-blocked):**
+
+- **RI1 — single bundled binary vs. split runtime/engine.** Nothing to measure
+  until Core links an inference runtime into the `valyria` bin (still
+  `NullProber`).
+- **Interim build → downloaded artifacts.** Gated on Core publishing signed
+  per-tag `valyria-<triple>` binaries.
+- **Windows access sandbox.** Gated on Core landing a Job Object / restricted-
+  token confinement for `valyria-process` on Windows.

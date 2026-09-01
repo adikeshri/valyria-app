@@ -8,7 +8,8 @@
 // This file is the single source of that mapping. It is deliberately data, not
 // logic: the renderer reads it, it does not branch on version strings.
 
-/** Capabilities the pinned Core (core.lock.json) advertises today. */
+/** Capabilities the pinned Core (core.lock.json) advertises today.
+ *  Protocol 1.9.0 — the CORE-INTERFACE gap-closure set (G1–G15). */
 export const KNOWN_CAPABILITIES = [
   "plan",
   "doctor",
@@ -17,6 +18,19 @@ export const KNOWN_CAPABILITIES = [
   "models",
   "rollback",
   "events_resume",
+  // gap closure:
+  "config_write", // G6  — config_set { key, value, scope }
+  "task_permission_mode", // G1  — task_create { permission_mode }
+  "repo", // G3  — git_status/diff/log/branches, search_query, index_status
+  "hardware", // G4  — hardware_probe, model_recommend
+  "model_manage", // G5  — model_install/remove/activate/inspect + progress events
+  "context", // G7  — context_retrieved event
+  "ledger", // G8  — ledger_changes { task_id }
+  "diagnostics_v2", // G13,G14,G15 — checkpoint_id, tool_invocation_id, failure locations
+  "client_auth", // G10 — peer-uid + per-frame token
+  "stream_filter", // G11 — task_id filter on subscribe
+  "approval_scope", // G2  — request_id + decision (once|task|deny)
+  "daemon", // the IPC transport (Unix socket / Windows named pipe, G9)
 ] as const;
 
 export type Capability = (typeof KNOWN_CAPABILITIES)[number];
@@ -44,83 +58,89 @@ export const SURFACE_REQUIREMENTS: readonly SurfaceRequirement[] = [
   { surface: "agent-activity", requires: null, fallback: { kind: "none" } },
   { surface: "task-history", requires: null, fallback: { kind: "none" } },
   { surface: "verification-inspector", requires: null, fallback: { kind: "none" } },
-  { surface: "approvals", requires: null, gap: "G2", fallback: { kind: "none" } },
+  // G2 closed (protocol 1.8.0): approval_requested carries request_id;
+  // permission_resolve takes { request_id?, decision: once|task|deny }.
+  { surface: "approvals", requires: "approval_scope", gap: "G2", fallback: { kind: "none" } },
   {
     surface: "workspace-explorer",
-    requires: "method:index_status",
+    requires: "repo",
     gap: "G3",
     fallback: { kind: "local-read", label: "Served locally" },
   },
   {
     surface: "code-viewer",
-    requires: "method:index_status",
+    requires: "repo",
     gap: "G3",
     fallback: { kind: "local-read", label: "Served locally" },
   },
   {
     surface: "git-changes",
-    requires: "method:git_status",
+    requires: "repo",
     gap: "G3",
     fallback: { kind: "local-read", label: "Served locally · read-only" },
   },
   {
     surface: "search",
-    requires: "method:search_query",
+    requires: "repo",
     gap: "G3",
     fallback: { kind: "local-read", label: "Filename match only" },
   },
   {
+    // The diff text is served by Core's `git_diff` (G3); the ownership
+    // column comes from `ledger_changes` (G8).
     surface: "diff-viewer",
-    // The diff itself is served locally from `git` (G3). The ownership column
-    // (agent / user / pre-existing) needs Core's change ledger, which v1 does
-    // not expose (G8) — it renders "unavailable", never a guess.
-    requires: "method:ledger_changes",
+    requires: "ledger",
     gap: "G8",
     fallback: { kind: "local-read", label: "git diff · ownership unavailable" },
   },
   {
+    // `plan_checkpoint` events + `checkpoint_id` on PlanStepSummary make
+    // the per-step rollback action reachable (G13).
     surface: "rollback",
-    // `task_rollback` + the `rollback` capability exist, but v1 exposes no way
-    // to *discover* a `checkpoint_id` (task_plan reports only `checkpoint: bool`;
-    // no event carries the id). The per-step action stays disabled with that
-    // reason; the wire path is wired and tested against Core's error path.
-    requires: "method:plan_checkpoint_event",
+    requires: "diagnostics_v2",
     gap: "G13",
     fallback: { kind: "none" },
   },
   {
+    // Core now emits `context_retrieved` (G7).
     surface: "context-inspector",
-    requires: "method:context_explain",
+    requires: "context",
     gap: "G7",
     fallback: { kind: "synthetic-fixture" },
   },
   {
+    // `model_install`/`remove`/`activate`/`inspect` + progress events (G5).
     surface: "model-manager",
-    requires: "models",
+    requires: "model_manage",
     gap: "G5",
-    fallback: { kind: "none" }, // inventory only until model_install exists
+    fallback: { kind: "none" },
   },
   {
+    // Structured `hardware_probe` + `model_recommend` (G4).
     surface: "hardware-status",
-    requires: "method:hardware_probe",
+    requires: "hardware",
     gap: "G4",
     fallback: { kind: "local-read", label: "From doctor_run only" },
   },
-  { surface: "settings", requires: null, gap: "G6", fallback: { kind: "none" } },
   {
+    // `config_set` writes and reports the effective value (G6).
+    surface: "settings",
+    requires: "config_write",
+    gap: "G6",
+    fallback: { kind: "none" },
+  },
+  {
+    // `task_create { permission_mode }` — no daemon restart (G1).
     surface: "autonomy",
-    // The mode is a daemon-start flag, not a `task_create` param (G1). The
-    // control works — by restarting the workspace daemon — but is disabled
-    // while a task runs and when the daemon was adopted from another process.
-    requires: "method:task_create_permission_mode",
+    requires: "task_permission_mode",
     gap: "G1",
     fallback: { kind: "local-read", label: "Applied by restarting Core" },
   },
   {
+    // The daemon peer-uid checks every connection and accepts a per-frame
+    // token (G10); the security overview can state the boundary as real.
     surface: "security-overview",
-    // Rendered from `doctor_run` + `config_show`; no capability gates those,
-    // but the socket the app connects over is not authenticated (G10).
-    requires: "doctor",
+    requires: "client_auth",
     gap: "G10",
     fallback: { kind: "none" },
   },

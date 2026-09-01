@@ -198,23 +198,29 @@ export function checkpointsForTask(
 }
 
 /** One shell command the agent ran, paired from a `tool_started` (a shell tool)
- *  and its following `tool_completed` (§4.10). This is the *only* source for the
+ *  and its `tool_completed` (§4.10). This is the *only* source for the
  *  read-only "Agent Commands" view — it never touches the human PTY, and D7
  *  forbids the two ever sharing a buffer.
  *
- *  Tolerances (D5): `tool_started` carries no invocation id, so a start is
- *  paired to the next `tool_completed` before the next `tool_started` — an
- *  unpaired start stays `pending` rather than borrowing a later result. And
- *  `tool_completed.rendered` is one undeclared pre-formatted blob
- *  (`exit=Some(0) reason=Exited\n--- stdout ---\n…\n--- stderr ---\n`, G14) —
- *  when it does not parse, the whole blob is kept in `raw` and rendered
- *  verbatim. */
+ *  Pairing (G14): `tool_started` / `tool_completed` now carry a
+ *  `tool_invocation_id`; when present the two are matched by it exactly. A
+ *  start with no matching completion stays `pending` and never borrows a later
+ *  result. Pre-G14 traces carry no id — those fall back to positional pairing
+ *  (next `tool_completed` before the next `tool_started`).
+ *
+ *  Output (G14): `tool_completed` carries structured `exit_code` / `stdout` /
+ *  `stderr` for shell tools. Those are used verbatim when present; the
+ *  pre-formatted `rendered` blob (`exit=Some(0)…\n--- stdout ---\n…`) is only
+ *  parsed as a fallback, and kept whole in `raw` when even that does not
+ *  parse. */
 export interface AgentCommand {
   seq: number;
   ts: number;
   program: string;
   args: string[];
-  /** null while pending, or when `rendered` gave no `exit=Some(n)` */
+  /** the G14 invocation id, when Core sent one — else null (positional pairing) */
+  invocationId: string | null;
+  /** null while pending, or when neither `exit_code` nor `rendered` gave one */
   exitCode: number | null;
   stdout: string | null;
   stderr: string | null;
@@ -222,6 +228,8 @@ export interface AgentCommand {
   raw: string | null;
   /** `tool_completed.success`; null while pending */
   succeeded: boolean | null;
+  /** `tool_completed.duration_ms` (G14); null while pending or when absent */
+  durationMs: number | null;
   pending: boolean;
 }
 
@@ -249,6 +257,17 @@ function parseRenderedCommand(rendered: string | null): RenderedParts | null {
 
 export function agentCommandsForTask(state: StoreState, taskId: string): AgentCommand[] {
   const rows = eventsForTask(state, taskId).sort((a, b) => a.seq - b.seq);
+
+  // Index completions by invocation id once, so id-based pairing stays linear
+  // over the event list (a shell tool's completion can land after later
+  // `tool_started`s when tools overlap).
+  const completionById = new Map<string, EventRow>();
+  for (const r of rows) {
+    if (r.kind !== "tool_completed") continue;
+    const id = (r.payload as { tool_invocation_id?: unknown })?.tool_invocation_id;
+    if (typeof id === "string" && !completionById.has(id)) completionById.set(id, r);
+  }
+
   const out: AgentCommand[] = [];
   for (let i = 0; i < rows.length; i++) {
     const e = rows[i]!;
@@ -262,14 +281,21 @@ export function agentCommandsForTask(state: StoreState, taskId: string): AgentCo
     const args = Array.isArray(input.args)
       ? (input.args.filter((a) => typeof a === "string") as string[])
       : [];
+    const invocationId = typeof p.tool_invocation_id === "string" ? p.tool_invocation_id : null;
 
     let completion: EventRow | undefined;
-    for (let j = i + 1; j < rows.length; j++) {
-      const n = rows[j]!;
-      if (n.kind === "tool_started") break;
-      if (n.kind === "tool_completed") {
-        completion = n;
-        break;
+    if (invocationId) {
+      // G14: exact pairing by id — an unmatched start stays pending.
+      completion = completionById.get(invocationId);
+    } else {
+      // Pre-G14: the next completion before the next start.
+      for (let j = i + 1; j < rows.length; j++) {
+        const n = rows[j]!;
+        if (n.kind === "tool_started") break;
+        if (n.kind === "tool_completed") {
+          completion = n;
+          break;
+        }
       }
     }
 
@@ -278,29 +304,65 @@ export function agentCommandsForTask(state: StoreState, taskId: string): AgentCo
       ts: e.ts,
       program,
       args,
+      invocationId,
       exitCode: null,
       stdout: null,
       stderr: null,
       raw: null,
       succeeded: null,
+      durationMs: null,
       pending: completion === undefined,
     };
 
     if (completion) {
       const cp = (completion.payload ?? {}) as Record<string, unknown>;
       cmd.succeeded = typeof cp.success === "boolean" ? cp.success : null;
-      const rendered = typeof cp.rendered === "string" ? cp.rendered : null;
-      const parts = parseRenderedCommand(rendered);
-      if (parts) {
-        cmd.exitCode = parts.exitCode;
-        cmd.stdout = parts.stdout;
-        cmd.stderr = parts.stderr;
-      } else if (rendered !== null) {
-        cmd.raw = rendered;
+      cmd.durationMs = typeof cp.duration_ms === "number" ? cp.duration_ms : null;
+
+      // G14 structured output wins whenever Core sent any of the three fields
+      // (each may be an explicit null — "no output" / "not a shell tool"). Only
+      // when none are present do we fall back to parsing the `rendered` blob,
+      // so a transitional trace that has the id but not the fields still works.
+      const structured =
+        "exit_code" in cp || "stdout" in cp || "stderr" in cp;
+      if (structured) {
+        cmd.exitCode = typeof cp.exit_code === "number" ? cp.exit_code : null;
+        cmd.stdout = typeof cp.stdout === "string" ? cp.stdout : null;
+        cmd.stderr = typeof cp.stderr === "string" ? cp.stderr : null;
+      } else {
+        const rendered = typeof cp.rendered === "string" ? cp.rendered : null;
+        const parts = parseRenderedCommand(rendered);
+        if (parts) {
+          cmd.exitCode = parts.exitCode;
+          cmd.stdout = parts.stdout;
+          cmd.stderr = parts.stderr;
+        } else if (rendered !== null) {
+          cmd.raw = rendered;
+        }
       }
     }
 
     out.push(cmd);
+  }
+  return out;
+}
+
+/** G13: checkpoint ids learned live from `plan_checkpoint` events
+ *  (`{ checkpoint_id, step_id }`), folded into `step_id → checkpoint_id`. This
+ *  is the discovery path the Rollback UI needs — `task_plan` also reports
+ *  `checkpoint_id` per step now, and the panel merges both, preferring whichever
+ *  it has. */
+export function checkpointIdsForTask(
+  state: StoreState,
+  taskId: string,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const e of state.events) {
+    if (e.taskId !== taskId || e.kind !== "plan_checkpoint") continue;
+    const p = (e.payload ?? {}) as Record<string, unknown>;
+    if (typeof p.step_id === "string" && typeof p.checkpoint_id === "string") {
+      out[p.step_id] = p.checkpoint_id;
+    }
   }
   return out;
 }

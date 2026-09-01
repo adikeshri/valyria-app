@@ -6,8 +6,9 @@ name: Release
 #
 #   .dmg / .app        macOS (arm64 + x86_64)
 #   .deb / .AppImage   Linux x86_64
-#   .msi / .exe        Windows x86_64 (tier 3 — installs, refuses to start a
-#                      session; the bundled valyria.exe cannot `serve`, G9)
+#   .msi / .exe        Windows x86_64 (tier 1 — the bundled valyria.exe serves
+#                      over a named pipe, G9; the access sandbox is still
+#                      permissive on Windows, surfaced by doctor_run)
 #
 #   push a `v*` tag        -> draft GitHub Release with installers attached
 #   manual dispatch        -> installers kept as workflow artifacts only
@@ -212,8 +213,9 @@ jobs:
 
             macOS builds: ${{ steps.sign.outputs.status }}.
             Updater: ${{ steps.sign.outputs.updater }}.
-            Windows is tier 3 — the installer runs and explains itself; the
-            bundled runtime cannot serve over a Unix socket (G9).
+            Windows is tier 1 — the bundled runtime serves over a named pipe
+            (G9). Its access sandbox is still permissive (no Job Object
+            confinement yet); `doctor_run` reports this in the app.
 
             Draft release — review the attached installers, then publish.
           releaseDraft: true

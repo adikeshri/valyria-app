@@ -82,7 +82,7 @@ async fn model_list_and_config_write_then_verify() {
     cfg.kill_daemon_on_drop = true;
 
     let mut session = spawn_or_adopt(cfg).await.expect("spawn Core");
-    let client = CoreClient::new(session.socket_path.clone());
+    let client = CoreClient::with_token(session.socket_path.clone(), session.auth_token.clone());
 
     // Inventory decodes; a clean machine has none.
     let models = client.model_list().await.expect("model_list");
@@ -120,8 +120,9 @@ async fn model_list_and_config_write_then_verify() {
         "origin points at the user config file"
     );
 
-    // A nested leaf works too: `network.internet` lands inside Core's
-    // NetworkPolicy struct, visible in the (debug-formatted) `network` entry.
+    // A nested leaf works too. As of protocol 1.1.0 (G6) `config_show` reports
+    // the network policy as its individual leaves (`network.internet`, …) so a
+    // write and a re-read line up exactly.
     write_key(&path, "network.internet", "controlled").expect("write network.internet");
     let after2 = client
         .config_show()
@@ -130,12 +131,15 @@ async fn model_list_and_config_write_then_verify() {
     let net = after2
         .entries
         .iter()
-        .find(|e| e.key == "network")
-        .expect("network key");
-    assert!(
-        net.value.contains("internet: controlled"),
-        "nested write reflected in the network policy: {}",
-        net.value
+        .find(|e| e.key == "network.internet")
+        .expect("network.internet key");
+    assert_eq!(
+        net.value, "controlled",
+        "nested write reflected in the network policy leaf"
+    );
+    assert_eq!(
+        net.origin, "global",
+        "the leaf's origin points at the user config"
     );
 
     std::env::remove_var("VALYRIA_HOME");

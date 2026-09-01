@@ -367,17 +367,14 @@ mod tests {
         assert!(fs.search("", 50).unwrap().is_empty());
     }
 
+    #[cfg(unix)]
     #[test]
     fn rejects_symlink_escape() {
         let (dir, fs) = fixture();
         let outside = tempfile::tempdir().unwrap();
         std::fs::write(outside.path().join("loot"), "secret\n").unwrap();
-        #[cfg(unix)]
-        {
-            std::os::unix::fs::symlink(outside.path().join("loot"), dir.path().join("link"))
-                .unwrap();
-            let err = fs.read_file("link").unwrap_err();
-            assert_eq!(err.code(), "bridge.fs.path_escape");
-        }
+        std::os::unix::fs::symlink(outside.path().join("loot"), dir.path().join("link")).unwrap();
+        let err = fs.read_file("link").unwrap_err();
+        assert_eq!(err.code(), "bridge.fs.path_escape");
     }
 }

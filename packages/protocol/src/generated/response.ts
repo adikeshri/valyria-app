@@ -59,6 +59,50 @@ export type Response =
       value: ModelListResponse;
     }
   | {
+      result: "git_status";
+      value: GitStatusResponse;
+    }
+  | {
+      result: "git_diff";
+      value: GitDiffResponse;
+    }
+  | {
+      result: "git_log";
+      value: GitLogResponse;
+    }
+  | {
+      result: "git_branches";
+      value: GitBranchesResponse;
+    }
+  | {
+      result: "search_query";
+      value: SearchQueryResponse;
+    }
+  | {
+      result: "index_status";
+      value: IndexStatusResponse;
+    }
+  | {
+      result: "hardware_probe";
+      value: HardwareProbeResponse;
+    }
+  | {
+      result: "model_recommend";
+      value: ModelRecommendResponse;
+    }
+  | {
+      result: "model_remove";
+      value: ModelRemoveResponse;
+    }
+  | {
+      result: "model_inspect";
+      value: ModelInspectResponse;
+    }
+  | {
+      result: "ledger_changes";
+      value: LedgerChangesResponse;
+    }
+  | {
       result: "ack";
     }
   | {
@@ -119,6 +163,10 @@ export interface PlanGetResponse {
 }
 export interface PlanStepSummary {
   checkpoint: boolean;
+  /**
+   * The `checkpoint_id` a checkpoint at this step was recorded under, when one exists — the id `task_rollback` expects (§16, G13). Additive as of protocol 1.5.0; also emitted live as a `plan_checkpoint` event.
+   */
+  checkpoint_id?: string | null;
   depends_on: string[];
   id: string;
   intent: string;
@@ -206,6 +254,256 @@ export interface ModelSummaryWire {
   license: string;
   quantization: string;
   size_bytes: number;
+}
+export interface GitStatusResponse {
+  /**
+   * Current branch, or `None` when HEAD is detached.
+   */
+  branch?: string | null;
+  detached: boolean;
+  files: GitFileStatusWire[];
+  /**
+   * HEAD commit SHA, or `None` for an unborn HEAD.
+   */
+  head_commit?: string | null;
+}
+export interface GitFileStatusWire {
+  /**
+   * `added` | `modified` | `deleted` | `untracked` | `conflicted`.
+   */
+  kind: string;
+  path: string;
+  /**
+   * `true` for an index-vs-HEAD (staged) entry, `false` for a worktree-vs-index (unstaged / untracked) entry.
+   */
+  staged: boolean;
+}
+export interface GitDiffResponse {
+  /**
+   * `true` when `unified` was clipped at Core's size cap.
+   */
+  truncated: boolean;
+  /**
+   * Unified-diff text; empty when there is nothing to show.
+   */
+  unified: string;
+}
+export interface GitLogResponse {
+  commits: GitCommitWire[];
+}
+export interface GitCommitWire {
+  author_email: string;
+  author_name: string;
+  /**
+   * The commit subject (first line).
+   */
+  message: string;
+  parents: string[];
+  sha: string;
+  /**
+   * Author time, unix seconds.
+   */
+  time_unix: number;
+}
+export interface GitBranchesResponse {
+  branches: GitBranchWire[];
+}
+export interface GitBranchWire {
+  commit: string;
+  is_head: boolean;
+  name: string;
+}
+export interface SearchQueryResponse {
+  /**
+   * Human-readable notes about modes that stepped aside ("semantic: no embeddings for generation 3", "git: not a git repository"). Never an error — a missing mode degrades the result, it does not fail it.
+   */
+  degraded: string[];
+  hits: SearchHitWire[];
+  /**
+   * Modes that actually ran.
+   */
+  modes_run: string[];
+}
+/**
+ * One ranked hit — mirrors `valyria_search::SearchHit`.
+ */
+export interface SearchHitWire {
+  explanation: ScoreExplanationWire;
+  line?: number | null;
+  path: string;
+  score: number;
+  snippet?: string | null;
+  symbol_path?: string | null;
+}
+/**
+ * The full derivation of a hit's score — mirrors `valyria_search::ScoreExplanation`.
+ */
+export interface ScoreExplanationWire {
+  features: SearchFeatureWire[];
+  retrieval_paths: string[];
+  stage_scores: SearchStageScoreWire[];
+}
+/**
+ * One reranking feature and its weighted contribution — mirrors `valyria_search::Feature`. The features of a hit sum *exactly* to its `score` (§14: "why this file?" answered from stored data).
+ */
+export interface SearchFeatureWire {
+  contribution: number;
+  name: string;
+  value: number;
+  weight: number;
+}
+/**
+ * How one retrieval mode ranked a hit before fusion — mirrors `valyria_search::StageScore`.
+ */
+export interface SearchStageScoreWire {
+  mode: string;
+  rank: number;
+  raw_score: number;
+}
+export interface IndexStatusResponse {
+  /**
+   * When the current generation was published, unix milliseconds.
+   */
+  created_at_ms?: number | null;
+  file_count: number;
+  /**
+   * `None` when the workspace has never been indexed.
+   */
+  generation?: number | null;
+  /**
+   * `files` | `complete` (the generation's `GenerationStage`).
+   */
+  stage?: string | null;
+  symbol_count: number;
+}
+/**
+ * Mirrors `valyria_hardware::HardwareReport` (§37, §39).
+ */
+export interface HardwareProbeResponse {
+  /**
+   * `Some(false)` = probed and absent; `None` = not probed on this platform yet.
+   */
+  accelerator_present?: boolean | null;
+  arch: string;
+  cpu: CpuInfoWire;
+  disk_available_bytes: number;
+  disk_total_bytes: number;
+  gpus: GpuInfoWire[];
+  os: string;
+  os_version?: string | null;
+  ram_available_bytes: number;
+  ram_total_bytes: number;
+  /**
+   * CPU and GPU share one memory pool (Apple Silicon today).
+   */
+  unified_memory: boolean;
+}
+/**
+ * Mirrors `valyria_hardware::CpuInfo`.
+ */
+export interface CpuInfoWire {
+  arch: string;
+  brand: string;
+  logical_cores: number;
+  physical_cores: number;
+}
+/**
+ * Mirrors `valyria_hardware::GpuInfo`. `vram_bytes` is `None` on a unified-memory system — meaningful, not missing.
+ */
+export interface GpuInfoWire {
+  core_count?: number | null;
+  name: string;
+  vendor?: string | null;
+  vram_bytes?: number | null;
+}
+export interface ModelRecommendResponse {
+  /**
+   * Every candidate for the role, best first (non-fitting ones sorted last).
+   */
+  candidates: ModelCandidateWire[];
+  /**
+   * The best-scoring fitting candidate, if any.
+   */
+  recommended?: ModelCandidateWire | null;
+  role: string;
+}
+/**
+ * One scored candidate for a role on this machine — mirrors `valyria_model_registry::CardScore` joined with its card. A card that will not fit is still listed, with `fit_kind = "will_not_fit"` and no `adjusted_score`.
+ */
+export interface ModelCandidateWire {
+  /**
+   * `suitability` minus the tight-fit penalty — the value Core ranks on. `None` when the card will not fit.
+   */
+  adjusted_score?: number | null;
+  display_name: string;
+  family: string;
+  /**
+   * For `tight`, the estimated resource utilisation (0.0..~1.0); for `will_not_fit`, the reason (`insufficient_ram` | `insufficient_vram`).
+   */
+  fit_detail?: string | null;
+  /**
+   * `comfortable` | `tight` | `will_not_fit`.
+   */
+  fit_kind: string;
+  id: string;
+  installed: boolean;
+  license_name: string;
+  size_bytes: number;
+  /**
+   * Catalog role suitability, 0..=100.
+   */
+  suitability: number;
+}
+export interface ModelRemoveResponse {
+  freed_bytes: number;
+}
+/**
+ * Full detail for one model — mirrors the `ModelCard` plus, when installed, its `manifest.json` (§4.21). `license_text` is the license body when Core has it locally, for the acceptance prompt.
+ */
+export interface ModelInspectResponse {
+  /**
+   * The roles this model is currently bound to.
+   */
+  active_roles: string[];
+  context_length: number;
+  display_name: string;
+  family: string;
+  id: string;
+  installed: boolean;
+  /**
+   * Present only when installed.
+   */
+  installed_at_ms?: number | null;
+  license_name: string;
+  license_url?: string | null;
+  parameters_b: number;
+  /**
+   * Measured decode throughput from the post-install probe, if recorded.
+   */
+  probe_tokens_per_sec?: number | null;
+  quantization: string;
+  size_bytes: number;
+  source_url: string;
+}
+export interface LedgerChangesResponse {
+  /**
+   * One row per agent-touched path, path-ordered.
+   */
+  changes: LedgerChangeWire[];
+}
+export interface LedgerChangeWire {
+  /**
+   * `agent_authored` | `pre_existing` | `concurrent_user_modification` | `unknown` — computed against the file's on-disk state now.
+   */
+  classification: string;
+  /**
+   * `write` | `delete` — the agent's most recent action on the path.
+   */
+  kind: string;
+  path: string;
+  step_id: string;
+  task_id: string;
+  tool_invocation_id?: string | null;
 }
 /**
  * Mirrors `valyria_types::CodedError` at the wire boundary — every `ErrorCode`-implementing error in the runtime reduces to this shape before crossing the protocol, matching §3's "errors that reach the model [and the client] are converted through a redaction pass first" convention (redaction itself is a later phase; the shape is stable now).

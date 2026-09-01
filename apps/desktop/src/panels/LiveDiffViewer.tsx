@@ -9,10 +9,21 @@ import { changedFilesForTask, currentTask } from "@valyria/state";
 import { repo, type GitEntry } from "../core/repo";
 import { useApp } from "../state/store";
 import { useLive } from "../core/liveStore";
+import { bridge, type LedgerChange } from "../core/bridge";
 import { appEditorTheme, countDiffLines, languageFor } from "../core/cm";
 import { present } from "../core/errors";
 import ServedLocally from "../components/ServedLocally";
 import ErrorState from "../components/ErrorState";
+
+/** CORE-INTERFACE G8 — Core's change ledger classifies every touched path.
+ *  The app renders the classification; it never guesses ownership from
+ *  file-touch order. */
+const OWNERSHIP_META: Record<string, { label: string; badge: string }> = {
+  agent_authored: { label: "agent", badge: "badge--agent" },
+  pre_existing: { label: "pre-existing", badge: "badge--existing" },
+  concurrent_user_modification: { label: "you (concurrent)", badge: "badge--user" },
+  unknown: { label: "unclassified", badge: "badge--neutral" },
+};
 
 interface Loaded {
   path: string;
@@ -25,9 +36,11 @@ interface Loaded {
 
 /** The Phase 4 diff viewer (docs/PLAN.md §4.8): CodeMirror 6 unified merge view,
  *  intra-line highlighting, next/previous change navigation, a changed-file
- *  rail. Served locally from `git` until Core exposes a diff surface (G3); the
- *  ownership column reads "unavailable" because Core's ledger is not on the
- *  wire (G8) — the app never guesses ownership from file-touch order. */
+ *  rail. The diff bytes are still served locally from `git` (read-only), but the
+ *  ownership column now comes from Core's change ledger (`ledger_changes`, G8):
+ *  agent-authored / pre-existing / concurrent-user, straight from Core — the app
+ *  never infers it from touch order. A path with no ledger entry (e.g. one you
+ *  edited outside a task) shows "not classified". */
 export default function LiveDiffViewer() {
   const selectedFile = useApp((s) => s.selectedFile);
   const setSelectedFile = useApp((s) => s.setSelectedFile);
@@ -40,17 +53,43 @@ export default function LiveDiffViewer() {
   const [entries, setEntries] = useState<GitEntry[]>([]);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ledger, setLedger] = useState<Map<string, LedgerChange>>(new Map());
 
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
 
+  const effectiveTask = store.tasks[selectedTaskId] ?? currentTask(store);
+  const effectiveTaskId = effectiveTask?.id ?? null;
+  const taskLastSeq = effectiveTask?.lastSeq ?? 0;
+
   // Paths the current task touched — annotated on the rail, never used to
   // filter (the reviewer still sees every uncommitted change).
   const agentPaths = useMemo(() => {
-    const task = store.tasks[selectedTaskId] ?? currentTask(store);
-    if (!task) return new Set<string>();
-    return new Set(changedFilesForTask(store, task.id).map((f) => f.path));
-  }, [store, selectedTaskId]);
+    if (!effectiveTaskId) return new Set<string>();
+    return new Set(changedFilesForTask(store, effectiveTaskId).map((f) => f.path));
+  }, [store, effectiveTaskId]);
+
+  // G8: Core's change ledger for the selected task — the authoritative
+  // per-path ownership. Re-fetched as the task advances.
+  useEffect(() => {
+    if (!effectiveTaskId) {
+      setLedger(new Map());
+      return;
+    }
+    let cancelled = false;
+    bridge
+      .ledgerChanges(effectiveTaskId)
+      .then((r) => {
+        if (cancelled) return;
+        const m = new Map<string, LedgerChange>();
+        for (const c of r.changes) m.set(c.path, c);
+        setLedger(m);
+      })
+      .catch(() => !cancelled && setLedger(new Map()));
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveTaskId, taskLastSeq]);
 
   // The changed-file rail: uncommitted changes, agent-touched first.
   useEffect(() => {
@@ -173,7 +212,7 @@ export default function LiveDiffViewer() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <ServedLocally detail="git diff · read-only · ownership unavailable (G8)" />
+      <ServedLocally detail="diff bytes local (Core exposes no blob read) · ownership from Core's ledger (G8)" />
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <div
           role="listbox"
@@ -198,11 +237,16 @@ export default function LiveDiffViewer() {
                 background: f.path === selectedFile ? "var(--bg-active)" : "transparent",
               }}
             >
-              {agentPaths.has(f.path) ? (
-                <Bot size={11} style={{ color: "var(--own-agent)", flexShrink: 0 }} aria-label="touched by the agent" />
-              ) : (
-                <FileDiff size={11} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
-              )}
+              {(() => {
+                const cls = ledger.get(f.path)?.classification;
+                if (cls === "agent_authored")
+                  return <Bot size={11} style={{ color: "var(--own-agent)", flexShrink: 0 }} aria-label="agent-authored (Core ledger)" />;
+                if (cls === "concurrent_user_modification")
+                  return <FileDiff size={11} style={{ color: "var(--own-user)", flexShrink: 0 }} aria-label="modified by you during the task (Core ledger)" />;
+                if (agentPaths.has(f.path))
+                  return <Bot size={11} style={{ color: "var(--own-agent)", flexShrink: 0 }} aria-label="touched by the agent" />;
+                return <FileDiff size={11} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />;
+              })()}
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, fontSize: 11.5 }}>
                 {f.path.split("/").pop()}
               </span>
@@ -219,12 +263,28 @@ export default function LiveDiffViewer() {
             <span style={{ fontSize: "var(--text-sm)", fontFamily: "var(--font-mono)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {loaded?.path ?? "—"}
             </span>
-            <span
-              className="badge badge--neutral"
-              title="Agent / user / pre-existing attribution needs Core's change ledger, which v1 does not expose on the wire (CORE-INTERFACE G8)."
-            >
-              ownership unavailable
-            </span>
+            {(() => {
+              const entry = loaded ? ledger.get(loaded.path) : undefined;
+              const meta = entry ? OWNERSHIP_META[entry.classification] ?? OWNERSHIP_META.unknown : null;
+              if (!meta) {
+                return (
+                  <span
+                    className="badge badge--neutral"
+                    title="Core's change ledger has no entry for this path — it was not touched inside a task."
+                  >
+                    not classified
+                  </span>
+                );
+              }
+              return (
+                <span
+                  className={`badge ${meta.badge}`}
+                  title={`Core's change ledger classifies ${loaded?.path} as ${entry!.classification} (${entry!.kind}${entry!.step_id ? `, step ${entry!.step_id}` : ""}).`}
+                >
+                  {meta.label}
+                </span>
+              );
+            })()}
             {loaded && (
               <span style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}>
                 <span style={{ color: "var(--diff-add-text)" }}>+{loaded.added}</span>{" "}

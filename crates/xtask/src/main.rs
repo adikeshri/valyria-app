@@ -188,9 +188,61 @@ fn check_protocol(repo: &Path) -> Result<(), String> {
         }
     }
 
+    // Per-kind payload contracts (G12): every `events/<kind>.schema.json` must
+    // match Core's byte-for-byte, the file sets must be equal, and every
+    // contract's kind must be a real event kind. A Core payload-shape change
+    // that is not re-vendored fails here.
+    {
+        let v_dir = vendored.join("events");
+        let c_dir = sibling.join("events");
+        let list = |d: &Path| -> Vec<String> {
+            let mut v: Vec<String> = std::fs::read_dir(d)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter_map(|e| e.file_name().into_string().ok())
+                .filter(|n| n.ends_with(".schema.json"))
+                .collect();
+            v.sort();
+            v
+        };
+        let v_files = list(&v_dir);
+        let c_files = list(&c_dir);
+        if v_files != c_files {
+            mismatches.push(format!(
+                "events/ file set (vendored {v_files:?} vs Core {c_files:?})"
+            ));
+        }
+        for name in v_files.iter().filter(|n| c_files.contains(n)) {
+            let a = std::fs::read_to_string(v_dir.join(name))
+                .map_err(|e| format!("reading vendored events/{name}: {e}"))?;
+            let b = std::fs::read_to_string(c_dir.join(name))
+                .map_err(|e| format!("reading ../valyria events/{name}: {e}"))?;
+            if a != b {
+                mismatches.push(format!("events/{name}"));
+            }
+        }
+    }
+
     // Event-kind coverage (D5 / G12): the vendored kind list must equal the
     // string literals in Core's `valyria_events::EventKind::as_str`.
     let vendored_kinds = read_lines_sorted(&vendored.join("event-kinds.txt"))?;
+
+    // Every per-kind payload contract names a kind that actually exists.
+    for name in std::fs::read_dir(vendored.join("events"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+    {
+        if let Some(stem) = name.strip_suffix(".schema.json") {
+            if !vendored_kinds.iter().any(|k| k == stem) {
+                mismatches.push(format!(
+                    "events/{name} has no matching kind in event-kinds.txt"
+                ));
+            }
+        }
+    }
     let core_kind_rs = repo
         .parent()
         .unwrap()

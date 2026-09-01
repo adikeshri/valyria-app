@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Check, AlertTriangle, XCircle, HelpCircle } from "lucide-react";
-import { bridge, type ConfigEntry, type DoctorCheck } from "../core/bridge";
+import { Check, AlertTriangle, XCircle, HelpCircle, ShieldCheck } from "lucide-react";
+import { bridge, type ConfigEntry, type DoctorCheck, type SessionInfo } from "../core/bridge";
 import { present } from "../core/errors";
 import ErrorState from "./ErrorState";
 
@@ -11,15 +11,17 @@ import ErrorState from "./ErrorState";
 export default function LiveSecurityOverview() {
   const [checks, setChecks] = useState<DoctorCheck[] | null>(null);
   const [entries, setEntries] = useState<ConfigEntry[] | null>(null);
+  const [session, setSession] = useState<SessionInfo | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([bridge.doctorRun(), bridge.configShow()])
-      .then(([d, c]) => {
+    Promise.all([bridge.doctorRun(), bridge.configShow(), bridge.sessionStatus()])
+      .then(([d, c, s]) => {
         if (cancelled) return;
         setChecks(d.checks);
         setEntries(c.entries);
+        setSession(s);
       })
       .catch((e) => !cancelled && setErr(String(e)));
     return () => {
@@ -49,6 +51,34 @@ export default function LiveSecurityOverview() {
         policy values. Rows Core does not report are marked, not guessed.
       </p>
 
+      <div style={{ padding: 14, background: "var(--bg-sunken)", borderRadius: 8, marginBottom: 12 }}>
+        <div className="section-label" style={{ marginBottom: 6 }}>Client ↔ Core connection</div>
+        <div style={{ display: "flex", gap: 8, padding: "6px 0", fontSize: "var(--text-sm)" }}>
+          <span style={{ flexShrink: 0, marginTop: 1 }}>
+            {session?.authenticated ? (
+              <ShieldCheck size={14} style={{ color: "var(--success)" }} />
+            ) : (
+              <AlertTriangle size={14} style={{ color: "var(--warning)" }} />
+            )}
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <div>
+              {session?.authenticated
+                ? "Authenticated — every frame carries this session's per-instance token (G10)"
+                : session
+                  ? "Unauthenticated — Core for this workspace was started without a token; connection is guarded only by the socket's file permissions and peer-uid check"
+                  : "No session open"}
+            </div>
+            {session && (
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                Peer-uid checked by Core · {session.origin} daemon · socket{" "}
+                <code style={{ fontFamily: "var(--font-mono)" }}>{session.socket_path}</code>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div style={{ padding: 14, background: "var(--bg-sunken)", borderRadius: 8 }}>
         <div className="section-label" style={{ marginBottom: 6 }}>Environment checks (Core-enforced)</div>
         {[...security, ...other].map((c) => (
@@ -70,8 +100,9 @@ export default function LiveSecurityOverview() {
       )}
 
       <p style={{ fontSize: 10.5, color: "var(--text-tertiary)", marginTop: 12 }}>
-        The app connects to Core over a Unix socket it cannot yet authenticate (CORE-INTERFACE G10). Confinement is
-        the socket's file permissions.
+        The socket is peer-uid restricted by Core (only the user that started the daemon may connect), and this
+        session also authenticates every frame with a per-daemon token written <code>0600</code> at spawn
+        (CORE-INTERFACE G10).
       </p>
     </div>
   );

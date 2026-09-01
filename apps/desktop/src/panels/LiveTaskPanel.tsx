@@ -3,7 +3,7 @@ import {
   CheckCircle2, Circle, CircleDot, Clock, FileDiff, ShieldCheck, Pause, Play, X,
   Undo2, Bookmark,
 } from "lucide-react";
-import { currentTask, eventsForTask, type EventRow } from "@valyria/state";
+import { checkpointIdsForTask, currentTask, eventsForTask, type EventRow } from "@valyria/state";
 import { useLive } from "../core/liveStore";
 import { useApp } from "../state/store";
 import { bridge, type PlanGet, type RollbackResult, type TaskReport } from "../core/bridge";
@@ -103,7 +103,7 @@ export default function LiveTaskPanel() {
         </Section>
 
         <Section title="Rollback">
-          <RollbackSection task={task} plan={plan} />
+          <RollbackSection task={task} plan={plan} checkpointIds={checkpointIdsForTask(store, task.id)} />
         </Section>
 
         <Section title={`Modified files (${changedFiles.length})`}>
@@ -155,29 +155,45 @@ export default function LiveTaskPanel() {
  *  app never computes a partial revert. The confirmation states what Core will
  *  do; the result is reported exactly.
  *
- *  Constraint (CORE-INTERFACE G13): v1 exposes no `checkpoint_id` — `task_plan`
- *  reports only `checkpoint: bool` per step and no event carries the id. So the
- *  per-step buttons are disabled with that reason, and the only working entry
- *  is the advanced "by id" path (for a developer who has one from Core's logs,
- *  or once Core emits a `plan_checkpoint` event). */
-function RollbackSection({ task, plan }: { task: { id: string; state: string }; plan: PlanGet | null }) {
+ *  G13: a checkpoint id is now discoverable — `task_plan` reports `checkpoint_id`
+ *  per step, and Core emits a `plan_checkpoint` event (`{ checkpoint_id,
+ *  step_id }`) live. Each boundary step whose id is known gets a working
+ *  per-step "Roll back" button; a boundary Core has not checkpointed yet stays
+ *  disabled with that reason. The advanced "by id" path remains for a hand-held
+ *  id. */
+function RollbackSection({
+  task,
+  plan,
+  checkpointIds,
+}: {
+  task: { id: string; state: string };
+  plan: PlanGet | null;
+  checkpointIds: Record<string, string>;
+}) {
   const rollbackTask = useLive((s) => s.rollbackTask);
   const boundaries = (plan?.steps ?? []).filter((s) => s.checkpoint || s.rollback_boundary);
 
   const [advOpen, setAdvOpen] = useState(false);
-  const [ckptId, setCkptId] = useState("");
-  const [confirming, setConfirming] = useState(false);
+  const [advId, setAdvId] = useState("");
+  // The checkpoint id the confirm dialog is armed for (from a step row or the
+  // advanced input); null when nothing is pending.
+  const [pending, setPending] = useState<{ id: string; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<RollbackResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  function idForStep(step: PlanGet["steps"][number]): string | null {
+    return step.checkpoint_id ?? checkpointIds[step.id] ?? null;
+  }
+
   async function doRollback() {
+    if (!pending) return;
     setBusy(true);
     setError(null);
     setResult(null);
-    const r = await rollbackTask(task.id, ckptId.trim());
+    const r = await rollbackTask(task.id, pending.id);
     setBusy(false);
-    setConfirming(false);
+    setPending(null);
     if (r) setResult(r);
     else setError(useLive.getState().error ?? "[bridge.protocol.error] rollback was refused");
   }
@@ -190,21 +206,34 @@ function RollbackSection({ task, plan }: { task: { id: string; state: string }; 
         </p>
       ) : (
         <ol style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-          {boundaries.map((s, i) => (
-            <li key={s.id || i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Bookmark size={13} style={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
-              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {s.intent}
-              </span>
-              <button
-                className="btn btn--sm"
-                disabled
-                title="Core v1 exposes no checkpoint id on the wire (CORE-INTERFACE G13). Use the advanced path below, or wait for Core to emit a plan_checkpoint event."
-              >
-                <Undo2 size={12} /> Roll back
-              </button>
-            </li>
-          ))}
+          {boundaries.map((s, i) => {
+            const ckptId = idForStep(s);
+            return (
+              <li key={s.id || i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Bookmark size={13} style={{ color: ckptId ? "var(--accent)" : "var(--text-tertiary)", flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {s.intent}
+                  {ckptId && (
+                    <span style={{ color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontSize: 10, marginLeft: 6 }}>
+                      {ckptId}
+                    </span>
+                  )}
+                </span>
+                <button
+                  className="btn btn--sm"
+                  disabled={!ckptId || busy}
+                  title={
+                    ckptId
+                      ? `Roll the workspace back to the checkpoint taken at "${s.intent}".`
+                      : "Core has not recorded a checkpoint id for this step yet (it arrives on task_plan or a plan_checkpoint event, G13)."
+                  }
+                  onClick={() => ckptId && setPending({ id: ckptId, label: s.intent })}
+                >
+                  <Undo2 size={12} /> Roll back
+                </button>
+              </li>
+            );
+          })}
         </ol>
       )}
 
@@ -223,59 +252,60 @@ function RollbackSection({ task, plan }: { task: { id: string; state: string }; 
             Checkpoint id (<code style={{ fontFamily: "var(--font-mono)" }}>ckpt_…</code>)
           </label>
           <input
-            value={ckptId}
-            onChange={(e) => setCkptId(e.target.value)}
+            value={advId}
+            onChange={(e) => setAdvId(e.target.value)}
             placeholder="ckpt_01J…"
             className="no-native-focus"
             style={{ width: "100%", fontFamily: "var(--font-mono)", fontSize: 12, padding: "5px 7px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--bg-sunken)" }}
           />
-          {!confirming ? (
-            <button
-              className="btn btn--sm btn--danger"
-              style={{ marginTop: 8 }}
-              disabled={!ckptId.trim() || busy}
-              onClick={() => setConfirming(true)}
-            >
-              <Undo2 size={12} /> Roll back…
-            </button>
-          ) : (
-            <div style={{ marginTop: 8, padding: 10, background: "var(--bg-sunken)", borderRadius: 6 }}>
-              <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>
-                Core will restore the files checkpointed at{" "}
-                <strong style={{ fontFamily: "var(--font-mono)" }}>{ckptId.trim()}</strong> and{" "}
-                <strong>refuse</strong> if any of them changed since — by you or the agent. This cannot be undone from the app.
-              </p>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button className="btn btn--sm btn--danger" disabled={busy} onClick={() => void doRollback()}>
-                  {busy ? "Rolling back…" : "Confirm rollback"}
-                </button>
-                <button className="btn btn--sm" disabled={busy} onClick={() => setConfirming(false)}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+          <button
+            className="btn btn--sm btn--danger"
+            style={{ marginTop: 8 }}
+            disabled={!advId.trim() || busy}
+            onClick={() => setPending({ id: advId.trim(), label: advId.trim() })}
+          >
+            <Undo2 size={12} /> Roll back…
+          </button>
+        </div>
+      )}
 
-          {result && (
-            <div style={{ marginTop: 10, fontSize: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--success)" }}>
-                <CheckCircle2 size={13} /> Reverted {result.reverted_entries} ledger{" "}
-                {result.reverted_entries === 1 ? "entry" : "entries"}.
-              </div>
-              {result.restored_files.length > 0 && (
-                <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
-                  {result.restored_files.map((f) => (
-                    <li key={f}>{f}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
+      {pending && (
+        <div style={{ marginTop: 10, padding: 10, background: "var(--bg-sunken)", borderRadius: 6 }}>
+          <p style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>
+            Core will restore the files checkpointed at{" "}
+            <strong style={{ fontFamily: "var(--font-mono)" }}>{pending.id}</strong>
+            {pending.label !== pending.id && <> (&ldquo;{pending.label}&rdquo;)</>} and{" "}
+            <strong>refuse</strong> if any of them changed since — by you or the agent. This cannot be undone from the app.
+          </p>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="btn btn--sm btn--danger" disabled={busy} onClick={() => void doRollback()}>
+              {busy ? "Rolling back…" : "Confirm rollback"}
+            </button>
+            <button className="btn btn--sm" disabled={busy} onClick={() => setPending(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <div style={{ marginTop: 10, fontSize: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--success)" }}>
+            <CheckCircle2 size={13} /> Reverted {result.reverted_entries} ledger{" "}
+            {result.reverted_entries === 1 ? "entry" : "entries"}.
+          </div>
+          {result.restored_files.length > 0 && (
+            <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
+              {result.restored_files.map((f) => (
+                <li key={f}>{f}</li>
+              ))}
+            </ul>
           )}
-          {error && (
-            <div style={{ marginTop: 10 }}>
-              <ErrorState presentation={present(error, { context: "Rolling back" })} compact />
-            </div>
-          )}
+        </div>
+      )}
+      {error && (
+        <div style={{ marginTop: 10 }}>
+          <ErrorState presentation={present(error, { context: "Rolling back" })} compact />
         </div>
       )}
     </div>

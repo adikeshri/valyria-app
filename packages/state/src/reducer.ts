@@ -11,6 +11,7 @@ import {
   type StoreState,
   type TaskProjection,
   type TaskState,
+  type FailureProjection,
   type TestProjection,
   type TestRunProjection,
 } from "./store.js";
@@ -180,6 +181,7 @@ function foldTestRun(
         : typeof p.outcome === "string"
           ? p.outcome
           : null,
+    failures: parseFailures(p.failures),
     seq: ev.seq,
   };
 
@@ -188,6 +190,36 @@ function foldTestRun(
   if (at === -1) runs.push(run);
   else runs[at] = run;
   return { taskId: ev.taskId as string, runs };
+}
+
+/** G15: Core's `failures[]` — `{ kind, message, failing_test, location[] }` —
+ *  into `FailureProjection[]`. Loose by design (D5): a non-array or malformed
+ *  entry degrades to fewer fields, never a throw. */
+function parseFailures(raw: unknown): FailureProjection[] {
+  if (!Array.isArray(raw)) return [];
+  const out: FailureProjection[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const f = item as Record<string, unknown>;
+    const locsRaw = Array.isArray(f.location) ? f.location : [];
+    const locations: { path: string; line: number | null }[] = [];
+    for (const l of locsRaw) {
+      if (!l || typeof l !== "object") continue;
+      const loc = l as Record<string, unknown>;
+      if (typeof loc.path !== "string") continue;
+      locations.push({
+        path: loc.path,
+        line: typeof loc.line === "number" ? loc.line : null,
+      });
+    }
+    out.push({
+      kind: typeof f.kind === "string" ? f.kind : null,
+      message: typeof f.message === "string" ? f.message : null,
+      failingTest: typeof f.failing_test === "string" ? f.failing_test : null,
+      locations,
+    });
+  }
+  return out;
 }
 
 function advanceTask(

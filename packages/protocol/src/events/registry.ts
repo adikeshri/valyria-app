@@ -19,8 +19,8 @@
 
 import { z } from "zod";
 
-/** The 21 event kinds `valyria_events::EventKind` emits today. Keep sorted and
- *  in sync with `schemas/event-kinds.txt`. */
+/** The event kinds `valyria_events::EventKind` emits (protocol 1.9.0). Keep
+ *  sorted and in sync with `schemas/event-kinds.txt`. */
 export const KNOWN_EVENT_KINDS = [
   "approval_requested",
   "context_retrieved",
@@ -28,7 +28,11 @@ export const KNOWN_EVENT_KINDS = [
   "file_changed",
   "memory_written",
   "model_completed",
+  "model_install_completed",
+  "model_install_failed",
+  "model_install_progress",
   "model_started",
+  "plan_checkpoint",
   "plan_created",
   "progress_stalled",
   "resource_pressure",
@@ -65,6 +69,8 @@ const anyObj = z.object({}).passthrough();
 const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
   approval_requested: z
     .object({
+      // G2: stable id to pass back to permission_resolve.
+      request_id: s.optional(),
       prompt: s.optional(),
       tool: s.optional(),
       category: s.optional(),
@@ -74,10 +80,41 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
     .passthrough(),
   context_retrieved: z
     .object({
-      items: z.array(z.unknown()).optional(),
+      items: z
+        .array(
+          z
+            .object({
+              path: s.optional(),
+              reason: s.optional(),
+              trust_level: s.optional(),
+              tokens: z.number().optional(),
+              score: z.number().nullable().optional(),
+            })
+            .passthrough(),
+        )
+        .optional(),
       budget_used: z.number().optional(),
       budget_total: z.number().optional(),
     })
+    .passthrough(),
+  // G13: { checkpoint_id, step_id } — lets a client learn a rollback id live.
+  plan_checkpoint: z
+    .object({ checkpoint_id: s.optional(), step_id: s.optional() })
+    .passthrough(),
+  // G5: model install progress / terminal.
+  model_install_progress: z
+    .object({
+      id: s.optional(),
+      phase: s.optional(),
+      downloaded_bytes: z.number().optional(),
+      total_bytes: z.number().optional(),
+    })
+    .passthrough(),
+  model_install_completed: z
+    .object({ id: s.optional(), size_bytes: z.number().optional() })
+    .passthrough(),
+  model_install_failed: z
+    .object({ id: s.optional(), code: s.optional(), message: s.optional() })
     .passthrough(),
   external_change_detected: z
     .object({ paths: z.array(s).optional() })
@@ -120,6 +157,20 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
       failure_count: z.number().optional(),
       run_id: s.optional(),
       digest: s.optional(),
+      failures: z
+        .array(
+          z
+            .object({
+              kind: s.optional(),
+              message: s.optional(),
+              failing_test: s.nullable().optional(),
+              location: z
+                .array(z.object({ path: s.optional(), line: z.number().nullable().optional() }).passthrough())
+                .optional(),
+            })
+            .passthrough(),
+        )
+        .optional(),
       summary: s.optional(),
     })
     .passthrough(),
@@ -147,7 +198,13 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
     .object({
       tool: s.optional(),
       success: z.boolean().optional(),
+      // G14: pairs with tool_started; structured fields alongside `rendered`.
       tool_invocation_id: s.optional(),
+      tool_record_id: s.optional(),
+      exit_code: z.number().nullable().optional(),
+      stdout: s.nullable().optional(),
+      stderr: s.nullable().optional(),
+      duration_ms: z.number().optional(),
       rendered: s.optional(),
     })
     .passthrough(),
@@ -158,6 +215,8 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
   tool_started: z
     .object({
       tool: s.optional(),
+      // G14: matches the tool_completed id.
+      tool_invocation_id: s.optional(),
       input: z
         .union([
           z
@@ -182,6 +241,20 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
       failure_count: z.number().optional(),
       run_id: s.optional(),
       digest: s.optional(),
+      failures: z
+        .array(
+          z
+            .object({
+              kind: s.optional(),
+              message: s.optional(),
+              failing_test: s.nullable().optional(),
+              location: z
+                .array(z.object({ path: s.optional(), line: z.number().nullable().optional() }).passthrough())
+                .optional(),
+            })
+            .passthrough(),
+        )
+        .optional(),
     })
     .passthrough(),
 };

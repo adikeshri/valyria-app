@@ -48,8 +48,12 @@ pub const CLIENT_NAME: &str = "valyria-app";
 pub async fn negotiate(
     socket_path: &std::path::Path,
     expected_protocol: &str,
+    auth_token: Option<&str>,
 ) -> Result<NegotiatedSession> {
-    let client = SocketClient::new(socket_path);
+    let client = match auth_token {
+        Some(token) => SocketClient::with_token(socket_path, token),
+        None => SocketClient::new(socket_path),
+    };
     let resp = client
         .call(Request::Hello(HelloRequest {
             client_name: CLIENT_NAME.to_string(),

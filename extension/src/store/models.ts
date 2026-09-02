@@ -10,6 +10,7 @@ import {
   activityLine,
   agentCommandsForTask,
   changedFilesForTask,
+  checkpointIdsForTask,
   checkpointsForTask,
   currentTask,
   eventsForTask,
@@ -21,6 +22,7 @@ import {
   type StoreState,
 } from "@valyria/state";
 import type {
+  AgentCommandsModel,
   ApprovalsModel,
   ChatModel,
   Connection,
@@ -28,6 +30,7 @@ import type {
   SecurityModel,
   TaskModel,
   TimelineModel,
+  VerificationModel,
 } from "../webviews/shared/protocol";
 
 /** The task the panels focus on: an explicit pick, else the most recent. */
@@ -101,12 +104,20 @@ export function chatModel(
 
 // --- Task panel ------------------------------------------------------
 
-export function taskModel(state: StoreState, focusId: string | undefined): TaskModel {
+export function taskModel(
+  state: StoreState,
+  focusId: string | undefined,
+  rollbackCapable = false
+): TaskModel {
   const id = resolveFocus(state, focusId);
   if (!id || !state.tasks[id]) {
-    return { taskId: null, objective: null, state: null, terminal: false, planSteps: [], checkpoints: [], files: [], tests: [], approval: null };
+    return {
+      taskId: null, objective: null, state: null, terminal: false,
+      planSteps: [], checkpoints: [], files: [], tests: [], approval: null,
+    };
   }
   const task = state.tasks[id]!;
+  const cpIds = checkpointIdsForTask(state, id);
 
   const planSteps: TaskModel["planSteps"] = [];
   const steps = asRecord(planFor(state, id)?.payload).steps;
@@ -130,17 +141,30 @@ export function taskModel(state: StoreState, focusId: string | undefined): TaskM
     state: task.state,
     terminal: task.terminal,
     planSteps,
-    checkpoints: checkpointsForTask(state, id).map((c) => ({
-      stepId: c.stepId,
-      intent: c.intent,
-      rollbackBoundary: c.rollbackBoundary,
-    })),
+    checkpoints: checkpointsForTask(state, id).map((c) => {
+      const checkpointId = c.stepId ? (cpIds[c.stepId] ?? null) : null;
+      return {
+        stepId: c.stepId,
+        intent: c.intent,
+        rollbackBoundary: c.rollbackBoundary,
+        checkpointId,
+        // §16 / G13: rollback needs Core's checkpoint_id and the diagnostics_v2
+        // capability. Without both the boundary is shown but the action is off.
+        rollbackReady: rollbackCapable && checkpointId !== null && !task.terminal,
+      };
+    }),
     files: changedFilesForTask(state, id).map((f) => ({ path: f.path, change: f.change })),
     tests: testResultsForTask(state, id).map((t) => ({
       command: t.command,
       outcome: t.outcome,
       summary: t.summary,
       failureCount: t.failureCount,
+      failures: t.failures.map((fl) => ({
+        kind: fl.kind,
+        message: fl.message,
+        failingTest: fl.failingTest,
+        locations: fl.locations.map((l) => ({ path: l.path, line: l.line })),
+      })),
     })),
     approval: ap
       ? {
@@ -150,6 +174,60 @@ export function taskModel(state: StoreState, focusId: string | undefined): TaskM
         }
       : null,
     agentCommandCount: agentCommandsForTask(state, id).length,
+  };
+}
+
+// --- Agent commands (§4.10, D7) ----------------------------------
+
+/** The read-only projection of shell commands the agent ran. This is the ONLY
+ *  source for this view — it never touches the integrated terminal's buffer. */
+export function agentCommandsModel(
+  state: StoreState,
+  focusId: string | undefined
+): AgentCommandsModel {
+  const id = resolveFocus(state, focusId);
+  if (!id) return { taskId: null, commands: [] };
+  return {
+    taskId: id,
+    commands: agentCommandsForTask(state, id).map((c) => ({
+      seq: c.seq,
+      program: c.program,
+      args: c.args,
+      exitCode: c.exitCode,
+      stdout: c.stdout,
+      stderr: c.stderr,
+      raw: c.raw,
+      succeeded: c.succeeded,
+      durationMs: c.durationMs,
+      pending: c.pending,
+    })),
+  };
+}
+
+// --- Verification inspector (§35, D8) --------------------------------
+
+/** Built from `task_report` (verified[] / unverified[]) — verbatim. There is no
+ *  path here to a generic "verified" state; a category with no evidence is
+ *  NOT RUN. `report` is null until the RPC has answered. */
+export function verificationModel(input: {
+  taskId: string | null;
+  report: {
+    status: string;
+    verified: { kind: string; command: string; outcome: string; run_id: string }[];
+    unverified: string[];
+  } | null;
+}): VerificationModel {
+  return {
+    taskId: input.taskId,
+    status: input.report?.status ?? null,
+    verified: (input.report?.verified ?? []).map((v) => ({
+      kind: v.kind,
+      command: v.command,
+      outcome: v.outcome,
+      runId: v.run_id,
+    })),
+    unverified: input.report?.unverified ?? [],
+    hasReport: input.report !== null,
   };
 }
 

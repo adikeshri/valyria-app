@@ -53,22 +53,60 @@ export interface ChatModel {
   canSubmit: boolean;
 }
 
+export interface FailureLoc {
+  kind: string | null;
+  message: string | null;
+  failingTest: string | null;
+  locations: { path: string; line: number | null }[];
+}
+
 export interface TaskModel {
   taskId: string | null;
   objective: string | null;
   state: string | null;
   terminal: boolean;
   planSteps: { intent: string; status: string | null; checkpoint: boolean }[];
-  checkpoints: { stepId: string | null; intent: string | null; rollbackBoundary: boolean }[];
+  checkpoints: {
+    stepId: string | null;
+    intent: string | null;
+    rollbackBoundary: boolean;
+    checkpointId: string | null;
+    rollbackReady: boolean;
+  }[];
   files: { path: string; change: string | null }[];
   tests: {
     command: string;
     outcome: "started" | "passed" | "failed";
     summary: string | null;
     failureCount: number | null;
+    failures: FailureLoc[];
   }[];
   approval: { prompt: string; tool: string | null; risk: string | null } | null;
   agentCommandCount?: number;
+}
+
+export interface AgentCommandsModel {
+  taskId: string | null;
+  commands: {
+    seq: number;
+    program: string;
+    args: string[];
+    exitCode: number | null;
+    stdout: string | null;
+    stderr: string | null;
+    raw: string | null;
+    succeeded: boolean | null;
+    durationMs: number | null;
+    pending: boolean;
+  }[];
+}
+
+export interface VerificationModel {
+  taskId: string | null;
+  status: string | null;
+  verified: { kind: string; command: string; outcome: string; runId: string }[];
+  unverified: string[];
+  hasReport: boolean;
 }
 
 export interface TimelineRow {
@@ -138,5 +176,8 @@ export const CMD = {
   /** { mode: "manual" | "assisted" | "autonomous" } */
   setAutonomy: "setAutonomy",
   refreshSecurity: "refreshSecurity",
-  openFile: "openFile", // { path: string }
+  openFile: "openFile", // { path: string, line?: number }
+  /** { checkpointId: string, intent?: string } */
+  rollbackTo: "rollbackTo",
+  refreshVerification: "refreshVerification",
 } as const;

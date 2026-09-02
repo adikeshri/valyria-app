@@ -88,6 +88,39 @@ function render(m: TaskModel): void {
     )
   );
 
+  // --- checkpoints / rollback (§16) ---
+  if (m.checkpoints.length) {
+    root.append(
+      section(
+        "Checkpoints",
+        h(
+          "ul",
+          { class: "vy-list" },
+          ...m.checkpoints.map((c) => {
+            const li = h(
+              "li",
+              { class: "task-cp" },
+              h("span", { text: c.intent ?? c.stepId ?? "(checkpoint)" }),
+              c.rollbackBoundary ? badge("rollback boundary", "muted") : null
+            );
+            if (c.rollbackReady && c.checkpointId) {
+              const b = h("button", { class: "vy-btn", type: "button" }, "Roll back to here") as HTMLButtonElement;
+              b.addEventListener("click", () =>
+                ctrl?.command(CMD.rollbackTo, { checkpointId: c.checkpointId, intent: c.intent })
+              );
+              li.append(b);
+            } else {
+              li.append(
+                h("span", { class: "vy-empty", text: c.checkpointId ? "" : "no checkpoint id — rollback unavailable" })
+              );
+            }
+            return li;
+          })
+        )
+      )
+    );
+  }
+
   // --- verification ---
   root.append(
     section(
@@ -102,7 +135,17 @@ function render(m: TaskModel): void {
                 {},
                 outcomeBadge(t.outcome),
                 h("span", { class: "vy-mono", text: t.command }),
-                t.summary ? h("span", { class: "vy-empty", text: t.summary }) : null
+                t.summary ? h("span", { class: "vy-empty", text: t.summary }) : null,
+                ...(t.failures ?? []).flatMap((f) =>
+                  f.locations.map((loc) => {
+                    const a = h("a", { href: "#", class: "task-loc vy-mono" }, `${loc.path}${loc.line ? `:${loc.line}` : ""}`);
+                    a.addEventListener("click", (e) => {
+                      e.preventDefault();
+                      ctrl?.command(CMD.openFile, { path: loc.path, line: loc.line ?? undefined });
+                    });
+                    return a;
+                  })
+                )
               )
             )
           )

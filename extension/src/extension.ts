@@ -23,6 +23,9 @@ import { TimelineViewProvider } from "./views/timeline";
 import { HistoryViewProvider } from "./views/history";
 import { ApprovalsViewProvider } from "./views/approvals";
 import { SecurityViewProvider } from "./views/security";
+import { VerificationViewProvider } from "./views/verification";
+import { AgentCommandsViewProvider } from "./views/agentCommands";
+import { FileOwnershipDecorations } from "./views/ownership";
 import { makeWebviewDispatch } from "./views/dispatch";
 import { maybePromptResume } from "./session/resume";
 import { watchApprovalNotifications } from "./session/notify";
@@ -112,15 +115,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(new StatusBar(supervisor));
 
   context.subscriptions.push(
-    watchApprovalNotifications(store, focus, supervisor, dispatch)
+    watchApprovalNotifications(store, focus, supervisor, dispatch),
+    new FileOwnershipDecorations(store, focus, supervisor, host, log)
   );
 
   const uri = context.extensionUri;
   const views: Array<[string, vscode.WebviewViewProvider]> = [
     [ChatViewProvider.viewId, new ChatViewProvider(uri, store, supervisor, focus, dispatch)],
-    [TaskViewProvider.viewId, new TaskViewProvider(uri, store, focus, dispatch)],
+    [TaskViewProvider.viewId, new TaskViewProvider(uri, store, supervisor, focus, dispatch)],
     [ActivityViewProvider.viewId, new ActivityViewProvider(uri, store, supervisor)],
     [ApprovalsViewProvider.viewId, new ApprovalsViewProvider(uri, store, supervisor, focus, dispatch)],
+    [AgentCommandsViewProvider.viewId, new AgentCommandsViewProvider(uri, store, focus)],
+    [VerificationViewProvider.viewId, new VerificationViewProvider(uri, store, focus, supervisor, host)],
     [SecurityViewProvider.viewId, new SecurityViewProvider(uri, store, supervisor, host)],
     [TimelineViewProvider.viewId, new TimelineViewProvider(uri, store)],
     [HistoryViewProvider.viewId, new HistoryViewProvider(uri, store, focus, dispatch)],

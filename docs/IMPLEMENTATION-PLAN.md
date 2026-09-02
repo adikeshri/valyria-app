@@ -439,13 +439,46 @@ security overview contains no claim not sourced from Core.
 
 ---
 
-## Phase 5 — Editor‑integrated agent surfaces
+## Phase 5 — Editor‑integrated agent surfaces  *(done)*
 
 **Goal:** the agent's work shows up *in the editor* — diff ownership,
 verification, agent commands beside the terminal, cross‑navigation — without
 the extension re‑implementing anything Code‑OSS already does.
 
-**Deliverables:**
+**Done (2026‑09‑02):**
+- **Change ownership (G8)** — `views/ownership.ts`: a
+  `FileDecorationProvider` badging `agent_authored` (`A`, purple) and
+  `concurrent_user_modification` (`!`, warning) from `ledger/changes` for the
+  focused task. `available` is false when Core lacks the `ledger` capability —
+  then **no decorations and no guessing** (D7/D8). Refreshes on focus change.
+- **`valyria.verification`** (D8) — `views/verification.ts` fetches
+  `task/report` per focused task (cached), renders `verified[]` (kind /
+  command / outcome / run_id) and `unverified[]` (each `NOT RUN`) verbatim.
+  No code path produces a generic "verified" state; "no report yet" until the
+  RPC answers, with a retry.
+- **`valyria.commands`** (D7) — `views/agentCommands.ts` +
+  `agentCommandsModel`: read‑only projection of shell commands from
+  `tool_started` / `tool_completed` (`agentCommandsForTask`), each row badged
+  `agent`, expandable to output. Never touches the integrated terminal.
+- **Rollback (§16 / G13)** — `taskModel` threads `checkpoint_id` from
+  `plan_checkpoint` events; a checkpoint is `rollbackReady` only with the id
+  **and** the `diagnostics_v2` capability **and** a non‑terminal task. The Task
+  view shows a "Roll back to here" button → a modal confirm → `task/rollback`,
+  then reports `reverted_entries` / `restored_files` exactly. Boundaries with
+  no id show disabled with the reason.
+- **Cross‑navigation** — test failures carry `location[]` (`parseFailures`);
+  the Task view renders `path:line` links that post `openFile`, and `dispatch`
+  opens the file at the line. Changed‑file paths are openable too.
+- **Bug fix** — the `npm test` glob (`test/**` → `test/*`) was recursing into
+  the symlinked `node_modules/@valyria/state/test/` and running that package's
+  suite instead of the extension's.
+- **Tests — 58 total (+8):** `phase5.test.ts` — verificationModel verbatim /
+  NOT RUN, agentCommandsModel pairing + output, `rollbackReady` gated on the
+  capability, failure `location` → `path:line`; render smoke: verification
+  claims + NOT RUN, agent‑commands `agent` badge + no posted commands, Task
+  "Roll back to here" posts `rollbackTo`.
+
+**Deliverables (original):**
 - **Change ownership (G8)** — a `FileDecorationProvider` for explorer badges +
   editor gutter decorations, sourced from `ledger_changes`. When the `ledger`
   capability is absent, the decoration is explicitly "unavailable" — **never

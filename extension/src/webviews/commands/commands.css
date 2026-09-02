@@ -1,0 +1,10 @@
+.cmd-list { display: flex; flex-direction: column; }
+.cmd-row { border-bottom: 1px solid var(--border-subtle); }
+.cmd-summary { display: flex; gap: 6px; align-items: baseline; padding: 4px 0; cursor: pointer; list-style: none; }
+.cmd-summary::-webkit-details-marker { display: none; }
+.cmd-cmd { flex: 1; overflow-wrap: anywhere; }
+.cmd-out {
+  margin: 0 0 6px; padding: 6px 8px; background: var(--code-bg);
+  border-radius: var(--radius-sm); font-size: var(--text-xs);
+  white-space: pre-wrap; max-height: 260px; overflow: auto;
+}

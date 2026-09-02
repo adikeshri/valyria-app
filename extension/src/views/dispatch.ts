@@ -85,11 +85,41 @@ export function makeWebviewDispatch(deps: DispatchDeps): (name: string, args: un
           case CMD.openFile: {
             const path = argStr(args, "path");
             if (!path) return;
+            const line = (args as Record<string, unknown>)["line"];
             const root = supervisor.session?.workspaceRoot;
-            const uri = root && !path.startsWith("/")
-              ? vscode.Uri.joinPath(vscode.Uri.file(root), path)
-              : vscode.Uri.file(path);
-            await vscode.window.showTextDocument(uri, { preview: true });
+            const uri =
+              root && !path.startsWith("/")
+                ? vscode.Uri.joinPath(vscode.Uri.file(root), path)
+                : vscode.Uri.file(path);
+            const opts: vscode.TextDocumentShowOptions = { preview: true };
+            if (typeof line === "number" && line > 0) {
+              const pos = new vscode.Position(line - 1, 0);
+              opts.selection = new vscode.Range(pos, pos);
+            }
+            await vscode.window.showTextDocument(uri, opts);
+            break;
+          }
+          case CMD.rollbackTo: {
+            const taskId = targetTask(args);
+            const checkpointId = argStr(args, "checkpointId");
+            const intent = argStr(args, "intent");
+            if (!taskId || !checkpointId) return;
+            const ok = await vscode.window.showWarningMessage(
+              `Roll back to “${intent ?? checkpointId}”? Core restores the files it recorded at this checkpoint.`,
+              { modal: true },
+              "Roll back"
+            );
+            if (ok !== "Roll back") return;
+            const r = (await host.client.request("task/rollback", { taskId, checkpointId })) as {
+              restored_files?: string[];
+              reverted_entries?: number;
+            };
+            void vscode.window.showInformationMessage(
+              `Valyria: rolled back — ${r.reverted_entries ?? 0} entr${
+                (r.reverted_entries ?? 0) === 1 ? "y" : "ies"
+              } reverted, ${(r.restored_files ?? []).length} file(s) restored.`
+            );
+            log.info(`rollback ${taskId} -> ${checkpointId}: ${JSON.stringify(r)}`);
             break;
           }
           default:

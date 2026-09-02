@@ -75,14 +75,20 @@
           "visibility": "collapsed"
         },
         {
-          "id": "valyria.security",
-          "name": "Security & autonomy",
+          "id": "valyria.commands",
+          "name": "Agent Commands",
           "type": "webview",
           "visibility": "collapsed"
         },
         {
           "id": "valyria.verification",
           "name": "Verification",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.security",
+          "name": "Security & autonomy",
           "type": "webview",
           "visibility": "collapsed"
         }
@@ -179,7 +185,7 @@
     "watch": "node esbuild.mjs --watch",
     "check": "tsc --noEmit -p ./",
     "typecheck": "tsc --noEmit -p ./",
-    "test": "node --import tsx --test \"test/**/*.test.ts\""
+    "test": "node --import tsx --test \"test/*.test.ts\""
   },
   "dependencies": {
     "@valyria/protocol": "file:../packages/protocol",

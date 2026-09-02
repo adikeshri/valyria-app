@@ -289,12 +289,63 @@ stable snapshot; removing a decoder fails CI.
 
 ---
 
-## Phase 3 — Agent Chat, Task, Activity, Timeline, History
+## Phase 3 — Agent Chat, Task, Activity, Timeline, History  *(done; live visual pass still pending a Core binary)*
 
 **Goal:** a fake‑model task is legible end‑to‑end with no raw JSON on the
 happy path. Port the `Live*` panels from `apps/desktop/src/panels/`.
 
-**Deliverables:**
+**Done (2026‑09‑02):**
+- **View‑model builders** — `extension/src/store/models.ts`: pure
+  `(StoreState, focusedTaskId, connection)` → `ChatModel` / `TaskModel` /
+  `TimelineModel` / `HistoryModel`, all assembled from `@valyria/state`
+  selectors (`eventsForTask`, `planFor`, `changedFilesForTask`,
+  `testResultsForTask`, `checkpointsForTask`, `pendingApprovalFor`,
+  `timelineRows`, `tasksByRecency`, `activityLine`). No `vscode`, no clock.
+- **`valyria.chat`** — composer (`Cmd/Ctrl‑Enter` or button → `createTask`),
+  disabled unless Core is ready and nothing is in flight; transcript = a
+  curated projection of the focused task's events via `activityLine` (objective
+  leads as the "you" turn when Core sends one); `working` / `blocked` /
+  `completed` / `failed` status pill.
+- **`valyria.task`** — objective + state badge, a surfaced pending approval
+  (prompt / tool / risk), the plan with per‑step status + `checkpoint`
+  markers, changed‑file rail, verification list (`NOT RUN` when empty — D8),
+  agent‑command count, and Pause/Resume/Cancel while non‑terminal.
+- **`valyria.activity`** — already narrative from Phase 2; now on the shared
+  runtime, oldest→newest, with the honest degraded‑event count.
+- **`valyria.timeline`** — every event newest‑first, each a `<details>` row
+  expanding to the decoded payload as pretty JSON; degraded rows tagged `raw`;
+  open rows persisted via `setState`.
+- **`valyria.history`** — `tasksByRecency` grouped by ISO day; a row click
+  posts `focusTask`, which pins `TaskFocus` and re‑models every panel.
+- **`TaskFocus`** (`src/session/focus.ts`) — the pinned‑vs‑most‑recent task the
+  panels show; cleared on a fresh session.
+- **`makeWebviewDispatch`** (`src/views/dispatch.ts`) — the single place
+  webview intents (`createTask` / `pause|resume|cancelTask` / `focusTask` /
+  `resolveApproval`) become bridge calls.
+- **Resume‑on‑launch** (`src/session/resume.ts`) — once events have hydrated a
+  fresh session, `activeTasks()` non‑empty → a Resume / Inspect / Discard
+  prompt; Inspect pins the task and reveals the Task view; Discard confirms
+  then `task/cancel`. Fires once per session.
+- **Shared render toolkit** — `src/webviews/shared/render.ts` (`h`, `section`,
+  `badge`, `empty`, `connBanner`, `stateLabel`) + `.vy-*` component styles
+  appended to `tokens.css`. Two more collapsed views (`timeline`, `history`)
+  added to `package.json`.
+- **Tests — 43 total (+17):**
+  `models.test.ts` (12): trace replay → objective leads the transcript, no
+  `{}`/`"payload"` in any transcript line, `terminal` at trace end,
+  `timelineModel.rows.length === events.length` with valid‑JSON `raw`,
+  history lists the task; synthetic `waiting_for_permission` → `blocked` not
+  `working`; unknown focus pin falls back to current.
+  `webview-render.test.ts` (5): each built bundle loaded into **jsdom** with a
+  stubbed `acquireVsCodeApi` — `#root` gets the expected text, no
+  `[object Object]`, `history` row click posts `focusTask`, timeline rows are
+  expandable. This is the CI stand‑in for the visual pass.
+
+**Deferred:** the live visual pass in the real VS Code webview (needs a Core
+binary to produce a task, and UI access the harness here doesn't have). jsdom
+render tests + clean activation cover the mechanics.
+
+**Deliverables (original):**
 - **`valyria.chat`** (port `LiveChatPanel`) — task entry → `task_create`;
   conversation view = projection of that task's events; a "working" / "blocked"
   indicator; context attachments appended to the objective as a visible,

@@ -14,12 +14,21 @@
     "vscode": "^1.134.0"
   },
   "//": "Bundled as a compiled-in built-in extension (scripts/bootstrap.sh links this dir into vscode/extensions/valyria). engines.vscode tracks @types/vscode, which lags the vscode/ submodule tag by ~1 minor.",
-  "categories": ["Other", "Machine Learning"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "capabilities": {
-    "untrustedWorkspaces": { "supported": false },
-    "virtualWorkspaces": { "supported": false }
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": {
+      "supported": false
+    }
   },
   "contributes": {
     "viewsContainers": {
@@ -33,22 +42,88 @@
     },
     "views": {
       "valyria": [
-        { "id": "valyria.chat", "name": "Agent", "type": "webview" },
-        { "id": "valyria.task", "name": "Task", "type": "webview" },
-        { "id": "valyria.activity", "name": "Activity", "type": "webview" },
-        { "id": "valyria.approvals", "name": "Approvals", "type": "webview" },
-        { "id": "valyria.verification", "name": "Verification", "type": "webview" }
+        {
+          "id": "valyria.chat",
+          "name": "Agent",
+          "type": "webview"
+        },
+        {
+          "id": "valyria.task",
+          "name": "Task",
+          "type": "webview"
+        },
+        {
+          "id": "valyria.activity",
+          "name": "Activity",
+          "type": "webview"
+        },
+        {
+          "id": "valyria.timeline",
+          "name": "Timeline",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.history",
+          "name": "History",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.approvals",
+          "name": "Approvals",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.verification",
+          "name": "Verification",
+          "type": "webview",
+          "visibility": "collapsed"
+        }
       ]
     },
     "commands": [
-      { "command": "valyria.openWorkspace", "title": "Valyria: Open Repository for Agent", "category": "Valyria" },
-      { "command": "valyria.newTask", "title": "Valyria: New Agent Task", "category": "Valyria" },
-      { "command": "valyria.pauseTask", "title": "Valyria: Pause Task", "category": "Valyria" },
-      { "command": "valyria.resumeTask", "title": "Valyria: Resume Task", "category": "Valyria" },
-      { "command": "valyria.cancelTask", "title": "Valyria: Cancel Task", "category": "Valyria" },
-      { "command": "valyria.reconnect", "title": "Valyria: Reconnect to Core", "category": "Valyria" },
-      { "command": "valyria.showAbout", "title": "Valyria: About / Compatibility", "category": "Valyria" },
-      { "command": "valyria.restartBridge", "title": "Valyria: Restart Bridge Host", "category": "Valyria" }
+      {
+        "command": "valyria.openWorkspace",
+        "title": "Valyria: Open Repository for Agent",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.newTask",
+        "title": "Valyria: New Agent Task",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.pauseTask",
+        "title": "Valyria: Pause Task",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.resumeTask",
+        "title": "Valyria: Resume Task",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.cancelTask",
+        "title": "Valyria: Cancel Task",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.reconnect",
+        "title": "Valyria: Reconnect to Core",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.showAbout",
+        "title": "Valyria: About / Compatibility",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.restartBridge",
+        "title": "Valyria: Restart Bridge Host",
+        "category": "Valyria"
+      }
     ],
     "configuration": {
       "title": "Valyria",
@@ -65,7 +140,11 @@
         },
         "valyria.autonomy.defaultMode": {
           "type": "string",
-          "enum": ["manual", "assisted", "autonomous"],
+          "enum": [
+            "manual",
+            "assisted",
+            "autonomous"
+          ],
           "default": "manual",
           "description": "Autonomy level a new workspace daemon starts under (CORE-INTERFACE G1). Changing it while a task runs is refused."
         },
@@ -73,9 +152,18 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["completed", "blocked", "permission_required", "tests_failed", "waiting"]
+            "enum": [
+              "completed",
+              "blocked",
+              "permission_required",
+              "tests_failed",
+              "waiting"
+            ]
           },
-          "default": ["blocked", "permission_required"],
+          "default": [
+            "blocked",
+            "permission_required"
+          ],
           "description": "Local OS notifications to raise. No push infrastructure — local only (PLAN.md §31)."
         }
       }
@@ -97,6 +185,7 @@
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.134.0",
     "esbuild": "^0.24.0",
+    "jsdom": "^30.0.1",
     "tsx": "^4.19.2",
     "typescript": "^5.6.0"
   }

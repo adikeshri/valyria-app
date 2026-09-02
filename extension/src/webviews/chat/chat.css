@@ -1,0 +1,15 @@
+.chat-composer { margin-bottom: 10px; }
+.chat-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+.chat-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; border-bottom: 1px solid var(--border-subtle); margin-bottom: 6px;
+}
+.chat-objective { font-weight: 600; font-size: var(--text-sm); flex: 1; }
+.chat-log { list-style: none; margin: 0; padding: 0; max-height: calc(100vh - 190px); overflow-y: auto; }
+.chat-turn { display: flex; gap: 8px; padding: 4px 0; align-items: baseline; }
+.chat-role {
+  flex: 0 0 42px; font-size: var(--text-xs); text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-tertiary);
+}
+.chat-turn--you .chat-role { color: var(--accent); }
+.chat-text { font-size: var(--text-sm); }

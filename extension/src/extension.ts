@@ -13,9 +13,16 @@ import { BridgeHost } from "./bridge/host";
 import type { JsonRpcClient } from "./bridge/client";
 import { registerCommands } from "./commands";
 import { Supervisor } from "./session/supervisor";
+import { TaskFocus } from "./session/focus";
 import { StatusBar } from "./status";
 import { Store } from "./store/store";
 import { ActivityViewProvider } from "./views/activity";
+import { ChatViewProvider } from "./views/chat";
+import { TaskViewProvider } from "./views/task";
+import { TimelineViewProvider } from "./views/timeline";
+import { HistoryViewProvider } from "./views/history";
+import { makeWebviewDispatch } from "./views/dispatch";
+import { maybePromptResume } from "./session/resume";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const log = vscode.window.createOutputChannel("Valyria", { log: true });
@@ -25,7 +32,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const host = new BridgeHost(context, log);
   const store = new Store(log);
   const supervisor = new Supervisor(host, log);
-  context.subscriptions.push(host, supervisor);
+  const focus = new TaskFocus();
+  context.subscriptions.push(host, supervisor, focus);
 
   try {
     host.start();
@@ -35,10 +43,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  /** Open (or re-open) the workspace session. `appliedThrough === 0` means a
-   *  full replay from Core's journal, so the local store is reset first. */
+  const dispatch = makeWebviewDispatch({ host, store, focus, log });
+  let resumePrompted = false;
+
   const reopen = async (root: string, appliedThrough: number): Promise<void> => {
-    if (appliedThrough === 0) store.reset();
+    if (appliedThrough === 0) {
+      store.reset();
+      focus.clear();
+      resumePrompted = false;
+    }
     try {
       await supervisor.open(root, appliedThrough);
       host.markHealthy();
@@ -47,8 +60,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   };
 
-  // (Re)attach every stream listener to the current client. Re-run after an
-  // auto-respawn, since respawn replaces the client object.
   const clientSubs: vscode.Disposable[] = [];
   const wireClient = (client: JsonRpcClient): void => {
     for (const d of clientSubs.splice(0)) d.dispose();
@@ -74,6 +85,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   };
   wireClient(host.client);
 
+  // Once events have started flowing after a fresh open, offer to resume any
+  // non-terminal task (PLAN.md §4.16 / §30).
+  context.subscriptions.push({
+    dispose: store.onDidChange(() => {
+      if (resumePrompted || supervisor.state !== "ready") return;
+      resumePrompted = true;
+      void maybePromptResume(store, focus, dispatch, log);
+    }),
+  });
+
   context.subscriptions.push(
     host.onRespawn(() => {
       log.info("bridge-host respawned — re-wiring stream and re-opening the session");
@@ -87,12 +108,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push(new StatusBar(supervisor));
 
-  const activity = new ActivityViewProvider(context.extensionUri, store, supervisor);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(ActivityViewProvider.viewId, activity, {
-      webviewOptions: { retainContextWhenHidden: true },
-    })
-  );
+  const uri = context.extensionUri;
+  const views: Array<[string, vscode.WebviewViewProvider]> = [
+    [ChatViewProvider.viewId, new ChatViewProvider(uri, store, supervisor, focus, dispatch)],
+    [TaskViewProvider.viewId, new TaskViewProvider(uri, store, focus, dispatch)],
+    [ActivityViewProvider.viewId, new ActivityViewProvider(uri, store, supervisor)],
+    [TimelineViewProvider.viewId, new TimelineViewProvider(uri, store)],
+    [HistoryViewProvider.viewId, new HistoryViewProvider(uri, store, focus, dispatch)],
+  ];
+  for (const [id, provider] of views) {
+    context.subscriptions.push(
+      vscode.window.registerWebviewViewProvider(id, provider, {
+        webviewOptions: { retainContextWhenHidden: true },
+      })
+    );
+  }
 
   registerCommands(context, host, supervisor, store, log, reopen);
 
@@ -104,7 +134,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   });
 
-  // A folder already open in the window counts as authorization to connect.
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (root) {
     await reopen(root, 0);

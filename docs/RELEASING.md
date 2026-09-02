@@ -1,5 +1,13 @@
 # Releasing Valyria App
 
+> **Note (Code‑OSS migration):** the pipeline below is the *Tauri‑era* release
+> flow. The Code‑OSS‑fork packaging is [PACKAGING.md](PACKAGING.md) +
+> `scripts/build.sh`; a replacement `release.yml` lands with Phase 8's signing
+> work. The **gates** section here still applies — CI (`.github/workflows/ci.yml`)
+> runs `cargo run -p xtask -- all` (8 checks incl. `check-extension`), the
+> extension's `check` + `test` + bundle‑size budget, and
+> `scripts/verify-offline.sh` for the §32 static offline guarantee.
+
 How a `v*` release is cut, and the gates that must pass first. Companion to
 [INTEGRATION.md §7](INTEGRATION.md) (the build pipeline) and
 [PLAN.md §8 / §9](PLAN.md) (Phase 8 exit criteria and performance budgets).

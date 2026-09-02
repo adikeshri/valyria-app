@@ -15,6 +15,10 @@
 //!   check-a11y       overlays trap focus (`useOverlayA11y`), the only tab
 //!                    strip implementation is `TabStrip.tsx`, and every image
 //!                    has an `alt`
+//!   check-extension  the Code-OSS-fork extension declares only the
+//!                    `@valyria/*` + `zod` runtime deps, references no
+//!                    xterm/PTY package, and `valyria-bridge-host` exposes no
+//!                    PTY methods (D7 — the terminal is Code-OSS's)
 //!
 //! Exit code is non-zero on the first failure so CI fails loudly.
 
@@ -31,16 +35,18 @@ fn main() -> ExitCode {
         Some("check-d7") => check_d7(&repo),
         Some("check-error-strings") => check_error_strings(&repo),
         Some("check-a11y") => check_a11y(&repo),
+        Some("check-extension") => check_extension(&repo),
         Some("all") => check_layering(&repo)
             .and_then(|_| verify_core(&repo))
             .and_then(|_| check_protocol(&repo))
             .and_then(|_| check_d7(&repo))
             .and_then(|_| check_error_strings(&repo))
-            .and_then(|_| check_a11y(&repo)),
+            .and_then(|_| check_a11y(&repo))
+            .and_then(|_| check_extension(&repo)),
         other => {
             eprintln!("unknown task: {other:?}");
             eprintln!(
-                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|check-d7|check-error-strings|check-a11y|all>"
+                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|check-d7|check-error-strings|check-a11y|check-extension|all>"
             );
             return ExitCode::from(2);
         }
@@ -509,6 +515,68 @@ fn check_a11y(repo: &Path) -> Result<(), String> {
     } else {
         Err(format!(
             "accessibility invariants broken:\n  {}",
+            offenders.join("\n  ")
+        ))
+    }
+}
+
+// --- check-extension (ARCHITECTURE-VSCODE.md / D7) ----------------------
+
+/// Invariants for the Code-OSS-fork extension:
+///  - it declares no runtime deps beyond `@valyria/*` + `zod` (everything else
+///    is bundled or provided by the extension host);
+///  - it never pulls in an xterm package — the agent-command view is a
+///    projection of `tool_*` events, never a PTY, and it must not be able to
+///    share the integrated terminal's buffer (D7);
+///  - `valyria-bridge-host` exposes no PTY methods (the terminal is Code-OSS's).
+fn check_extension(repo: &Path) -> Result<(), String> {
+    let mut offenders = Vec::new();
+
+    let pkg_path = repo.join("extension/package.json");
+    let pkg = std::fs::read_to_string(&pkg_path)
+        .map_err(|e| format!("reading {}: {e}", pkg_path.display()))?;
+    let manifest: serde_json::Value =
+        serde_json::from_str(&pkg).map_err(|e| format!("parsing extension/package.json: {e}"))?;
+
+    const ALLOWED_DEPS: &[&str] = &["@valyria/protocol", "@valyria/state", "zod"];
+    if let Some(deps) = manifest.get("dependencies").and_then(|v| v.as_object()) {
+        for name in deps.keys() {
+            if !ALLOWED_DEPS.contains(&name.as_str()) {
+                offenders.push(format!("extension dependency not on the allowlist: {name}"));
+            }
+        }
+    }
+
+    // No xterm anywhere in the extension source or its manifest (D7).
+    let mut ts_files = Vec::new();
+    collect_files(&repo.join("extension/src"), "ts", &mut ts_files);
+    for f in &ts_files {
+        let text = std::fs::read_to_string(f).unwrap_or_default();
+        if text.contains("xterm") || text.contains("node-pty") || text.contains("portable-pty") {
+            let rel = f
+                .strip_prefix(repo)
+                .unwrap_or(f)
+                .to_string_lossy()
+                .replace('\\', "/");
+            offenders.push(format!("{rel} references a terminal/PTY package (D7)"));
+        }
+    }
+
+    // The bridge-host must not have grown PTY methods back.
+    let host = std::fs::read_to_string(repo.join("crates/valyria-bridge-host/src/main.rs"))
+        .unwrap_or_default();
+    if host.contains("\"pty/") || host.contains("PtySession") {
+        offenders.push(
+            "valyria-bridge-host exposes PTY methods — the terminal is Code-OSS's (D7)".into(),
+        );
+    }
+
+    if offenders.is_empty() {
+        println!("check-extension: ok — deps allowlisted, no xterm/PTY in the extension (D7)");
+        Ok(())
+    } else {
+        Err(format!(
+            "extension invariants broken:\n  {}",
             offenders.join("\n  ")
         ))
     }

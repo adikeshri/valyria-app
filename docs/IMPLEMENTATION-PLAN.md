@@ -710,11 +710,34 @@ byte‑identical; the Windows build launches and explains itself.
 
 ---
 
-## Phase 9 — CI, gates, integration, offline job
+## Phase 9 — CI, gates, integration, offline job  *(done for the codeable parts; heavy jobs need bigger runners)*
 
 **Goal:** every invariant in this document is machine‑checked.
 
-**Deliverables:**
+**Done (2026‑09‑02):**
+- **`xtask check-extension`** — new gate: the extension declares only
+  `@valyria/*` + `zod` runtime deps, references no `xterm` / `node-pty` /
+  `portable-pty`, and `valyria-bridge-host` exposes no PTY methods (D7). Added
+  to `xtask all` — the CI `rust` job runs all 8 gates.
+- **`.github/workflows/ci.yml`** — two new jobs:
+  - `extension`: node 24.20, `npm ci` + `check` + `test` (68) + `compile` +
+    `scripts/check-bundle-size.sh` (host ≤ 600 KB, each webview ≤ 40 KB).
+  - `branded-editor`: `scripts/bootstrap.sh` (submodule + overlay + patches) +
+    `scripts/verify-offline.sh` (the §32 static guarantee).
+  The existing `rust` / `deny` jobs already cover `valyria-bridge-host` (it's in
+  the workspace `clippy` / `test`).
+- **`scripts/check-bundle-size.sh`** — the bundle budget.
+- Local full run: `cargo fmt --all --check`, `xtask all` (8/8), extension
+  `check` + 68 tests, `verify-offline.sh`, `check-bundle-size.sh` — all green.
+
+**Deferred (need infrastructure):** the full `npm ci && npm run compile` in
+`vscode/` + per‑OS installer build (self‑hosted / larger runners — see
+`docs/PACKAGING.md`); the network‑namespaced offline *integration* job (needs a
+real Core sidecar); `@vscode/test-electron` e2e; per‑platform visual regression.
+The unit + trace‑replay + jsdom‑render layers stand in for these in `ci.yml`
+today.
+
+**Deliverables (original):**
 - **Static** — `cargo fmt` / `clippy -D warnings`, `xtask all` (layering,
   check‑protocol, verify‑core, check‑d7, check‑error‑strings, check‑a11y),
   `tsc --noEmit`, ESLint, `cargo-deny`.

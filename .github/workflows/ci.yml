@@ -120,3 +120,46 @@ jobs:
   # was advisory (`continue-on-error`) and its substance is already covered by
   # the `node` and `rust` jobs (npm test / build, cargo test --workspace, xtask
   # all). §32 is now a release-time manual check — see docs/RELEASING.md.
+
+  # --- Code-OSS fork path (docs/ARCHITECTURE-VSCODE.md) --------------------
+
+  extension:
+    name: Valyria extension (typecheck · test · bundle · size)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false   # the extension builds without the vscode/ tree
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20"
+      - run: npm ci
+        working-directory: extension
+      - run: npm run check
+        working-directory: extension
+      - run: npm test
+        working-directory: extension
+      - run: npm run compile
+        working-directory: extension
+      - name: Bundle-size budget
+        run: bash scripts/check-bundle-size.sh
+
+  branded-editor:
+    name: Branded Code-OSS (bootstrap · overlay · offline check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20"
+      - name: Bootstrap (submodule + overlay + patches)
+        run: scripts/bootstrap.sh
+      - name: Offline guarantee (static)
+        run: scripts/verify-offline.sh
+      # The full `npm ci && npm run compile` in vscode/ + the per-OS installer
+      # build run on dedicated (self-hosted / larger) runners — see
+      # docs/PACKAGING.md. This job only proves the branded tree assembles and
+      # phones home to nothing.

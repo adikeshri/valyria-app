@@ -46,6 +46,7 @@ window onto that work, and the place a developer approves what the agent may do.
 | [docs/ARCHITECTURE-VSCODE.md](docs/ARCHITECTURE-VSCODE.md) | **Primary.** The Code-OSS-fork architecture — repo topology, process model, branding checklist, what each old Tauri piece became |
 | [docs/IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md) | **Primary.** The phase-by-phase build plan (0–11), what shipped per phase, standing gates, capability-gap → phase map |
 | [docs/PACKAGING.md](docs/PACKAGING.md) | Sidecars, per-OS gulp targets, signing credentials, the update feed, Windows tier 3 |
+| [docs/SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md) | Hardening checklist — process boundary, webview CSP, secrets/network, errors, trust; automated gates + per-release manual passes |
 | [docs/CORE-INTERFACE.md](docs/CORE-INTERFACE.md) | What Core's protocol offers, the capability gaps (G1–G15), and how each surface degrades until Core closes them |
 | [docs/PLAN.md](docs/PLAN.md) | The original Tauri build plan. Still the reference for Core, the protocol, and the design decisions (D1–D14); **superseded on the app shell** by ARCHITECTURE-VSCODE.md |
 

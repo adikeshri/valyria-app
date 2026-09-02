@@ -812,11 +812,41 @@ describes the Code‑OSS product, no dead references remain.
 
 ---
 
-## Phase 11 — Hardening & first release
+## Phase 11 — Hardening & first release  *(automated hardening done; signed release + manual passes remain)*
 
 **Goal:** ship it.
 
-**Deliverables:**
+**Done (2026‑09‑02):**
+- **Accessibility (automated)** — `test/a11y.test.ts`: every one of the 15
+  webview bundles rendered in jsdom with a representative model and run through
+  **axe‑core** — **zero serious/critical violations**. Plus a keyboard check
+  per view: no positive `tabindex`, no native control pulled out of the tab
+  order. Runs in the CI `extension` job.
+- **Error presentation (§36)** — `xtask check-extension` now also fails on a
+  banned generic error string (`something went wrong`, `an error occurred`,
+  `unknown error`, `unexpected error`, `oops`). Currently zero. User‑visible
+  errors already carry the underlying message + the stable bridge `code`.
+- **Soak (§9 / §44)** — `test/soak.test.ts`: 20 000 events delivered in
+  512‑event batches ingest in ~165 ms and all four projections (`chatModel`,
+  `taskModel`, `timelineModel`, `agentCommandsModel`) rebuild in < 5 ms;
+  `file_changed` folds to distinct paths, not one row per touch; no model
+  reasoning text reaches the transcript (§10); a terminal task stops
+  accumulating work.
+- **`docs/SECURITY-REVIEW.md`** — the hardening checklist: process boundary,
+  webview CSP, secrets/network, errors, trust — automated items linked to their
+  gates, manual items (SR walk, keyboard‑only task, real‑layout axe,
+  network‑namespaced launch) listed for per‑release sign‑off.
+
+**Remaining (need infrastructure / a human):**
+- Manual VoiceOver + NVDA passes; keyboard‑only full‑task traversal; `axe`
+  DevTools on the running webviews (real layout → contrast).
+- The signed / notarized release: tag, `scripts/build.sh` on each OS with
+  credentials, Open VSX publish of the extension, release notes naming the
+  bundled Core rev.
+- Perf budgets under a real Core (the soak test stands in with synthetic
+  events).
+
+**Deliverables (original):**
 - **Accessibility audit** — automated `axe` + a manual screen‑reader pass
   (VoiceOver + NVDA) on every webview and the first‑run flow; a keyboard‑only
   traversal test asserting every interactive element is reachable and focus is
@@ -854,12 +884,30 @@ published.
 
 ## Current state
 
-**Phase 0 is complete and verified** — `scripts/bootstrap.sh` →
+**Phases 0–11 are landed on `chore/migration`.** `scripts/bootstrap.sh` →
 `scripts/install-deps.sh` → `scripts/dev.sh` launches a branded **Valyria**
-window with the built‑in extension active. Phase 1 (the session & event spine)
-is the next work and the one that proves the whole architecture.
+window; the extension activates with 16 agent surfaces (Agent, Task, Activity,
+Timeline, Approvals, Agent Commands, Verification, Security & autonomy, Models,
+Hardware, Settings, Context, About, First‑run) all rendered from `@valyria/state`
+projections over the `valyria-bridge-host` event stream.
 
-Toolchain note for contributors: the machine's default Homebrew `node` may be
-too old (or, as seen here, broken by a `simdjson` dylib bump — `brew reinstall
-node` fixes that). `scripts/node-guard.sh` sidesteps it by using a keg‑only
-`node@24`; `brew install node@24` is the one‑time setup.
+Green locally and in CI: `cargo fmt --all --check`, `cargo clippy --workspace
+-D warnings`, `cargo test --workspace`, `xtask all` (4 gates), the extension's
+`tsc` + **100 tests** (trace replay, jsdom render, axe a11y, soak) +
+bundle‑size budget, and `scripts/verify-offline.sh`.
+
+**What still needs a human or real infrastructure** (tracked in the phase notes
+above and `docs/SECURITY-REVIEW.md`):
+
+- A real `valyria` Core binary on `PATH` to run the live create‑task →
+  kill/adopt/resume cycle and a Core‑backed perf pass. The adoption path is
+  covered by `valyria-bridge`'s own integration tests.
+- The full `npm ci && npm run compile` in `vscode/` + per‑OS **signed /
+  notarized installers** (credentials, bigger runners — `docs/PACKAGING.md`).
+- Manual VoiceOver / NVDA passes and a keyboard‑only full‑task traversal.
+- Final icon artwork (drop‑in replace of `build/icons/valyria.svg`).
+
+Toolchain note: the machine's default Homebrew `node` may be too old (or broken
+by a `simdjson` dylib bump — `brew reinstall node` fixes that).
+`scripts/node-guard.sh` sidesteps it with a keg‑only `node@24`;
+`brew install node@24` is the one‑time setup.

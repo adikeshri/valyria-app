@@ -8,8 +8,9 @@
 //!                    the vendored version.txt
 //!   check-extension  the Code-OSS-fork extension declares only the
 //!                    `@valyria/*` + `zod` runtime deps, references no
-//!                    xterm/PTY package, and `valyria-bridge-host` exposes no
-//!                    PTY methods (D7 — the terminal is Code-OSS's)
+//!                    xterm/PTY package (D7), `valyria-bridge-host` exposes no
+//!                    PTY methods, and no source file carries a banned generic
+//!                    error string (§36)
 //!
 //! Exit code is non-zero on the first failure so CI fails loudly.
 
@@ -316,18 +317,37 @@ fn check_extension(repo: &Path) -> Result<(), String> {
         }
     }
 
-    // No xterm anywhere in the extension source or its manifest (D7).
+    // Banned generic error strings (§36: every user-visible error must say what
+    // happened / whether the agent stopped / what to do — "something went wrong"
+    // is not expressible).
+    const BANNED_ERRORS: &[&str] = &[
+        "something went wrong",
+        "an error occurred",
+        "unknown error",
+        "unexpected error",
+        "oops",
+    ];
+
+    // No xterm / PTY (D7) and no banned error strings in the extension source.
     let mut ts_files = Vec::new();
     collect_files(&repo.join("extension/src"), "ts", &mut ts_files);
     for f in &ts_files {
         let text = std::fs::read_to_string(f).unwrap_or_default();
+        let rel = f
+            .strip_prefix(repo)
+            .unwrap_or(f)
+            .to_string_lossy()
+            .replace('\\', "/");
         if text.contains("xterm") || text.contains("node-pty") || text.contains("portable-pty") {
-            let rel = f
-                .strip_prefix(repo)
-                .unwrap_or(f)
-                .to_string_lossy()
-                .replace('\\', "/");
             offenders.push(format!("{rel} references a terminal/PTY package (D7)"));
+        }
+        let lower = text.to_lowercase();
+        for banned in BANNED_ERRORS {
+            if lower.contains(banned) {
+                offenders.push(format!(
+                    "{rel} contains a banned generic error string: {banned:?}"
+                ));
+            }
         }
     }
 
@@ -341,7 +361,9 @@ fn check_extension(repo: &Path) -> Result<(), String> {
     }
 
     if offenders.is_empty() {
-        println!("check-extension: ok — deps allowlisted, no xterm/PTY in the extension (D7)");
+        println!(
+            "check-extension: ok — deps allowlisted, no xterm/PTY (D7), no banned error strings (§36)"
+        );
         Ok(())
     } else {
         Err(format!(

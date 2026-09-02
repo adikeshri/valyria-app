@@ -18,6 +18,7 @@ import {
   timelineRows,
   activityLine,
   currentTask,
+  degradedEvents,
   type StoreState,
 } from "@valyria/state";
 import type { EventBatch, ConnectionState } from "../bridge/protocol";
@@ -101,7 +102,13 @@ export class Store {
   // --- view-model helpers (selectors live in @valyria/state) --------------
 
   activityLines(): string[] {
-    return timelineRows(this.state).map(activityLine);
+    // timelineRows is newest-first; the Activity feed reads oldest → newest.
+    return [...timelineRows(this.state)].reverse().map(activityLine);
+  }
+
+  /** Events the decoder could not type (D5) — surfaced as a count, never hidden. */
+  degradedCount(): number {
+    return degradedEvents(this.state).length;
   }
 
   currentTaskId(): string | undefined {

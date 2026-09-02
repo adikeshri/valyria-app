@@ -10,10 +10,13 @@
 import * as vscode from "vscode";
 import type { BridgeHost } from "../bridge/host";
 import type { ConnectionState, SessionInfo } from "../bridge/protocol";
+import { Capabilities } from "./capabilities";
 
 export class Supervisor implements vscode.Disposable {
   private _session: SessionInfo | undefined;
   private _state: ConnectionState = "starting";
+  /** The D6 registry, refreshed from every `hello` (via `session/open`). */
+  readonly caps = new Capabilities();
 
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
@@ -32,7 +35,7 @@ export class Supervisor implements vscode.Disposable {
   }
 
   has(capability: string): boolean {
-    return this._session?.capabilities.includes(capability) ?? false;
+    return this.caps.has(capability);
   }
 
   /** Driven by `extension.ts` from `core/connectionState`. */
@@ -56,6 +59,7 @@ export class Supervisor implements vscode.Disposable {
         appliedThrough,
       });
       this._session = info;
+      this.caps.set(info.capabilities);
       this._state = "ready";
       this.log.info(
         `session ready: ${info.workspaceRoot} · protocol ${info.protocolVersion} · ` +
@@ -65,6 +69,7 @@ export class Supervisor implements vscode.Disposable {
       return info;
     } catch (e) {
       this._state = "failed";
+      this.caps.clear();
       this._onDidChange.fire();
       throw e;
     }

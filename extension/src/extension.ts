@@ -87,9 +87,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push(new StatusBar(supervisor));
 
-  const activity = new ActivityViewProvider(store, supervisor);
+  const activity = new ActivityViewProvider(context.extensionUri, store, supervisor);
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(ActivityViewProvider.viewId, activity)
+    vscode.window.registerWebviewViewProvider(ActivityViewProvider.viewId, activity, {
+      webviewOptions: { retainContextWhenHidden: true },
+    })
   );
 
   registerCommands(context, host, supervisor, store, log, reopen);

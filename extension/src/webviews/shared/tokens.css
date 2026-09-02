@@ -1,0 +1,129 @@
+/*
+ * Valyria webview design tokens.
+ *
+ * The token *names* are the ones the ported panels from apps/desktop/src/styles/
+ * tokens.css already use. Their *values* here resolve to VS Code's own theme
+ * variables, so every webview follows the editor's active colour theme
+ * (light / dark / any high-contrast) with no media queries and no JS.
+ *
+ * Rule (ARCHITECTURE-VSCODE.md standing gates): never hard-code a colour — go
+ * through a --vscode-* var with a literal only as the last-resort fallback.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ---- brand accent ---- */
+  --accent: var(--vscode-textLink-foreground, #3794ff);
+  --accent-strong: var(--vscode-textLink-activeForeground, var(--accent));
+  --accent-soft: var(--vscode-editor-selectionHighlightBackground, rgba(55, 148, 255, 0.15));
+  --accent-contrast: var(--vscode-button-foreground, #fff);
+
+  /* ---- surfaces ---- */
+  --bg-canvas: var(--vscode-sideBar-background, var(--vscode-editor-background, #1e1e1e));
+  --bg-surface: var(--vscode-editorWidget-background, var(--bg-canvas));
+  --bg-surface-raised: var(--vscode-editorHoverWidget-background, var(--bg-surface));
+  --bg-sunken: var(--vscode-editor-background, var(--bg-canvas));
+  --bg-hover: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.1));
+  --bg-active: var(--vscode-list-activeSelectionBackground, var(--accent-soft));
+  --bg-overlay: var(--vscode-widget-shadow, rgba(0, 0, 0, 0.4));
+
+  /* ---- borders ---- */
+  --border-subtle: var(--vscode-editorWidget-border, transparent);
+  --border: var(--vscode-widget-border, var(--vscode-editorWidget-border, rgba(128, 128, 128, 0.25)));
+  --border-strong: var(--vscode-contrastBorder, var(--border));
+
+  /* ---- text ---- */
+  --text-primary: var(--vscode-foreground, #ccc);
+  --text-secondary: var(--vscode-descriptionForeground, #a0a0a0);
+  --text-tertiary: var(--vscode-disabledForeground, #808080);
+  --text-on-accent: var(--vscode-button-foreground, #fff);
+  --text-link: var(--vscode-textLink-foreground, var(--accent));
+
+  /* ---- semantic ---- */
+  --success: var(--vscode-testing-iconPassed, var(--vscode-charts-green, #89d185));
+  --warning: var(--vscode-editorWarning-foreground, var(--vscode-charts-yellow, #cca700));
+  --danger: var(--vscode-editorError-foreground, var(--vscode-errorForeground, #f14c4c));
+  --info: var(--vscode-editorInfo-foreground, var(--vscode-charts-blue, #3794ff));
+
+  /* ---- diff / ownership (agent vs human — D7) ---- */
+  --diff-add-bg: var(--vscode-diffEditor-insertedTextBackground, rgba(137, 209, 133, 0.2));
+  --diff-add-text: var(--vscode-charts-green, #89d185);
+  --diff-del-bg: var(--vscode-diffEditor-removedTextBackground, rgba(241, 76, 76, 0.2));
+  --diff-del-text: var(--vscode-charts-red, #f14c4c);
+  --own-agent: var(--vscode-charts-purple, #b180d7);
+  --own-agent-bg: color-mix(in srgb, var(--own-agent) 16%, transparent);
+  --own-user: var(--vscode-charts-blue, #3794ff);
+  --own-user-bg: color-mix(in srgb, var(--own-user) 16%, transparent);
+  --own-existing: var(--text-tertiary);
+  --own-existing-bg: color-mix(in srgb, var(--own-existing) 14%, transparent);
+
+  /* ---- code ---- */
+  --code-bg: var(--vscode-textCodeBlock-background, var(--bg-sunken));
+  --font-ui: var(--vscode-font-family);
+  --font-mono: var(--vscode-editor-font-family, ui-monospace, Menlo, Consolas, monospace);
+  --text-xs: 11px;
+  --text-sm: var(--vscode-font-size, 13px);
+  --text-base: var(--vscode-font-size, 13px);
+  --text-md: calc(var(--vscode-font-size, 13px) + 1px);
+  --text-lg: calc(var(--vscode-font-size, 13px) + 4px);
+  --text-xl: calc(var(--vscode-font-size, 13px) + 9px);
+
+  /* ---- shape / motion ---- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 9px;
+  --focus-ring: 0 0 0 1px var(--vscode-focusBorder, var(--accent));
+  --dur-fast: 90ms;
+  --dur-base: 150ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+  }
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---- base document ---- */
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+body {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  background: transparent; /* the webview host paints the sidebar ground */
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: 2px;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

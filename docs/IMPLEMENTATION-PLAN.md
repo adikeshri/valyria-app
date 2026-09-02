@@ -210,11 +210,57 @@ says so.
 
 ---
 
-## Phase 2 — Webview runtime & design system
+## Phase 2 — Webview runtime & design system  *(done; live visual check deferred to Phase 3)*
 
 **Goal:** the shared infrastructure every agent surface is built on.
 
-**Deliverables:**
+**Done (2026‑09‑02):**
+- **Bundler** — `extension/esbuild.mjs` now builds two graphs: the CJS host
+  entry, and one IIFE bundle per `src/webviews/<name>/main.ts`
+  (`out/webviews/<name>.{js,css}`), plus `tokens.css` copied alongside.
+  `npm run watch` watches both.
+- **Design tokens** — `src/webviews/shared/tokens.css`: the Tauri panels' token
+  *names* (`--bg-canvas`, `--text-primary`, `--accent`, `--own-agent`, …)
+  resolved to `--vscode-*` theme variables, so webviews follow the editor's
+  active theme (light / dark / any HC) with no media queries. Reduced‑motion
+  honoured; base reset + `.visually-hidden` + `:focus-visible` ring.
+- **Message protocol** — `src/webviews/shared/protocol.ts`: host→webview
+  `{type:"state",view,model}` / `{type:"focus"}`; webview→host `{type:"ready"}`
+  / `{type:"command",name,args}`. Per‑view model interfaces (`ActivityModel`).
+- **Webview host helper** — `src/webviews/shared/host.ts`: `mountWebview` wraps
+  `acquireVsCodeApi`, drives `getState`/`setState` persistence, posts `ready`,
+  exposes `command`/`save`; `announce()` (aria‑live polite region), `el()`.
+- **`WebviewBase`** (`src/views/webviewBase.ts`) — abstract `WebviewViewProvider`
+  owning the security boundary (`localResourceRoots` + strict CSP + per‑resolve
+  nonce, extracted to the vscode‑free `webviewHtml.ts` for testing), the
+  `ready`/`command` message loop, and auto‑push on `wire()`d changes. Activity
+  view re‑expressed as a 30‑line subclass; render logic moved to
+  `src/webviews/activity/`.
+- **Decoder layer** — the store already routes every event through
+  `@valyria/protocol`'s `decodeEvent` (via `@valyria/state`); added
+  `Store.degradedCount()` (`degradedEvents` selector) and surfaced it in the
+  Activity model as an honest count, never hidden.
+- **Capability registry (D6)** — `src/session/capabilities.ts`: `Capabilities`
+  holds the live `hello` set and `resolve(surface)` /`snapshot()` against
+  `@valyria/protocol`'s `SURFACE_REQUIREMENTS`. Owned by `Supervisor`
+  (`supervisor.caps`), refreshed on every `session/open`, dumped by
+  `valyria.showAbout`.
+- **Tests — 26 total (+12):**
+  `decoder-coverage.test.ts` (7): every kind in `fixtures/traces/*` is known
+  and decodes; the store records zero degraded events.
+  `capabilities.test.ts` (5): every surface resolves; the pinned Core lights
+  all of them; an empty set gates exactly the capability‑bound ones to their
+  fallback.
+  `webview-html.test.ts` (5): `default-src 'none'`, the single `<script>` is
+  nonce‑gated, styles/fonts limited to `cspSource`, every resource under
+  `cspSource`.
+
+**Deferred:** a live visual check of the rendered Activity webview (the harness
+here can't drive the VS Code UI). Confirmed: extension activates with no CSP
+errors and both bundles emit. The panels become interactive in Phase 3, where
+the visual pass happens.
+
+**Deliverables (original):**
 - **Bundler** — esbuild config producing webview bundles from
   `extension/src/webviews/*` (one entry per view, or one app + a `view` param).
   `npm --prefix extension run watch` rebuilds webviews too.

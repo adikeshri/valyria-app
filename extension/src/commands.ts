@@ -95,6 +95,8 @@ export function registerCommands(
           connectionState: supervisor.state,
           lastSeq: store.lastSeq,
           session: supervisor.session ?? null,
+          capabilities: supervisor.caps.list(),
+          surfaces: supervisor.caps.snapshot(),
           about,
         },
         null,

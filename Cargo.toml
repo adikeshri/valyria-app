@@ -7,6 +7,7 @@ resolver = "2"
 members = [
     "apps/desktop/src-tauri",
     "crates/valyria-bridge",
+    "crates/valyria-bridge-host",
     "crates/xtask",
 ]
 

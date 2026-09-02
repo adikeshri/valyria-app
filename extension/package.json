@@ -1,0 +1,94 @@
+{
+  "name": "valyria",
+  "displayName": "Valyria",
+  "description": "The Valyria autonomous coding agent, built in.",
+  "version": "0.1.0",
+  "publisher": "valyria",
+  "license": "Apache-2.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adikeshri/valyria-app.git"
+  },
+  "engines": {
+    "vscode": "^1.134.0"
+  },
+  "//": "Bundled as a compiled-in built-in extension (scripts/bootstrap.sh links this dir into vscode/extensions/valyria). engines.vscode tracks @types/vscode, which lags the vscode/ submodule tag by ~1 minor.",
+  "categories": ["Other", "Machine Learning"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": { "supported": false },
+    "virtualWorkspaces": { "supported": false }
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "valyria",
+          "title": "Valyria",
+          "icon": "media/valyria-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "valyria": [
+        { "id": "valyria.chat", "name": "Agent", "type": "webview" },
+        { "id": "valyria.task", "name": "Task", "type": "webview" },
+        { "id": "valyria.activity", "name": "Activity", "type": "webview" },
+        { "id": "valyria.approvals", "name": "Approvals", "type": "webview" },
+        { "id": "valyria.verification", "name": "Verification", "type": "webview" }
+      ]
+    },
+    "commands": [
+      { "command": "valyria.openWorkspace", "title": "Valyria: Open Repository for Agent", "category": "Valyria" },
+      { "command": "valyria.newTask", "title": "Valyria: New Agent Task", "category": "Valyria" },
+      { "command": "valyria.pauseTask", "title": "Valyria: Pause Task", "category": "Valyria" },
+      { "command": "valyria.resumeTask", "title": "Valyria: Resume Task", "category": "Valyria" },
+      { "command": "valyria.cancelTask", "title": "Valyria: Cancel Task", "category": "Valyria" },
+      { "command": "valyria.reconnect", "title": "Valyria: Reconnect to Core", "category": "Valyria" },
+      { "command": "valyria.showAbout", "title": "Valyria: About / Compatibility", "category": "Valyria" },
+      { "command": "valyria.restartBridge", "title": "Valyria: Restart Bridge Host", "category": "Valyria" }
+    ],
+    "configuration": {
+      "title": "Valyria",
+      "properties": {
+        "valyria.core.binaryPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to a `valyria` Core binary. Empty = use the bundled sidecar. Mirrors `$VALYRIA_BIN` (see docs/INTEGRATION.md)."
+        },
+        "valyria.bridge.hostPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to a valyria-bridge-host binary. Empty = use the copy bundled next to the extension (extension/bin/)."
+        },
+        "valyria.autonomy.defaultMode": {
+          "type": "string",
+          "enum": ["manual", "assisted", "autonomous"],
+          "default": "manual",
+          "description": "Autonomy level a new workspace daemon starts under (CORE-INTERFACE G1). Changing it while a task runs is refused."
+        },
+        "valyria.notifications.categories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["completed", "blocked", "permission_required", "tests_failed", "waiting"]
+          },
+          "default": ["blocked", "permission_required"],
+          "description": "Local OS notifications to raise. No push infrastructure — local only (PLAN.md §31)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "typecheck": "tsc --noEmit -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.134.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -65,41 +65,54 @@ fn repo_root() -> PathBuf {
 
 // --- check-layering (docs/PLAN.md D2) -------------------------------------
 
-/// The only Core crates `valyria-bridge` may depend on.
-const BRIDGE_CORE_ALLOWLIST: &[&str] = &["valyria-protocol", "valyria-types"];
+/// Per-crate allowlists of `valyria*` dependencies. Anything matching
+/// `valyria` / `valyria-*` not on a crate's list fails the build (D2).
+///
+/// `valyria-bridge` speaks the Core protocol and may see only the wire crates.
+/// `valyria-bridge-host` is a thin stdio front end and may see only the bridge.
+const LAYERING: &[(&str, &[&str])] = &[
+    (
+        "crates/valyria-bridge/Cargo.toml",
+        &["valyria-protocol", "valyria-types"],
+    ),
+    ("crates/valyria-bridge-host/Cargo.toml", &["valyria-bridge"]),
+];
 
 fn check_layering(repo: &Path) -> Result<(), String> {
-    let manifest_path = repo.join("crates/valyria-bridge/Cargo.toml");
-    let text = std::fs::read_to_string(&manifest_path)
-        .map_err(|e| format!("reading {}: {e}", manifest_path.display()))?;
-    let manifest: toml::Value =
-        toml::from_str(&text).map_err(|e| format!("parsing {}: {e}", manifest_path.display()))?;
+    let mut all_offenders = Vec::new();
 
-    let mut offenders = Vec::new();
-    for table in ["dependencies", "build-dependencies", "dev-dependencies"] {
-        let Some(deps) = manifest.get(table).and_then(|v| v.as_table()) else {
-            continue;
-        };
-        for name in deps.keys() {
-            let looks_like_core = name == "valyria" || name.starts_with("valyria-");
-            if looks_like_core && !BRIDGE_CORE_ALLOWLIST.contains(&name.as_str()) {
-                offenders.push(format!("[{table}] {name}"));
+    for (rel, allowlist) in LAYERING {
+        let manifest_path = repo.join(rel);
+        let text = std::fs::read_to_string(&manifest_path)
+            .map_err(|e| format!("reading {}: {e}", manifest_path.display()))?;
+        let manifest: toml::Value = toml::from_str(&text)
+            .map_err(|e| format!("parsing {}: {e}", manifest_path.display()))?;
+
+        for table in ["dependencies", "build-dependencies", "dev-dependencies"] {
+            let Some(deps) = manifest.get(table).and_then(|v| v.as_table()) else {
+                continue;
+            };
+            for name in deps.keys() {
+                let looks_like_core = name == "valyria" || name.starts_with("valyria-");
+                if looks_like_core && !allowlist.contains(&name.as_str()) {
+                    all_offenders.push(format!("{rel} [{table}] {name}"));
+                }
             }
         }
     }
 
-    if offenders.is_empty() {
-        println!(
-            "check-layering: ok — valyria-bridge depends only on {}",
-            BRIDGE_CORE_ALLOWLIST.join(", ")
-        );
+    if all_offenders.is_empty() {
+        for (rel, allowlist) in LAYERING {
+            println!(
+                "check-layering: ok — {rel} depends only on {}",
+                allowlist.join(", ")
+            );
+        }
         Ok(())
     } else {
         Err(format!(
-            "valyria-bridge has forbidden Core dependencies (D2):\n  {}\n\
-             The bridge may only depend on: {}",
-            offenders.join("\n  "),
-            BRIDGE_CORE_ALLOWLIST.join(", ")
+            "forbidden Core dependencies (D2):\n  {}",
+            all_offenders.join("\n  ")
         ))
     }
 }

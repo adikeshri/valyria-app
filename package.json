@@ -2,14 +2,16 @@
   "name": "valyria-app",
   "private": true,
   "version": "0.0.0",
-  "description": "Desktop application for Valyria. This root hosts the npm workspace (apps/*, packages/*) and the Cargo workspace (Cargo.toml).",
+  "description": "Valyria — a branded Code-OSS distribution with the Valyria autonomous agent as a built-in extension. This root hosts the npm workspace (extension, packages/*, apps/*) and the Cargo workspace (Cargo.toml). The editor itself is the `vscode/` submodule; see docs/ARCHITECTURE-VSCODE.md.",
+  "//workspaces": "extension/ is intentionally NOT a workspace — it's a self-contained built-in extension with its own lockfile, symlinked into vscode/extensions/ at bootstrap. Keeping it out of the root workspace avoids npm hoisting its @types/vscode into a tree the Code-OSS build also scans.",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w desktop",
-    "build:app": "npm run build -w desktop",
+    "bootstrap": "scripts/bootstrap.sh",
+    "dev": "scripts/dev.sh",
+    "build:app": "scripts/build.sh",
     "codegen": "npm run codegen -w @valyria/protocol",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

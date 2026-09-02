@@ -5003,6 +5003,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "valyria-bridge-host"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "valyria-bridge",
+]
+
+[[package]]
 name = "valyria-desktop"
 version = "0.1.0"
 dependencies = [

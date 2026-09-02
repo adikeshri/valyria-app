@@ -377,12 +377,40 @@ prompt.
 
 ---
 
-## Phase 4 — Approvals, autonomy, security overview
+## Phase 4 — Approvals, autonomy, security overview  *(done)*
 
 **Goal:** a manual‑mode task blocks on every mutating action, each approvable
 and deniable, with honest risk treatment.
 
-**Deliverables:**
+**Done (2026‑09‑02):**
+- `valyria.approvals` — one pending ask at a time (`pendingApprovalFor`), card
+  shows `prompt` / `tool` / `category` / `target` / `risk`; `destructive` /
+  `network` / `elevated` get high‑risk styling and a two‑step Allow
+  (arm → "Confirm — allow this"). `Allow for task` shown only when Core
+  advertises `approval_scope`, otherwise an honest "needs capability" line.
+- **G2 supersession** — the decision carries the approval's `seq`;
+  `dispatch` refuses to resolve when `approvalIsCurrent(state, taskId, seq)` is
+  false and tells the user to review again. Resolve routes through
+  `permission/resolveScoped` (once|task) when `approval_scope` is present, else
+  `permission/resolve`.
+- **Notification** (`session/notify.ts`) — a new pending approval raises a
+  toast (warning for high‑risk) with Allow once / Deny / Review, gated on the
+  `valyria.notifications.categories` setting; Review reveals the Approvals view.
+- `valyria.security` — autonomy radios (`manual`/`assisted`/`autonomous`),
+  `canChange` only when we own the daemon and no task is active, with the
+  reason spelled out; changing it calls `session/restart`. Policy list from
+  `config_show` — a key Core doesn't return renders "not reported", never an
+  invented checkmark (D8). Environment checks filtered from `doctor_run` to
+  sandbox / permission / network names, with remediation. Repository
+  instructions: `VALYRIA.md` / `AGENTS.md` (root = "authorized"), read via
+  `vscode.workspace.fs`.
+- **Tests — 50 total (+7):** `phase4.test.ts` — pending destructive approval
+  with metadata; approval clears when the task moves on; G2 stale‑seq guard;
+  autonomy `canChange` matrix; unreported keys stay unreported (D8); render
+  smoke: destructive prompt needs the second click, autonomy radios post
+  `setAutonomy`.
+
+**Deliverables (original):**
 - **`valyria.approvals`** (port `LiveApprovalCard` / `ApprovalCard`) —
   modal‑but‑non‑blocking, driven by `approval_requested` payloads (`prompt`,
   `tool`, `category`, `target`, `risk`). Risk drives visual treatment;

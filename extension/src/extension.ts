@@ -21,8 +21,11 @@ import { ChatViewProvider } from "./views/chat";
 import { TaskViewProvider } from "./views/task";
 import { TimelineViewProvider } from "./views/timeline";
 import { HistoryViewProvider } from "./views/history";
+import { ApprovalsViewProvider } from "./views/approvals";
+import { SecurityViewProvider } from "./views/security";
 import { makeWebviewDispatch } from "./views/dispatch";
 import { maybePromptResume } from "./session/resume";
+import { watchApprovalNotifications } from "./session/notify";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const log = vscode.window.createOutputChannel("Valyria", { log: true });
@@ -43,7 +46,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  const dispatch = makeWebviewDispatch({ host, store, focus, log });
+  const dispatch = makeWebviewDispatch({ host, store, supervisor, focus, log });
   let resumePrompted = false;
 
   const reopen = async (root: string, appliedThrough: number): Promise<void> => {
@@ -108,11 +111,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push(new StatusBar(supervisor));
 
+  context.subscriptions.push(
+    watchApprovalNotifications(store, focus, supervisor, dispatch)
+  );
+
   const uri = context.extensionUri;
   const views: Array<[string, vscode.WebviewViewProvider]> = [
     [ChatViewProvider.viewId, new ChatViewProvider(uri, store, supervisor, focus, dispatch)],
     [TaskViewProvider.viewId, new TaskViewProvider(uri, store, focus, dispatch)],
     [ActivityViewProvider.viewId, new ActivityViewProvider(uri, store, supervisor)],
+    [ApprovalsViewProvider.viewId, new ApprovalsViewProvider(uri, store, supervisor, focus, dispatch)],
+    [SecurityViewProvider.viewId, new SecurityViewProvider(uri, store, supervisor, host)],
     [TimelineViewProvider.viewId, new TimelineViewProvider(uri, store)],
     [HistoryViewProvider.viewId, new HistoryViewProvider(uri, store, focus, dispatch)],
   ];

@@ -21,11 +21,13 @@ import {
   type StoreState,
 } from "@valyria/state";
 import type {
+  ApprovalsModel,
   ChatModel,
+  Connection,
   HistoryModel,
+  SecurityModel,
   TaskModel,
   TimelineModel,
-  Connection,
 } from "../webviews/shared/protocol";
 
 /** The task the panels focus on: an explicit pick, else the most recent. */
@@ -164,6 +166,114 @@ export function timelineModel(state: StoreState): TimelineModel {
       summary: activityLine(e),
       raw: JSON.stringify(e.payload ?? null, null, 2),
     })),
+  };
+}
+
+// --- Approvals (§4.7, G2) ------------------------------------------
+
+export function approvalsModel(
+  state: StoreState,
+  focusId: string | undefined,
+  allowForTaskSupported: boolean
+): ApprovalsModel {
+  const id = resolveFocus(state, focusId);
+  const ap = id ? pendingApprovalFor(state, id) : undefined;
+  if (!id || !ap) {
+    return { taskId: id ?? null, approval: null, allowForTaskSupported };
+  }
+  const p = asRecord(ap.payload);
+  const str = (k: string): string | null => (typeof p[k] === "string" ? (p[k] as string) : null);
+  return {
+    taskId: id,
+    allowForTaskSupported,
+    approval: {
+      seq: ap.seq,
+      prompt: str("prompt") ?? "Approval requested",
+      tool: str("tool"),
+      category: str("category"),
+      target: str("target"),
+      // `destructive` | `network` | `elevated` | `standard` | null
+      risk: str("risk"),
+    },
+  };
+}
+
+// --- Security / autonomy (§4.15, §25, §26) -------------------------
+
+interface DoctorCheck {
+  name: string;
+  status: string;
+  detail: string;
+  remediation?: string | null;
+}
+interface ConfigEntry {
+  key: string;
+  value: string;
+  origin: string;
+}
+
+const SECURITY_KEYS = [
+  "network",
+  "permission.mode",
+  "sandbox",
+  "sandbox.mode",
+  "approvals.required",
+  "workspace.write_outside_root",
+];
+
+export function securityModel(input: {
+  configEntries: ConfigEntry[] | null;
+  doctor: { checks: DoctorCheck[]; summary: string } | null;
+  session: {
+    permissionMode: string | null;
+    ownsDaemon: boolean;
+    protocolVersion: string;
+    runtimeVersion: string;
+  } | null;
+  activeTasks: number;
+  repoInstructions: { name: string; text: string; authorized: boolean }[];
+}): SecurityModel {
+  const entries = input.configEntries ?? [];
+  const pick = (k: string) => entries.find((e) => e.key === k);
+
+  return {
+    autonomy: {
+      mode: input.session?.permissionMode ?? null,
+      // G1: changing autonomy restarts the daemon — only possible when we own it
+      // and nothing is running.
+      canChange: !!input.session?.ownsDaemon && input.activeTasks === 0,
+      reason: !input.session
+        ? "No session."
+        : !input.session.ownsDaemon
+          ? "Core was started by another process — change autonomy there."
+          : input.activeTasks > 0
+            ? "A task is running — autonomy changes restart Core."
+            : "Changing this restarts the Core daemon.",
+      levels: [
+        { id: "manual", label: "Manual", desc: "Approve every mutating action." },
+        { id: "assisted", label: "Assisted", desc: "Approve destructive & network actions only." },
+        { id: "autonomous", label: "Autonomous", desc: "No approval prompts. Use with care." },
+      ],
+    },
+    // Only lines Core actually reports. A key it doesn't return renders as
+    // "not reported" — never a checkmark we invented (D8).
+    settings: SECURITY_KEYS.map((k) => {
+      const e = pick(k);
+      return { key: k, value: e?.value ?? null, origin: e?.origin ?? null, reported: !!e };
+    }),
+    checks: (input.doctor?.checks ?? [])
+      .filter((c) => /sandbox|permission|network|isolation|write/i.test(c.name))
+      .map((c) => ({
+        name: c.name,
+        status: c.status,
+        detail: c.detail,
+        remediation: c.remediation ?? null,
+      })),
+    doctorSummary: input.doctor?.summary ?? null,
+    repoInstructions: input.repoInstructions,
+    compatible: input.session
+      ? input.session.protocolVersion.split(".")[0] === "1"
+      : null,
   };
 }
 

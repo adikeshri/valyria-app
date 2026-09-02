@@ -3,14 +3,17 @@
  * into bridge calls. No agent logic — just routing (PLAN.md §41 / D2).
  */
 import * as vscode from "vscode";
+import { approvalIsCurrent } from "@valyria/state";
 import { CMD } from "../webviews/shared/protocol";
 import type { BridgeHost } from "../bridge/host";
+import type { Supervisor } from "../session/supervisor";
 import type { TaskFocus } from "../session/focus";
 import type { Store } from "../store/store";
 
 export interface DispatchDeps {
   host: BridgeHost;
   store: Store;
+  supervisor: Supervisor;
   focus: TaskFocus;
   log: vscode.LogOutputChannel;
 }
@@ -21,7 +24,7 @@ function argStr(args: unknown, key: string): string | undefined {
 }
 
 export function makeWebviewDispatch(deps: DispatchDeps): (name: string, args: unknown) => void {
-  const { host, store, focus, log } = deps;
+  const { host, store, supervisor, focus, log } = deps;
 
   const targetTask = (args: unknown): string | undefined =>
     argStr(args, "taskId") ?? focus.pinned ?? store.currentTaskId();
@@ -56,11 +59,37 @@ export function makeWebviewDispatch(deps: DispatchDeps): (name: string, args: un
             break;
           }
           case CMD.resolveApproval: {
+            const a = (args ?? {}) as Record<string, unknown>;
             const taskId = targetTask(args);
-            const allow = Boolean((args as Record<string, unknown> | undefined)?.["allow"]);
+            const allow = Boolean(a["allow"]);
+            const seq = typeof a["seq"] === "number" ? (a["seq"] as number) : undefined;
+            const scope = a["scope"] === "task" ? "task" : "once";
             if (!taskId) return;
-            await host.client.request("permission/resolve", { taskId, allow });
-            log.info(`approval ${allow ? "allowed" : "denied"} for ${taskId}`);
+            // G2 supersession guard: never answer a prompt a newer
+            // approval_requested has replaced — re-prompt via the store instead.
+            if (seq !== undefined && !approvalIsCurrent(store.getState(), taskId, seq)) {
+              log.warn(`approval seq ${seq} is stale for ${taskId}; not resolving`);
+              void vscode.window.showWarningMessage(
+                "Valyria: that approval was superseded by a newer request. Review it again."
+              );
+              return;
+            }
+            if (supervisor.has("approval_scope")) {
+              await host.client.request("permission/resolveScoped", { taskId, allow, scope });
+            } else {
+              await host.client.request("permission/resolve", { taskId, allow });
+            }
+            log.info(`approval ${allow ? `allowed (${scope})` : "denied"} for ${taskId}`);
+            break;
+          }
+          case CMD.openFile: {
+            const path = argStr(args, "path");
+            if (!path) return;
+            const root = supervisor.session?.workspaceRoot;
+            const uri = root && !path.startsWith("/")
+              ? vscode.Uri.joinPath(vscode.Uri.file(root), path)
+              : vscode.Uri.file(path);
+            await vscode.window.showTextDocument(uri, { preview: true });
             break;
           }
           default:

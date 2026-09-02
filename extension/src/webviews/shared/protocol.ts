@@ -84,6 +84,34 @@ export interface TimelineModel {
   rows: TimelineRow[];
 }
 
+export interface ApprovalsModel {
+  taskId: string | null;
+  allowForTaskSupported: boolean;
+  approval: {
+    seq: number;
+    prompt: string;
+    tool: string | null;
+    category: string | null;
+    target: string | null;
+    /** "destructive" | "network" | "elevated" | "standard" | null */
+    risk: string | null;
+  } | null;
+}
+
+export interface SecurityModel {
+  autonomy: {
+    mode: string | null;
+    canChange: boolean;
+    reason: string;
+    levels: { id: string; label: string; desc: string }[];
+  };
+  settings: { key: string; value: string | null; origin: string | null; reported: boolean }[];
+  checks: { name: string; status: string; detail: string; remediation: string | null }[];
+  doctorSummary: string | null;
+  repoInstructions: { name: string; text: string; authorized: boolean }[];
+  compatible: boolean | null;
+}
+
 export interface HistoryTask {
   id: string;
   objective: string | null;
@@ -105,5 +133,10 @@ export const CMD = {
   resumeTask: "resumeTask",
   cancelTask: "cancelTask",
   focusTask: "focusTask",
-  resolveApproval: "resolveApproval", // { allow: boolean }
+  /** { allow: boolean, seq: number, scope?: "once" | "task" } */
+  resolveApproval: "resolveApproval",
+  /** { mode: "manual" | "assisted" | "autonomous" } */
+  setAutonomy: "setAutonomy",
+  refreshSecurity: "refreshSecurity",
+  openFile: "openFile", // { path: string }
 } as const;

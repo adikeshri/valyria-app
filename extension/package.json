@@ -58,6 +58,11 @@
           "type": "webview"
         },
         {
+          "id": "valyria.approvals",
+          "name": "Approvals",
+          "type": "webview"
+        },
+        {
           "id": "valyria.timeline",
           "name": "Timeline",
           "type": "webview",
@@ -70,8 +75,8 @@
           "visibility": "collapsed"
         },
         {
-          "id": "valyria.approvals",
-          "name": "Approvals",
+          "id": "valyria.security",
+          "name": "Security & autonomy",
           "type": "webview",
           "visibility": "collapsed"
         },

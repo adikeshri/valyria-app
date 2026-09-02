@@ -514,12 +514,48 @@ same buffer.
 
 ---
 
-## Phase 6 — Models, hardware, first‑run, settings, context
+## Phase 6 — Models, hardware, first‑run, settings, context  *(done)*
 
 **Goal:** a clean machine reaches "Ready" and completes a harmless task
 without the user learning what a model server is.
 
-**Deliverables:**
+**Done (2026‑09‑02):**
+- **`valyria.models`** — inventory from `model/list` (id, family, quant, size,
+  license, installed; `active` derived from a `model.*` config binding).
+  Install / remove / activate call Core and are shown only with the
+  `model_manage` capability (G5); a modal confirm precedes each. A prominent
+  "Valyria never downloads model weights — Core does" line, and a render test
+  asserts no `http(s)://` in the DOM (§20/§38).
+- **`valyria.hardware`** — from `hardware/probe`; a field Core returns as
+  `None` renders "not probed" (distinct from a probed `false`). Recommendation
+  from `model/recommend` when `hardware` is advertised (G4); otherwise the view
+  says Core doesn't score fit yet and points at the RAM figures.
+- **`valyria.settings`** — `config/show` grouped into Agent / Models / Security
+  / Repository / Application by key prefix, each row value **+ origin badge**.
+  An edit → `config/write` (workspace scope, TOML) → the response *is* a fresh
+  `config_show`, so the effective value is rendered; a policy adjustment is
+  surfaced. The provider refuses to write a key Core didn't report (D13).
+- **`valyria.context`** — ships disabled: "Core does not emit
+  `context_retrieved` yet (G7)"; built so it lights up automatically —
+  trace‑tested against a synthetic `context_retrieved` event.
+- **`valyria.firstrun`** — a webview view gated on the `valyria.showFirstRun`
+  context key (set from `globalState`): explains local inference, opens a
+  repository, runs one fixed read‑only probe task, and marks itself seen on
+  completion.
+- **Offline marker** — `StatusBar` gains a second item:
+  `$(shield) Local · Offline · Model: <id>`, or `$(globe) Network runtime`
+  when `doctor_run` actually reports one — observed state, not a constant (§32).
+- **Notifications** (`session/notify.ts`, renamed `watchNotifications`) — adds
+  `completed` (task terminal) and `tests_failed` (`test_failed` events) on top
+  of the Phase‑4 approval toast, all gated on
+  `valyria.notifications.categories`.
+- **Tests — 65 total (+7):** `phase6.test.ts` — active‑model derivation +
+  manage gating, `None`→null hardware fields + G4 gating, settings grouping /
+  single‑appearance / known‑keys, context G7 disabled vs lit; render smoke:
+  models "never downloads" note + no URLs, context names G7, settings edit
+  posts `writeConfig`.
+
+**Deliverables (original):**
 - **Model Manager** (port `LiveModelsPanel`) — inventory: id, family,
   quantization, size, license, installed, active. Install / remove / activate
   gated on the `model_manage` capability (G5). **No download path exists in the

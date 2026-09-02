@@ -26,9 +26,14 @@ import { SecurityViewProvider } from "./views/security";
 import { VerificationViewProvider } from "./views/verification";
 import { AgentCommandsViewProvider } from "./views/agentCommands";
 import { FileOwnershipDecorations } from "./views/ownership";
+import { ModelsViewProvider } from "./views/models";
+import { HardwareViewProvider } from "./views/hardware";
+import { SettingsViewProvider } from "./views/settings";
+import { ContextViewProvider } from "./views/context";
+import { FirstRunViewProvider } from "./views/firstrun";
 import { makeWebviewDispatch } from "./views/dispatch";
 import { maybePromptResume } from "./session/resume";
-import { watchApprovalNotifications } from "./session/notify";
+import { watchNotifications } from "./session/notify";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const log = vscode.window.createOutputChannel("Valyria", { log: true });
@@ -61,8 +66,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     try {
       await supervisor.open(root, appliedThrough);
       host.markHealthy();
+      void refreshRuntimeMarker();
     } catch (e) {
       log.error(`session/open failed: ${String(e)}`);
+    }
+  };
+
+  // Reflect observed state into the Local · Offline · Model marker (§32).
+  const refreshRuntimeMarker = async (): Promise<void> => {
+    if (supervisor.state !== "ready") return;
+    try {
+      const cfg = (await host.client.request("config/show", {})) as {
+        entries?: { key: string; value: string }[];
+      };
+      const modelEntry = (cfg.entries ?? []).find((e) => /(^|\.)model(\.code|\.id|_id)?$/i.test(e.key));
+      const doc = (await host.client.request("doctor/run", {})) as {
+        checks?: { name: string; status: string; detail: string }[];
+      };
+      const networkRuntime = (doc.checks ?? []).some(
+        (c) => /network|online|remote.?model/i.test(c.name) && c.status === "pass" && /enabled|allowed|reachable/i.test(c.detail)
+      );
+      statusBar.setRuntime({ activeModel: modelEntry?.value ?? null, networkRuntime });
+    } catch {
+      /* marker stays at its safe default: Local · Offline */
     }
   };
 
@@ -112,12 +138,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     { dispose: () => { for (const d of clientSubs.splice(0)) d.dispose(); } }
   );
 
-  context.subscriptions.push(new StatusBar(supervisor));
+  const statusBar = new StatusBar(supervisor);
+  context.subscriptions.push(statusBar);
 
   context.subscriptions.push(
-    watchApprovalNotifications(store, focus, supervisor, dispatch),
+    watchNotifications(store, focus, supervisor, dispatch),
     new FileOwnershipDecorations(store, focus, supervisor, host, log)
   );
+
+  void FirstRunViewProvider.syncVisibility(context);
 
   const uri = context.extensionUri;
   const views: Array<[string, vscode.WebviewViewProvider]> = [
@@ -128,6 +157,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     [AgentCommandsViewProvider.viewId, new AgentCommandsViewProvider(uri, store, focus)],
     [VerificationViewProvider.viewId, new VerificationViewProvider(uri, store, focus, supervisor, host)],
     [SecurityViewProvider.viewId, new SecurityViewProvider(uri, store, supervisor, host)],
+    [ModelsViewProvider.viewId, new ModelsViewProvider(uri, supervisor, host)],
+    [HardwareViewProvider.viewId, new HardwareViewProvider(uri, supervisor, host)],
+    [SettingsViewProvider.viewId, new SettingsViewProvider(uri, supervisor, host)],
+    [ContextViewProvider.viewId, new ContextViewProvider(uri, store, supervisor, focus)],
+    [FirstRunViewProvider.viewId, new FirstRunViewProvider(uri, context, store, supervisor, host, reopen)],
     [TimelineViewProvider.viewId, new TimelineViewProvider(uri, store)],
     [HistoryViewProvider.viewId, new HistoryViewProvider(uri, store, focus, dispatch)],
   ];

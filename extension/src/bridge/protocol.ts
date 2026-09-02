@@ -85,8 +85,8 @@ export interface Requests {
 
   // --- config / doctor ---
   "config/show": [Record<string, never>, unknown];
-  "config/write": [{ key: string; value: string; scope: "repo" | "user" }, unknown];
-  "config/set": [{ key: string; value: string }, unknown];
+  "config/write": [{ key: string; value: string; scope: "workspace" | "user" }, unknown];
+  "config/set": [{ key: string; value: string; scope?: string }, unknown];
   "doctor/run": [Record<string, never>, unknown];
 
   // --- workspace / index / search (Core surfaces; G3) ---
@@ -103,7 +103,7 @@ export interface Requests {
 
   // --- models / hardware (G4/G5) ---
   "model/list": [Record<string, never>, unknown];
-  "model/recommend": [Record<string, never>, unknown];
+  "model/recommend": [{ role?: string }, unknown];
   "model/install": [{ id: string }, unknown];
   "model/remove": [{ id: string }, unknown];
   "model/activate": [{ id: string }, unknown];

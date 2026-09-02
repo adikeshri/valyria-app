@@ -43,6 +43,12 @@
     "views": {
       "valyria": [
         {
+          "id": "valyria.firstrun",
+          "name": "Get started",
+          "type": "webview",
+          "when": "valyria.showFirstRun"
+        },
+        {
           "id": "valyria.chat",
           "name": "Agent",
           "type": "webview"
@@ -89,6 +95,30 @@
         {
           "id": "valyria.security",
           "name": "Security & autonomy",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.models",
+          "name": "Models",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.hardware",
+          "name": "Hardware",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.settings",
+          "name": "Settings",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.context",
+          "name": "Context",
           "type": "webview",
           "visibility": "collapsed"
         }

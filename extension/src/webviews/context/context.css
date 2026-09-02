@@ -1,0 +1,2 @@
+.ctx-disabled { border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 10px 12px; color: var(--text-secondary); font-size: var(--text-sm); }
+.ctx-row { display: flex; gap: 6px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--text-sm); }

@@ -150,6 +150,61 @@ export interface SecurityModel {
   compatible: boolean | null;
 }
 
+export interface ModelsModel {
+  manageCapable: boolean;
+  hasList: boolean;
+  models: {
+    id: string;
+    family: string;
+    quantization: string;
+    sizeBytes: number;
+    installed: boolean;
+    license: string;
+    active: boolean;
+  }[];
+  bindings: { key: string; value: string; origin: string }[];
+}
+
+export interface HardwareModel {
+  hasProbe: boolean;
+  hardwareCapable: boolean;
+  os: string | null;
+  arch: string | null;
+  cpu: { brand: string | null; physicalCores: number | null; logicalCores: number | null } | null;
+  ramTotalBytes: number | null;
+  ramAvailableBytes: number | null;
+  diskAvailableBytes: number | null;
+  unifiedMemory: boolean | null;
+  acceleratorPresent: boolean | null;
+  gpus: { name: string; vendor: string | null; vramBytes: number | null }[];
+  recommendation: {
+    role: string;
+    recommendedId: string | null;
+    candidates: { id: string; fits: boolean; reason: string | null }[];
+  } | null;
+}
+
+export interface SettingsModel {
+  hasConfig: boolean;
+  sections: {
+    title: string;
+    rows: { key: string; value: string; origin: string; editable: boolean }[];
+  }[];
+}
+
+export interface ContextModel {
+  available: boolean;
+  taskId: string | null;
+  items: {
+    seq: number;
+    source: string | null;
+    path: string | null;
+    trust: string | null;
+    tokens: number | null;
+    summary: string;
+  }[];
+}
+
 export interface HistoryTask {
   id: string;
   objective: string | null;
@@ -180,4 +235,13 @@ export const CMD = {
   /** { checkpointId: string, intent?: string } */
   rollbackTo: "rollbackTo",
   refreshVerification: "refreshVerification",
+  /** { id: string, action: "install" | "remove" | "activate" } */
+  manageModel: "manageModel",
+  refreshModels: "refreshModels",
+  refreshHardware: "refreshHardware",
+  /** { key: string, value: string } */
+  writeConfig: "writeConfig",
+  firstRunOpenRepo: "firstRunOpenRepo",
+  firstRunProbeTask: "firstRunProbeTask",
+  firstRunDismiss: "firstRunDismiss",
 } as const;

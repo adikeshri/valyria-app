@@ -1,0 +1,5 @@
+.hw-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: var(--text-sm); }
+.hw-grid dt { color: var(--text-tertiary); }
+.hw-grid dd { margin: 0; }
+.hw-unprobed { color: var(--text-tertiary); font-style: italic; }
+.hw-cand { display: flex; gap: 6px; align-items: baseline; }

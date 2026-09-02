@@ -26,8 +26,12 @@ import type {
   ApprovalsModel,
   ChatModel,
   Connection,
+  ContextModel,
+  HardwareModel,
   HistoryModel,
+  ModelsModel,
   SecurityModel,
+  SettingsModel,
   TaskModel,
   TimelineModel,
   VerificationModel,
@@ -352,6 +356,164 @@ export function securityModel(input: {
     compatible: input.session
       ? input.session.protocolVersion.split(".")[0] === "1"
       : null,
+  };
+}
+
+// --- Models (§20, §37 — inventory only; the app never downloads weights) ---
+
+interface ModelSummary {
+  id: string;
+  family: string;
+  quantization: string;
+  size_bytes: number;
+  installed: boolean;
+  license: string;
+}
+
+export function modelsModel(input: {
+  models: ModelSummary[] | null;
+  configEntries: { key: string; value: string; origin: string }[] | null;
+  manageCapable: boolean;
+}): ModelsModel {
+  const activeIds = new Set(
+    (input.configEntries ?? [])
+      .filter((e) => /(^|\.)model(\.|$)/i.test(e.key) || /model_id|active_model/i.test(e.key))
+      .map((e) => e.value)
+  );
+  return {
+    manageCapable: input.manageCapable,
+    hasList: input.models !== null,
+    models: (input.models ?? []).map((m) => ({
+      id: m.id,
+      family: m.family,
+      quantization: m.quantization,
+      sizeBytes: m.size_bytes,
+      installed: m.installed,
+      license: m.license,
+      active: activeIds.has(m.id),
+    })),
+    bindings: (input.configEntries ?? [])
+      .filter((e) => /(^|\.)model(\.|role)/i.test(e.key))
+      .map((e) => ({ key: e.key, value: e.value, origin: e.origin })),
+  };
+}
+
+// --- Hardware (§21, §37 — probe + recommendation; G4 gates fit()) ---
+
+export function hardwareModel(input: {
+  probe: Record<string, unknown> | null;
+  recommend: {
+    role: string;
+    recommended: Record<string, unknown> | null;
+    candidates: Record<string, unknown>[];
+  } | null;
+  hardwareCapable: boolean;
+}): HardwareModel {
+  const p = input.probe;
+  const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
+  const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+  const cpu = asRecord(p?.["cpu"]);
+  const gpus = Array.isArray(p?.["gpus"]) ? (p!["gpus"] as Record<string, unknown>[]) : [];
+
+  return {
+    hasProbe: p !== null,
+    hardwareCapable: input.hardwareCapable,
+    os: p ? `${str(p["os"]) ?? "?"} ${str(p["os_version"]) ?? ""}`.trim() : null,
+    arch: p ? str(p["arch"]) : null,
+    cpu: p
+      ? {
+          brand: str(cpu["brand"]),
+          physicalCores: num(cpu["physical_cores"]),
+          logicalCores: num(cpu["logical_cores"]),
+        }
+      : null,
+    ramTotalBytes: p ? num(p["ram_total_bytes"]) : null,
+    ramAvailableBytes: p ? num(p["ram_available_bytes"]) : null,
+    diskAvailableBytes: p ? num(p["disk_available_bytes"]) : null,
+    unifiedMemory: p ? p["unified_memory"] === true : null,
+    // Some fields are "probed and absent" (Some(false)) vs "not probed" (None).
+    acceleratorPresent:
+      p && typeof p["accelerator_present"] === "boolean"
+        ? (p["accelerator_present"] as boolean)
+        : null,
+    gpus: gpus.map((g) => ({
+      name: str(g["name"]) ?? "?",
+      vendor: str(g["vendor"]),
+      vramBytes: num(g["vram_bytes"]),
+    })),
+    recommendation: input.recommend
+      ? {
+          role: input.recommend.role,
+          recommendedId: str(asRecord(input.recommend.recommended)["id"]),
+          candidates: input.recommend.candidates.map((c) => ({
+            id: str(asRecord(c)["id"]) ?? "?",
+            fits: asRecord(c)["fits"] === true,
+            reason: str(asRecord(c)["reason"] ?? asRecord(c)["explanation"]),
+          })),
+        }
+      : null,
+  };
+}
+
+// --- Settings (§24 — render config_show; D13 write-then-verify) ---
+
+const SETTINGS_SECTIONS: { title: string; match: RegExp }[] = [
+  { title: "Agent", match: /^(agent|permission|autonomy|approvals|task)\b/i },
+  { title: "Models", match: /^(model|models|inference|runtime)\b/i },
+  { title: "Security", match: /^(network|sandbox|security|isolation|workspace\.write)\b/i },
+  { title: "Repository", match: /^(repo|repository|index|git|search)\b/i },
+  { title: "Application", match: /.*/ },
+];
+
+export function settingsModel(input: {
+  entries: { key: string; value: string; origin: string }[] | null;
+}): SettingsModel {
+  const entries = input.entries;
+  if (!entries) return { hasConfig: false, sections: [] };
+
+  const used = new Set<string>();
+  const sections = SETTINGS_SECTIONS.map((sec) => {
+    const rows = entries
+      .filter((e) => !used.has(e.key) && sec.match.test(e.key))
+      .map((e) => {
+        used.add(e.key);
+        return {
+          key: e.key,
+          value: e.value,
+          origin: e.origin,
+          // Only string-ish leaves are editable via config/write (a TOML string).
+          editable: sec.title !== "Application" || /^(log|ui|editor)\./i.test(e.key),
+        };
+      });
+    return { title: sec.title, rows };
+  }).filter((s) => s.rows.length > 0);
+
+  return { hasConfig: true, sections };
+}
+
+// --- Context inspector (§34 — disabled with an explanation until G7) ---
+
+export function contextModel(state: StoreState, focusId: string | undefined, contextCapable: boolean): ContextModel {
+  const id = resolveFocus(state, focusId);
+  const rows: ContextModel["items"] = [];
+  if (id && contextCapable) {
+    for (const e of eventsForTask(state, id)) {
+      if (e.kind !== "context_retrieved") continue;
+      const p = asRecord(e.payload);
+      rows.push({
+        seq: e.seq,
+        source: typeof p["source"] === "string" ? (p["source"] as string) : null,
+        path: typeof p["path"] === "string" ? (p["path"] as string) : null,
+        trust: typeof p["trust"] === "string" ? (p["trust"] as string) : null,
+        tokens: typeof p["tokens"] === "number" ? (p["tokens"] as number) : null,
+        summary: activityLine(e),
+      });
+    }
+  }
+  return {
+    available: contextCapable,
+    taskId: id ?? null,
+    items: rows,
   };
 }
 

@@ -1,5 +1,12 @@
 # Valyria App — Build Plan
 
+> **Superseded on the app shell.** This is the original Tauri build plan. The
+> Code-OSS-fork architecture is [ARCHITECTURE-VSCODE.md](ARCHITECTURE-VSCODE.md)
+> and the phase status is [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md). The
+> **design decisions (D1–D14), the Core protocol, and the subsystem designs**
+> below are still the reference — they were always about the bridge and the
+> projection, not the Tauri renderer.
+
 The desktop application for Valyria: a local-first autonomous software engineer.
 
 This plan is written against the Core tree at `../valyria` as of protocol

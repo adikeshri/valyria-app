@@ -1,11 +1,11 @@
-# Cargo workspace for the app's Rust side: the Tauri host and the protocol
-# bridge. The Core tree at ../valyria is a SEPARATE workspace and is never a
-# member here — the bridge reaches Core only through the `valyria-protocol`
-# git dependency pinned in core.lock.json (docs/PLAN.md D2).
+# Cargo workspace for the app's Rust side: the Core protocol bridge and the
+# stdio front end the Valyria VS Code extension spawns. The Core tree at
+# ../valyria is a SEPARATE workspace and is never a member here — the bridge
+# reaches Core only through the `valyria-protocol` git dependency pinned in
+# core.lock.json (docs/ARCHITECTURE-VSCODE.md).
 [workspace]
 resolver = "2"
 members = [
-    "apps/desktop/src-tauri",
     "crates/valyria-bridge",
     "crates/valyria-bridge-host",
     "crates/xtask",

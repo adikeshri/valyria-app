@@ -5,76 +5,69 @@
 <h1 align="center">Valyria App</h1>
 
 <p align="center">
-  The desktop application for <a href="../valyria">Valyria</a> — a local-first
-  autonomous coding harness that runs entirely on your own machine.
+  A full VS&nbsp;Code-class editor — a branded <b>Code&nbsp;-&nbsp;OSS</b>
+  distribution — with the <a href="../valyria">Valyria</a> autonomous coding
+  agent shipped as a bundled built-in extension. Local-first: inference runs on
+  your machine, no account, no telemetry.
 </p>
 
-## See it
+## Shape
 
-![Valyria App — clicking through the Agent, Task, Diff, Tests and Terminal surfaces](docs/assets/demo.gif)
+| Path | What it is |
+|---|---|
+| `vscode/` | Code&nbsp;-&nbsp;OSS submodule, pinned by `build/VSCODE_REF` (never edited in place) |
+| `build/` | the branding overlay (`product.overlay.json`) + patches, applied by `scripts/bootstrap.sh` |
+| `extension/` | the **Valyria** built-in extension — every agent surface (Agent, Task, Activity, Timeline, Approvals, Verification, Agent Commands, Models, Hardware, Settings, Context, About, First-run) |
+| `crates/valyria-bridge/` | the only code that speaks Core's protocol — socket client, session supervisor, event pump |
+| `crates/valyria-bridge-host/` | the stdio JSON-RPC front end the extension spawns (the role the Tauri host played, minus Tauri) |
+| `packages/protocol` · `packages/state` | generated wire types + zod decoders; the pure, synchronous event reducer |
 
-<p align="center">
-  <img src="docs/assets/screenshot.png" alt="The Valyria App desktop renderer" width="900">
-</p>
+The agent lives entirely in the extension and talks to Core only through
+`valyria-bridge-host`. The editor itself — files, search, diff, git, terminal,
+debug, tasks — is upstream Code&nbsp;-&nbsp;OSS and the extension does not touch it.
 
-The tour above runs against `apps/desktop/src/data/mock.ts` — every panel is
-built on the exact data shapes Core's protocol will provide.
+## Run it
 
-> **Status: mid-pivot.** valyria-app is being rebuilt as a **branded Code-OSS
-> distribution** (a full VS Code-class editor) with the Valyria agent shipped as
-> a **bundled built-in extension**. See
-> [docs/ARCHITECTURE-VSCODE.md](docs/ARCHITECTURE-VSCODE.md) for the new shape
-> and the migration phases.
->
-> - `vscode/` — Code-OSS submodule, pinned by `build/VSCODE_REF`
-> - `build/` — the branding overlay applied by `scripts/bootstrap.sh`
-> - `extension/` — the Valyria built-in extension (TypeScript)
-> - `crates/valyria-bridge-host/` — stdio JSON-RPC front end for `valyria-bridge`
-> - `apps/desktop/` — the old Tauri prototype, retired once the extension is at parity
->
-> Get going: `brew install node@24` (one-time; keg-only) →
-> `scripts/bootstrap.sh` → `scripts/install-deps.sh` → `scripts/dev.sh`.
-> Phase 0 is complete — that sequence launches a branded **Valyria** window
-> with the agent extension active. See
-> [docs/IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md).
->
-> The visual prototype under [apps/desktop](apps/desktop) still builds
-> (`npm run app:dev`) and its panels are the reference for the extension's
-> agent surfaces.
+```bash
+brew install node@24          # one-time; keg-only, non-invasive (see scripts/node-guard.sh)
+scripts/bootstrap.sh          # submodule + overlay + patches
+scripts/install-deps.sh       # ~5-10 min, ~1 GB
+scripts/dev.sh                # watch + launch the branded Valyria window
+```
 
 `valyria-app` is a **client** of the Valyria Core runtime, not a second
 implementation of it. Core plans, edits, runs and verifies; the app is the
-window onto that work — repository, task, context, actions, verification — and
-the place a developer approves what the agent is allowed to do.
+window onto that work, and the place a developer approves what the agent may do.
 
 ## Documents
 
 | Document | What it covers |
 |---|---|
-| [docs/ARCHITECTURE-VSCODE.md](docs/ARCHITECTURE-VSCODE.md) | **Current.** The Code-OSS-fork architecture, repo topology, process model, branding checklist |
-| [docs/IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md) | **Current.** The phase-by-phase build plan (0–11), standing gates, dependency graph, capability-gap → phase map |
-| [docs/PLAN.md](docs/PLAN.md) | The original Tauri build plan. Still accurate about Core, the protocol, and the design decisions (D1–D14); superseded on the app-shell architecture by ARCHITECTURE-VSCODE.md |
-| [docs/CORE-INTERFACE.md](docs/CORE-INTERFACE.md) | What Core's frozen v1 protocol offers, the twelve gaps between it and the product, and the additive methods the app needs |
+| [docs/ARCHITECTURE-VSCODE.md](docs/ARCHITECTURE-VSCODE.md) | **Primary.** The Code-OSS-fork architecture — repo topology, process model, branding checklist, what each old Tauri piece became |
+| [docs/IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md) | **Primary.** The phase-by-phase build plan (0–11), what shipped per phase, standing gates, capability-gap → phase map |
+| [docs/PACKAGING.md](docs/PACKAGING.md) | Sidecars, per-OS gulp targets, signing credentials, the update feed, Windows tier 3 |
+| [docs/CORE-INTERFACE.md](docs/CORE-INTERFACE.md) | What Core's protocol offers, the capability gaps (G1–G15), and how each surface degrades until Core closes them |
+| [docs/PLAN.md](docs/PLAN.md) | The original Tauri build plan. Still the reference for Core, the protocol, and the design decisions (D1–D14); **superseded on the app shell** by ARCHITECTURE-VSCODE.md |
 
 Start with the design decisions in PLAN §1 and the gap list in CORE-INTERFACE §2
-— between them they explain nearly every structural choice in the plan.
+— between them they explain nearly every structural choice.
 
 ## The shape of it
 
 ```text
-┌──────────────────────────────┐        ┌────────────────────────────┐
-│ valyria-app (Tauri)          │        │ valyria serve (Core)       │
-│                              │        │                            │
-│  renderer  ── React/TS       │  NDJSON│  one runtime per workspace │
-│  bridge    ── Rust           │◄──────►│  agent loop, tools, index, │
-│              protocol client │  Unix  │  verification, ledger      │
-│              supervisor, PTY │  socket│                            │
-└──────────────────────────────┘        └────────────────────────────┘
-        UI process may die              runtime survives independently
+┌─ Valyria (Electron / branded Code-OSS) ──────┐     ┌─ valyria serve (Core) ─────┐
+│  workbench + editor  ── upstream, untouched   │     │                            │
+│  ext host (Node)                              │     │  one daemon per workspace  │
+│    └─ extension "valyria"                     │     │  agent loop, tools, index, │
+│         child_process ─ valyria-bridge-host ──┼─────►  verification, ledger      │
+│              (stdio JSON-RPC)   NDJSON / Unix │     │                            │
+└──────────────────────────────────────────────┘     └────────────────────────────┘
+        UI process may die                            runtime survives independently
 ```
 
 Core runs as a supervised sidecar daemon, never inside the UI process, so a
-crashed window never kills a running task.
+crashed window never kills a running task. The extension owns no socket — that
+lives inside `valyria-bridge-host`.
 
 ## License
 

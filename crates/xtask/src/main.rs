@@ -6,15 +6,6 @@
 //!                    checkout, when one is present next to this repo
 //!   verify-core      core.lock.json is internally consistent and matches
 //!                    the vendored version.txt
-//!   check-d7         the human PTY and the agent-command view never share a
-//!                    buffer: only the terminal panel touches `@xterm/xterm`,
-//!                    and the agent-command view touches no PTY plumbing
-//!   check-error-strings  no renderer surface shows a raw error string or a
-//!                    banned generic — every error goes through
-//!                    `core/errors.ts` `present()` + `<ErrorState>` (§3 / §36)
-//!   check-a11y       overlays trap focus (`useOverlayA11y`), the only tab
-//!                    strip implementation is `TabStrip.tsx`, and every image
-//!                    has an `alt`
 //!   check-extension  the Code-OSS-fork extension declares only the
 //!                    `@valyria/*` + `zod` runtime deps, references no
 //!                    xterm/PTY package, and `valyria-bridge-host` exposes no
@@ -32,21 +23,15 @@ fn main() -> ExitCode {
         Some("check-layering") => check_layering(&repo),
         Some("check-protocol") => check_protocol(&repo),
         Some("verify-core") => verify_core(&repo),
-        Some("check-d7") => check_d7(&repo),
-        Some("check-error-strings") => check_error_strings(&repo),
-        Some("check-a11y") => check_a11y(&repo),
         Some("check-extension") => check_extension(&repo),
         Some("all") => check_layering(&repo)
             .and_then(|_| verify_core(&repo))
             .and_then(|_| check_protocol(&repo))
-            .and_then(|_| check_d7(&repo))
-            .and_then(|_| check_error_strings(&repo))
-            .and_then(|_| check_a11y(&repo))
             .and_then(|_| check_extension(&repo)),
         other => {
             eprintln!("unknown task: {other:?}");
             eprintln!(
-                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|check-d7|check-error-strings|check-a11y|check-extension|all>"
+                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|check-extension|all>"
             );
             return ExitCode::from(2);
         }
@@ -300,222 +285,6 @@ fn check_protocol(repo: &Path) -> Result<(), String> {
              If ../valyria is at the pinned rev, run `xtask sync-core` and commit. \
              If it is ahead, this is an unrecorded Core bump.",
             mismatches.join(", ")
-        ))
-    }
-}
-
-// --- check-d7 (docs/PLAN.md D7 / §4.10) --------------------------------
-//
-// The integrated terminal shares a panel between the human's shell and the
-// agent's commands, but never a buffer — confusing the two is a security
-// problem (a user who thinks the agent ran a command it did not run approves
-// the wrong things). This makes that mechanical:
-//
-//   * `@xterm/xterm` — a real writable terminal — is imported by the human
-//     terminal only (the live panel plus its mock/dispatcher).
-//   * the agent-command view is a read-only projection of `tool_*` events and
-//     must not reach for any PTY plumbing.
-
-/// Renderer files allowed to import `@xterm/xterm`.
-const XTERM_ALLOWED: &[&str] = &[
-    "apps/desktop/src/panels/LiveTerminalPanel.tsx",
-    "apps/desktop/src/panels/TerminalPanel.tsx",
-];
-
-/// The agent-command view — must stay a plain list, never a terminal.
-const AGENT_VIEW: &str = "apps/desktop/src/panels/LiveAgentCommands.tsx";
-const AGENT_VIEW_FORBIDDEN: &[&str] =
-    &["@xterm/xterm", "core/pty", "pty_write", "core://pty-output"];
-
-fn check_d7(repo: &Path) -> Result<(), String> {
-    let src = repo.join("apps/desktop/src");
-    let mut files = Vec::new();
-    collect_files(&src, "tsx", &mut files);
-    collect_files(&src, "ts", &mut files);
-
-    let mut offenders = Vec::new();
-
-    for file in &files {
-        let rel = file
-            .strip_prefix(repo)
-            .unwrap_or(file)
-            .to_string_lossy()
-            .replace('\\', "/");
-        let text = std::fs::read_to_string(file)
-            .map_err(|e| format!("reading {}: {e}", file.display()))?;
-
-        if text.contains("@xterm/xterm") && !XTERM_ALLOWED.contains(&rel.as_str()) {
-            offenders.push(format!(
-                "{rel} imports @xterm/xterm — only the human terminal may (D7)"
-            ));
-        }
-
-        if rel == AGENT_VIEW {
-            for needle in AGENT_VIEW_FORBIDDEN {
-                if text.contains(needle) {
-                    offenders.push(format!(
-                        "{rel} references {needle:?} — the agent-command view must not touch PTY plumbing (D7)"
-                    ));
-                }
-            }
-        }
-    }
-
-    // The allowlisted files must actually exist, or the guard is dead.
-    for allowed in XTERM_ALLOWED {
-        if !repo.join(allowed).exists() {
-            offenders.push(format!("allowlisted file {allowed} is missing"));
-        }
-    }
-    if !repo.join(AGENT_VIEW).exists() {
-        offenders.push(format!("{AGENT_VIEW} is missing"));
-    }
-
-    if offenders.is_empty() {
-        println!("check-d7: ok — human PTY and agent-command view stay separate buffers");
-        Ok(())
-    } else {
-        Err(format!(
-            "D7 separation violated:\n  {}",
-            offenders.join("\n  ")
-        ))
-    }
-}
-
-// --- check-error-strings (docs/PLAN.md §3 / PRD §36) ------------------
-//
-// Every user-visible error answers the four §36 questions, via
-// `core/errors.ts` `present()` + `<ErrorState>`. A raw `String(e)` or a bare
-// generic in JSX bypasses that — bar it mechanically.
-
-/// Renderer strings that mean "an error is being rendered raw" or "a generic
-/// stand-in is being shown".
-const ERR_BANNED: &[&str] = &[
-    "{String(e)}",
-    ">{err}",
-    ">{error}",
-    "{err}<",
-    "{error}<",
-    "title={err}",
-    "title={error}",
-    "title={String(",
-    "Something went wrong",
-    "An error occurred",
-    "Unknown error",
-    "went wrong",
-];
-
-/// The one file allowed to render presentation fields directly.
-const ERR_ALLOWED: &[&str] = &["apps/desktop/src/components/ErrorState.tsx"];
-
-fn check_error_strings(repo: &Path) -> Result<(), String> {
-    let src = repo.join("apps/desktop/src");
-    let mut files = Vec::new();
-    collect_files(&src, "tsx", &mut files);
-
-    let mut offenders = Vec::new();
-    for file in &files {
-        let rel = file
-            .strip_prefix(repo)
-            .unwrap_or(file)
-            .to_string_lossy()
-            .replace('\\', "/");
-        if ERR_ALLOWED.contains(&rel.as_str()) {
-            continue;
-        }
-        let text = std::fs::read_to_string(file)
-            .map_err(|e| format!("reading {}: {e}", file.display()))?;
-        for needle in ERR_BANNED {
-            if text.contains(needle) {
-                offenders.push(format!("{rel} contains {needle:?}"));
-            }
-        }
-    }
-
-    if !repo.join("apps/desktop/src/core/errors.ts").exists() {
-        offenders.push("apps/desktop/src/core/errors.ts is missing".to_string());
-    }
-
-    if offenders.is_empty() {
-        println!("check-error-strings: ok — errors go through present() + <ErrorState>");
-        Ok(())
-    } else {
-        Err(format!(
-            "raw / generic error strings in the renderer (§36):\n  {}\n\
-             Route them through `present()` from core/errors.ts and render <ErrorState>.",
-            offenders.join("\n  ")
-        ))
-    }
-}
-
-// --- check-a11y (docs/PLAN.md §5 Phase 9 / D10) -----------------------
-//
-// Static structural checks. The manual VoiceOver/NVDA + axe pass is
-// docs/ACCESSIBILITY.md — this gate just holds the invariants a grep can hold.
-
-/// Full-screen overlays: each must trap focus / handle Escape via the shared
-/// hook, or keyboard users get stuck behind them.
-const OVERLAY_FILES: &[&str] = &[
-    "apps/desktop/src/components/SettingsView.tsx",
-    "apps/desktop/src/components/AboutView.tsx",
-    "apps/desktop/src/components/CommandPalette.tsx",
-    "apps/desktop/src/components/LiveFirstRun.tsx",
-    "apps/desktop/src/components/FirstRunView.tsx",
-];
-
-fn check_a11y(repo: &Path) -> Result<(), String> {
-    let src = repo.join("apps/desktop/src");
-    let mut files = Vec::new();
-    collect_files(&src, "tsx", &mut files);
-
-    let mut offenders = Vec::new();
-
-    for overlay in OVERLAY_FILES {
-        let path = repo.join(overlay);
-        match std::fs::read_to_string(&path) {
-            Ok(text) => {
-                if !text.contains("useOverlayA11y") {
-                    offenders.push(format!(
-                        "{overlay} does not use useOverlayA11y (focus trap / Escape)"
-                    ));
-                }
-            }
-            Err(_) => offenders.push(format!("{overlay} is missing (overlay allowlist stale)")),
-        }
-    }
-
-    for file in &files {
-        let rel = file
-            .strip_prefix(repo)
-            .unwrap_or(file)
-            .to_string_lossy()
-            .replace('\\', "/");
-        let text = std::fs::read_to_string(file)
-            .map_err(|e| format!("reading {}: {e}", file.display()))?;
-
-        // Only TabStrip defines the tablist role.
-        if text.contains("role=\"tablist\"") && rel != "apps/desktop/src/components/TabStrip.tsx" {
-            offenders.push(format!(
-                "{rel} hand-rolls role=\"tablist\" — use <TabStrip>"
-            ));
-        }
-        // Every <img> carries an alt.
-        for (i, line) in text.lines().enumerate() {
-            if line.contains("<img ") && !line.contains("alt=") {
-                offenders.push(format!("{rel}:{} <img> without alt=", i + 1));
-            }
-        }
-    }
-
-    if offenders.is_empty() {
-        println!(
-            "check-a11y: ok — overlays trap focus, TabStrip is the only tab strip, images have alt"
-        );
-        Ok(())
-    } else {
-        Err(format!(
-            "accessibility invariants broken:\n  {}",
-            offenders.join("\n  ")
         ))
     }
 }

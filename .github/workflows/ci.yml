@@ -20,14 +20,14 @@ env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
 jobs:
-  node:
-    name: Node (codegen · typecheck · test · lint · build)
+  packages:
+    name: Shared packages (codegen · typecheck · test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: "24.20"
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
@@ -38,26 +38,12 @@ jobs:
 
       - run: npm run typecheck
       - run: npm test
-      - run: npm run lint -w desktop
-      - run: npm run build -w desktop
 
   rust:
     name: Rust (fmt · clippy · test · gates)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Tauri system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            libgtk-3-dev \
-            libssl-dev \
-            patchelf \
-            build-essential
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -76,11 +62,11 @@ jobs:
       # no ../valyria checkout. It runs in the release pipeline against the
       # bundled Core binary.
 
-      - name: Gates (check-layering · verify-core · check-protocol · check-d7 · check-error-strings · check-a11y)
+      - name: Gates (check-layering · verify-core · check-protocol · check-extension)
         run: cargo run -q -p xtask -- all
 
   rust-windows:
-    name: Rust on Windows (bridge transport · gates)
+    name: Rust on Windows (bridge-host tier-3 · gates)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -91,15 +77,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
-      # Scope: prove the Windows-specific code in valyria-bridge *compiles and
-      # lints* clean (named-pipe transport address, adopt/liveness probes —
-      # CORE-INTERFACE G9 / D14) and that the gates run. Not `cargo test`: the
-      # bridge's lib tests spawn a real interactive shell (PTY) and assume a
-      # Unix socket path — that is runtime behaviour a Windows box would have
-      # to validate, and it is not what this job is for. The full Tauri
-      # desktop build for Windows is exercised by the release pipeline.
-      - run: cargo build -p valyria-bridge -p xtask --all-targets --locked
-      - run: cargo clippy -p valyria-bridge -p xtask --all-targets --locked -- -D warnings
+      # Scope: prove valyria-bridge + valyria-bridge-host compile and lint clean
+      # on Windows (the tier-3 `cfg!(windows)` refusal path — CORE-INTERFACE G9)
+      # and that the gates run. Not `cargo test`: the bridge's lib tests assume a
+      # Unix socket + a real shell.
+      - run: cargo build -p valyria-bridge -p valyria-bridge-host -p xtask --all-targets --locked
+      - run: cargo clippy -p valyria-bridge -p valyria-bridge-host -p xtask --all-targets --locked -- -D warnings
       - run: cargo run -q -p xtask -- all
 
   deny:

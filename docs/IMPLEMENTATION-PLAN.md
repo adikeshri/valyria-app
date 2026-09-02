@@ -763,11 +763,36 @@ string each fail the build.
 
 ---
 
-## Phase 10 — Retire Tauri & consolidate docs
+## Phase 10 — Retire Tauri & consolidate docs  *(done)*
 
 **Goal:** one product, one architecture, no dead code.
 
-**Deliverables:**
+**Done (2026‑09‑02):**
+- **`apps/desktop/` deleted** — 123 tracked files (the React renderer +
+  `src-tauri` host + icons + mock data). `Cargo.toml` `members` drops
+  `apps/desktop/src-tauri`; the workspace now builds three crates with no Tauri
+  dependency (`cargo check --workspace` in <1 s). Root `package.json`
+  `workspaces` → `["packages/*"]`.
+- **`xtask`** — removed `check-d7` / `check-error-strings` / `check-a11y`
+  (they scanned `apps/desktop/src`). `xtask all` = `check-layering` +
+  `verify-core` + `check-protocol` + `check-extension`. The D7 invariant is
+  now carried by `check-extension` (no xterm/PTY in the extension) and Code‑OSS
+  owns the terminal.
+- **`.github/workflows/`** — `release.yml` (Tauri‑era) deleted; `PACKAGING.md`
+  + `scripts/build.sh` supersede it. `ci.yml`: `node` job → `packages`
+  (codegen / typecheck / test only), Tauri apt deps removed, `-w desktop`
+  steps removed, `rust-windows` now also builds/lints `valyria-bridge-host`
+  (the tier‑3 path).
+- **Docs** — README rewritten around the Code‑OSS product (shape table, run
+  steps, updated architecture diagram); supersede banners on `PLAN.md`
+  (design decisions still the reference), `INTEGRATION.md` (→ PACKAGING.md for
+  distribution), `ACCESSIBILITY.md` (→ extension webviews). `ARCHITECTURE-VSCODE.md`
+  + `IMPLEMENTATION-PLAN.md` are the primary docs; `PACKAGING.md` added.
+- **Verified:** root `npm ci` + `typecheck` + `test` (30, packages),
+  extension `check` + `test` (68), `cargo check --workspace` + `test`
+  (all), `xtask all` (4/4), `cargo fmt --all --check` — all green.
+
+**Deliverables (original):**
 - Delete `apps/desktop/` (renderer + `src-tauri`); drop
   `apps/desktop/src-tauri` from `Cargo.toml` `members`; remove Tauri
   dependencies from the workspace.

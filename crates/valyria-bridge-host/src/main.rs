@@ -12,15 +12,17 @@
 
 mod rpc;
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde::Serialize;
 use serde_json::{json, Value};
 use tokio::io::{stdin, stdout, BufReader};
 use tokio::sync::{mpsc, Mutex};
 use valyria_bridge::{
-    spawn_or_adopt, BridgeError, CoreBinary, CoreClient, EventPump, PumpMessage, Session,
-    SupervisorConfig,
+    config_path, spawn_or_adopt, write_key, BridgeError, ConfigScope, CoreBinary, CoreClient,
+    EventPump, PumpMessage, Session, SupervisorConfig,
 };
 
 use rpc::{read_frame, write_frame, Incoming, Notification, Outgoing, Response, RpcError};
@@ -28,19 +30,28 @@ use rpc::{read_frame, write_frame, Incoming, Notification, Outgoing, Response, R
 /// Protocol major this build negotiates against (core.lock.json → 1.10.0).
 const EXPECTED_PROTOCOL: &str = "1.10.0";
 
+/// Bounded backoff for re-establishing a daemon that dropped its stream.
+const RESTART_BACKOFF_MS: [u64; 6] = [200, 500, 1000, 2000, 4000, 8000];
+
 type OutTx = mpsc::UnboundedSender<Outgoing>;
 
 struct Live {
     session: Session,
     client: CoreClient,
-    pump_task: tokio::task::JoinHandle<()>,
-    /// The display root passed to `session/open` — `Session` doesn't retain it.
+    /// The supervise task: forwards the event stream and, on a hard close,
+    /// restarts the daemon and resumes from `last_seq`. Aborted when this
+    /// `Live` is dropped (a new `session/open`, or `session/close`).
+    supervise_task: tokio::task::JoinHandle<()>,
+    /// Highest `last_seq` delivered so far — the resume cursor after a restart.
+    last_seq: Arc<AtomicU64>,
+    /// The display root passed to `session/open` (`Session` doesn't retain it);
+    /// also what the supervise task rebuilds from on a restart.
     root: String,
 }
 
 impl Drop for Live {
     fn drop(&mut self) {
-        self.pump_task.abort();
+        self.supervise_task.abort();
     }
 }
 
@@ -104,16 +115,16 @@ async fn main() {
         }
     });
 
+    emit_state(&out_tx, "starting", None);
+
     let mut reader = BufReader::new(stdin());
     loop {
         match read_frame(&mut reader).await {
             Ok(Some(req)) => {
-                let host = Arc::clone(&host);
-                let out_tx = out_tx.clone();
                 // Sequential dispatch keeps ordering simple and matches the old
                 // one-at-a-time Tauri command model. A slow Core call cannot
                 // block the event pump — that runs in its own task.
-                handle(host, out_tx, req).await;
+                handle(&host, &out_tx, req).await;
             }
             Ok(None) => {
                 tracing::info!("stdin closed; exiting");
@@ -130,13 +141,13 @@ async fn main() {
     let _ = writer.await;
 }
 
-async fn handle(host: Arc<Host>, out_tx: OutTx, req: Incoming) {
+async fn handle(host: &Arc<Host>, out_tx: &OutTx, req: Incoming) {
     let Some(id) = req.id.clone() else {
         tracing::debug!("ignoring notification: {}", req.method);
         return;
     };
     let method = req.method.clone();
-    let result = dispatch(&host, &out_tx, &req).await;
+    let result = dispatch(host, out_tx, &req).await;
     let msg = match result {
         Ok(v) => Response::ok(id, v),
         Err(e) => {
@@ -158,6 +169,16 @@ fn str_param(req: &Incoming, key: &str) -> Result<String, RpcError> {
 }
 fn opt_str(req: &Incoming, key: &str) -> Option<String> {
     param(req, key).and_then(Value::as_str).map(str::to_string)
+}
+fn str_array(req: &Incoming, key: &str) -> Vec<String> {
+    param(req, key)
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn map_err(e: BridgeError) -> RpcError {
@@ -184,9 +205,9 @@ where
     f(client).await.map_err(map_err).and_then(to_value)
 }
 
-async fn dispatch(host: &Host, out_tx: &OutTx, req: &Incoming) -> Result<Value, RpcError> {
+async fn dispatch(host: &Arc<Host>, out_tx: &OutTx, req: &Incoming) -> Result<Value, RpcError> {
     match req.method.as_str() {
-        // ---- session / supervisor -------------------------------------
+        // ---- session / supervisor -----------------------------------
         "session/open" => {
             let root = str_param(req, "workspaceRoot")?;
             let mode = opt_str(req, "permissionMode");
@@ -199,30 +220,21 @@ async fn dispatch(host: &Host, out_tx: &OutTx, req: &Incoming) -> Result<Value, 
             let guard = host.live.lock().await;
             match guard.as_ref() {
                 None => Ok(Value::Null),
-                Some(live) => to_value(SessionInfo::of(&live.session_root(), &live.session)),
+                Some(live) => to_value(SessionInfo::of(&live.root, &live.session)),
             }
         }
         "session/close" => {
-            let mut guard = host.live.lock().await;
-            *guard = None;
+            *host.live.lock().await = None;
+            emit_state(out_tx, "starting", Some("session closed"));
             Ok(Value::Null)
         }
-        "session/restart" => Err(RpcError::method_not_found(
-            "session/restart (autonomy restart — port from bridge_host.rs::session_restart)",
-        )),
-        "about/info" => {
-            let guard = host.live.lock().await;
-            let s = guard
-                .as_ref()
-                .map(|l| SessionInfo::of(&l.session_root(), &l.session));
-            Ok(json!({
-                "bridgeHost": env!("CARGO_PKG_VERSION"),
-                "expectedProtocol": EXPECTED_PROTOCOL,
-                "session": s.map(to_value).transpose()?,
-            }))
+        "session/restart" => {
+            let mode = str_param(req, "permissionMode")?;
+            session_restart(host, out_tx.clone(), mode).await
         }
+        "about/info" => about_info(host).await,
 
-        // ---- tasks --------------------------------------------------
+        // ---- tasks ------------------------------------------------
         "task/create" => {
             let objective = str_param(req, "objective")?;
             let mode = opt_str(req, "mode");
@@ -263,7 +275,7 @@ async fn dispatch(host: &Host, out_tx: &OutTx, req: &Incoming) -> Result<Value, 
             with_client(host, |c| async move { c.task_cancel(&t).await }).await
         }
 
-        // ---- approvals --------------------------------------------
+        // ---- approvals ------------------------------------------
         "permission/resolve" => {
             let t = str_param(req, "taskId")?;
             let allow = param(req, "allow")
@@ -282,58 +294,65 @@ async fn dispatch(host: &Host, out_tx: &OutTx, req: &Incoming) -> Result<Value, 
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
             let decision = if !allow {
-                "deny".to_string()
+                "deny"
             } else if scope == "task" {
-                "allow_task".to_string()
+                "allow_task"
             } else {
-                "allow_once".to_string()
+                "allow_once"
             };
             with_client(host, |c| async move {
-                c.permission_resolve_scoped(&t, None, &decision).await
+                c.permission_resolve_scoped(&t, None, decision).await
             })
             .await
         }
 
-        // ---- config / doctor -------------------------------------
+        // ---- config / doctor ----------------------------------
         "config/show" => with_client(host, |c| async move { c.config_show().await }).await,
         "config/set" => {
             let key = str_param(req, "key")?;
             let value = str_param(req, "value")?;
+            let scope = opt_str(req, "scope").unwrap_or_else(|| "repo".to_string());
             with_client(
                 host,
-                |c| async move { c.config_set(&key, &value, "repo").await },
+                |c| async move { c.config_set(&key, &value, &scope).await },
             )
             .await
         }
+        "config/write" => {
+            let key = str_param(req, "key")?;
+            let value = str_param(req, "value")?;
+            let scope = str_param(req, "scope")?; // "workspace" | "user"
+            config_write(host, scope, key, value).await
+        }
         "doctor/run" => with_client(host, |c| async move { c.doctor_run().await }).await,
 
-        // ---- workspace / index / search -------------------------
+        // ---- workspace / index / search -----------------------
         "workspace/status" => {
             with_client(host, |c| async move { c.workspace_status().await }).await
         }
         "search/query" => {
             let q = str_param(req, "query")?;
-            let modes = param(req, "modes")
-                .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str().map(str::to_string))
-                        .collect()
-                })
-                .unwrap_or_default();
+            let modes = str_array(req, "modes");
+            let anchors = str_array(req, "anchors");
+            let limit = param(req, "limit")
+                .and_then(Value::as_u64)
+                .map(|n| n as u32);
             with_client(host, |c| async move {
-                c.search_query(q, modes, Vec::new(), None).await
+                c.search_query(q, modes, anchors, limit).await
             })
             .await
         }
         "index/status" => with_client(host, |c| async move { c.index_status().await }).await,
         "index/build" => with_client(host, |c| async move { c.index_build().await }).await,
 
-        // ---- git (Core surface, G3) ----------------------------
+        // ---- git (Core surface, G3) --------------------------
         "git/status" => with_client(host, |c| async move { c.git_status().await }).await,
         "git/diff" => {
             let path = opt_str(req, "path");
-            with_client(host, |c| async move { c.git_diff(path, false).await }).await
+            let staged = param(req, "staged")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            with_client(host, |c| async move { c.git_diff(path, staged).await }).await
         }
         "git/log" => {
             let limit = param(req, "limit")
@@ -343,10 +362,11 @@ async fn dispatch(host: &Host, out_tx: &OutTx, req: &Incoming) -> Result<Value, 
         }
         "git/branches" => with_client(host, |c| async move { c.git_branches().await }).await,
 
-        // ---- models / hardware --------------------------------
+        // ---- models / hardware ------------------------------
         "model/list" => with_client(host, |c| async move { c.model_list().await }).await,
         "model/recommend" => {
-            with_client(host, |c| async move { c.model_recommend("code").await }).await
+            let role = opt_str(req, "role").unwrap_or_else(|| "code".to_string());
+            with_client(host, |c| async move { c.model_recommend(&role).await }).await
         }
         "model/install" => {
             let id = str_param(req, "id")?;
@@ -358,7 +378,8 @@ async fn dispatch(host: &Host, out_tx: &OutTx, req: &Incoming) -> Result<Value, 
         }
         "model/activate" => {
             let id = str_param(req, "id")?;
-            with_client(host, |c| async move { c.model_activate(&id, "code").await }).await
+            let role = opt_str(req, "role").unwrap_or_else(|| "code".to_string());
+            with_client(host, |c| async move { c.model_activate(&id, &role).await }).await
         }
         "model/inspect" => {
             let id = str_param(req, "id")?;
@@ -366,36 +387,22 @@ async fn dispatch(host: &Host, out_tx: &OutTx, req: &Incoming) -> Result<Value, 
         }
         "hardware/probe" => with_client(host, |c| async move { c.hardware_probe().await }).await,
 
-        // ---- ledger (G8) -------------------------------------
+        // ---- ledger (G8) -----------------------------------
         "ledger/changes" => {
             let t = str_param(req, "taskId")?;
             with_client(host, |c| async move { c.ledger_changes(&t).await }).await
         }
 
-        // ---- config/write (TOML) — port from bridge_host.rs::config_write
-        "config/write" => Err(RpcError::method_not_found(
-            "config/write (TOML write-then-verify — port from bridge_host.rs::config_write)",
-        )),
-
         other => Err(RpcError::method_not_found(other)),
     }
 }
 
-impl Live {
-    fn session_root(&self) -> String {
-        self.root.clone()
-    }
-}
+// --- session lifecycle ----------------------------------------------------
 
-// --- session/open ------------------------------------------------------------
-
-async fn session_open(
-    host: &Host,
-    out_tx: OutTx,
-    root: String,
+fn build_supervisor_config(
+    root: &str,
     permission_mode: Option<String>,
-    applied_through: u64,
-) -> Result<Value, RpcError> {
+) -> Result<SupervisorConfig, RpcError> {
     // $VALYRIA_BIN, else a sidecar next to our own executable.
     let sidecar = std::env::current_exe().ok().and_then(|exe| {
         let name = if cfg!(windows) {
@@ -407,78 +414,292 @@ async fn session_open(
         cand.exists().then_some(cand)
     });
     let core_binary: CoreBinary = CoreBinary::resolve(None, sidecar).map_err(map_err)?;
-
-    let mut config = SupervisorConfig::new(&root, core_binary);
+    let mut config = SupervisorConfig::new(root, core_binary);
     config.expected_protocol = EXPECTED_PROTOCOL.to_string();
     config.permission_mode = permission_mode;
+    Ok(config)
+}
 
+/// Map a supervisor failure to a connection state: a protocol-major mismatch is
+/// `incompatible` (nothing to retry), everything else is `failed`.
+fn state_for(err: &BridgeError) -> &'static str {
+    if err.code() == "bridge.protocol.mismatch" {
+        "incompatible"
+    } else {
+        "failed"
+    }
+}
+
+async fn session_open(
+    host: &Arc<Host>,
+    out_tx: OutTx,
+    root: String,
+    permission_mode: Option<String>,
+    applied_through: u64,
+) -> Result<Value, RpcError> {
     emit_state(&out_tx, "connecting", None);
 
+    let config = build_supervisor_config(&root, permission_mode.clone())?;
     let session = spawn_or_adopt(config).await.map_err(|e| {
-        emit_state(&out_tx, "failed", Some(&e.to_string()));
+        emit_state(&out_tx, state_for(&e), Some(&e.to_string()));
         map_err(e)
     })?;
 
     let client = CoreClient::with_token(session.socket_path.clone(), session.auth_token.clone());
+    let last_seq = Arc::new(AtomicU64::new(applied_through));
 
-    // Event pump → notifications. Its own task; never blocks a Core call.
-    let mut pump = EventPump::start(
+    let pump = EventPump::start(
         session.socket_path.clone(),
         session.auth_token.clone(),
         applied_through,
     );
-    let pump_out = out_tx.clone();
-    let pump_task = tokio::spawn(async move {
-        while let Some(msg) = pump.recv().await {
-            match msg {
-                PumpMessage::Batch(b) => {
-                    let events: Vec<Value> = b
-                        .events
-                        .into_iter()
-                        .map(|e| {
-                            json!({
-                                "seq": e.seq,
-                                "taskId": e.task_id,
-                                "tsMs": e.ts_ms as u64,
-                                "kind": e.kind,
-                                "payload": e.payload,
-                            })
-                        })
-                        .collect();
-                    send_notif(
-                        &pump_out,
-                        "core/eventBatch",
-                        json!({
-                            "firstSeq": b.first_seq,
-                            "lastSeq": b.last_seq,
-                            "gapBefore": b.gap_before,
-                            "events": events,
-                        }),
-                    );
-                }
-                PumpMessage::Reconnected { from } => {
-                    send_notif(&pump_out, "core/reconnected", json!({ "resumeFrom": from }));
-                }
-                PumpMessage::Closed { last_seq } => {
-                    send_notif(&pump_out, "core/closed", json!({ "lastSeq": last_seq }));
-                    emit_state(&pump_out, "degraded", Some("Core stream closed"));
-                }
-            }
-        }
-    });
+
+    let supervise_task = tokio::spawn(supervise(
+        Arc::clone(host),
+        out_tx.clone(),
+        root.clone(),
+        permission_mode.clone(),
+        pump,
+        Arc::clone(&last_seq),
+    ));
 
     let info = SessionInfo::of(&root, &session);
-    let live = Live {
+    *host.live.lock().await = Some(Live {
         session,
         client,
-        pump_task,
+        supervise_task,
+        last_seq,
         root: root.clone(),
-    };
-    *host.live.lock().await = Some(live);
+    });
 
     emit_state(&out_tx, "ready", None);
     to_value(info)
 }
+
+/// Restart the workspace daemon under a new autonomy level (§25 / G1). Only
+/// valid when this process spawned the daemon — an adopted daemon is not ours
+/// to stop.
+async fn session_restart(host: &Arc<Host>, out_tx: OutTx, mode: String) -> Result<Value, RpcError> {
+    let (root, applied_through) = {
+        let mut guard = host.live.lock().await;
+        let live = guard
+            .as_ref()
+            .ok_or_else(|| RpcError::bridge("bridge.no_session", "no session is open"))?;
+        if !live.session.is_owned() {
+            return Err(RpcError::bridge(
+                "bridge.autonomy.not_owned",
+                "Core for this workspace was started by another process; stop it there to change autonomy.",
+            ));
+        }
+        let root = live.root.clone();
+        let applied_through = live.last_seq.load(Ordering::SeqCst);
+        // Drop the current session: aborts its supervise task and, because we
+        // own the daemon, stops it too.
+        if let Some(mut prev) = guard.take() {
+            prev.session.shutdown_daemon().await.map_err(map_err)?;
+        }
+        (root, applied_through)
+    };
+
+    session_open(host, out_tx, root, Some(mode), applied_through).await
+}
+
+async fn about_info(host: &Host) -> Result<Value, RpcError> {
+    let guard = host.live.lock().await;
+    let (session, verdict) = match guard.as_ref() {
+        None => (None, "no session"),
+        Some(live) => {
+            let got = &live.session.negotiated.protocol_version;
+            let verdict = if major(got) == major(EXPECTED_PROTOCOL) {
+                "compatible"
+            } else {
+                "incompatible"
+            };
+            (Some(SessionInfo::of(&live.root, &live.session)), verdict)
+        }
+    };
+    Ok(json!({
+        "bridgeHost": env!("CARGO_PKG_VERSION"),
+        "expectedProtocol": EXPECTED_PROTOCOL,
+        "compatibility": verdict,
+        "session": session.map(to_value).transpose()?,
+    }))
+}
+
+fn major(v: &str) -> &str {
+    v.split('.').next().unwrap_or(v)
+}
+
+/// D13 write-then-verify (CORE-INTERFACE G6): edit Core's own `config.toml`,
+/// then return a fresh `config_show` so the caller renders the effective value
+/// with its origin — not the optimistic write.
+async fn config_write(
+    host: &Host,
+    scope: String,
+    key: String,
+    value: String,
+) -> Result<Value, RpcError> {
+    let scope = ConfigScope::parse(&scope).map_err(map_err)?;
+    let client = {
+        let guard = host.live.lock().await;
+        guard
+            .as_ref()
+            .ok_or_else(|| RpcError::bridge("bridge.no_session", "no session is open"))?
+            .client
+            .clone()
+    };
+
+    let data_dir = match scope {
+        ConfigScope::Workspace => Some(client.workspace_status().await.map_err(map_err)?.data_dir),
+        ConfigScope::User => None,
+    };
+    let path =
+        config_path(scope, data_dir.as_deref().map(std::path::Path::new)).map_err(map_err)?;
+
+    tokio::task::spawn_blocking(move || write_key(&path, &key, &value))
+        .await
+        .map_err(|e| RpcError::new(-32603, format!("join: {e}")))?
+        .map_err(map_err)?;
+
+    client
+        .config_show()
+        .await
+        .map_err(map_err)
+        .and_then(to_value)
+}
+
+// --- the supervise task -------------------------------------------------
+
+async fn supervise(
+    host: Arc<Host>,
+    out_tx: OutTx,
+    root: String,
+    permission_mode: Option<String>,
+    mut pump: EventPump,
+    last_seq: Arc<AtomicU64>,
+) {
+    loop {
+        match pump.recv().await {
+            Some(PumpMessage::Batch(b)) => {
+                last_seq.fetch_max(b.last_seq, Ordering::SeqCst);
+                forward_batch(&out_tx, b);
+            }
+            Some(PumpMessage::Reconnected { from }) => {
+                send_notif(&out_tx, "core/reconnected", json!({ "resumeFrom": from }));
+                emit_state(&out_tx, "ready", None);
+            }
+            Some(PumpMessage::Closed { last_seq: ls }) => {
+                last_seq.fetch_max(ls, Ordering::SeqCst);
+                send_notif(&out_tx, "core/closed", json!({ "lastSeq": ls }));
+                match restart(&host, &out_tx, &root, &permission_mode, &last_seq).await {
+                    Some(new_pump) => pump = new_pump,
+                    None => {
+                        emit_state(
+                            &out_tx,
+                            "failed",
+                            Some("Core stream ended and could not be re-established"),
+                        );
+                        return;
+                    }
+                }
+            }
+            None => {
+                // The pump was dropped (session replaced/closed) — stop quietly.
+                return;
+            }
+        }
+    }
+}
+
+fn forward_batch(out_tx: &OutTx, b: valyria_bridge::EventBatch) {
+    // Events go out as their raw wire shape (`seq`, `task_id`, `ts_ms`, `kind`,
+    // `payload`) — that is exactly what `@valyria/state`'s decoder expects
+    // (`wireEventEnvelope`). Only the batch envelope is camelCased.
+    let events: Vec<Value> = b
+        .events
+        .iter()
+        .map(|e| serde_json::to_value(e).unwrap_or(Value::Null))
+        .collect();
+    send_notif(
+        out_tx,
+        "core/eventBatch",
+        json!({
+            "firstSeq": b.first_seq,
+            "lastSeq": b.last_seq,
+            "gapBefore": b.gap_before,
+            "events": events,
+        }),
+    );
+}
+
+/// The daemon dropped its stream and could not self-heal. Re-`spawn_or_adopt`
+/// with bounded backoff, swap the new session/client into `host.live` in place
+/// (so this task is not aborting itself), and return a fresh pump resuming from
+/// `last_seq`. `None` when every attempt failed or the session was closed
+/// meanwhile.
+async fn restart(
+    host: &Arc<Host>,
+    out_tx: &OutTx,
+    root: &str,
+    permission_mode: &Option<String>,
+    last_seq: &Arc<AtomicU64>,
+) -> Option<EventPump> {
+    for (i, backoff) in RESTART_BACKOFF_MS.iter().enumerate() {
+        emit_state(
+            out_tx,
+            "reconnecting",
+            Some(&format!("attempt {}/{}", i + 1, RESTART_BACKOFF_MS.len())),
+        );
+        tokio::time::sleep(Duration::from_millis(*backoff)).await;
+
+        let config = match build_supervisor_config(root, permission_mode.clone()) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let session = match spawn_or_adopt(config).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("restart attempt {} failed: {e}", i + 1);
+                continue;
+            }
+        };
+        let client =
+            CoreClient::with_token(session.socket_path.clone(), session.auth_token.clone());
+        let resume_from = last_seq.load(Ordering::SeqCst);
+        let pump = EventPump::start(
+            session.socket_path.clone(),
+            session.auth_token.clone(),
+            resume_from,
+        );
+
+        {
+            let mut guard = host.live.lock().await;
+            match guard.as_mut() {
+                Some(live) => {
+                    live.session = session;
+                    live.client = client;
+                }
+                None => return None, // session/close won the race
+            }
+        }
+
+        emit_state(out_tx, "ready", None);
+        send_notif(
+            out_tx,
+            "core/log",
+            json!({
+                "level": "info",
+                "message": format!(
+                    "Core restarted; task state reloaded from the journal, event stream resumed from seq {resume_from}"
+                )
+            }),
+        );
+        return Some(pump);
+    }
+    None
+}
+
+// --- notification helpers ---------------------------------------------
 
 fn send_notif(out_tx: &OutTx, method: &'static str, params: Value) {
     let _ = out_tx.send(Outgoing::Notification(Notification::new(method, params)));

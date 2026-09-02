@@ -43,11 +43,12 @@ export interface EventBatch {
   events: CoreEvent[];
 }
 
-/** Mirrors valyria_protocol::WireEvent (loose-typed by design — PLAN.md D5). */
+/** The raw wire event (valyria_protocol::WireEvent) — snake_case, exactly what
+ *  `@valyria/state`'s decoder consumes. Loose-typed by design (PLAN.md D5). */
 export interface CoreEvent {
   seq: number;
-  taskId: string | null;
-  tsMs: number;
+  task_id: string | null;
+  ts_ms: number;
   kind: string;
   payload: unknown;
 }
@@ -55,7 +56,10 @@ export interface CoreEvent {
 /** Request methods: name -> [params, result]. */
 export interface Requests {
   // --- session / supervisor ---
-  "session/open": [{ workspaceRoot: string; permissionMode?: string | null }, SessionInfo];
+  "session/open": [
+    { workspaceRoot: string; permissionMode?: string | null; appliedThrough?: number },
+    SessionInfo,
+  ];
   "session/restart": [{ permissionMode: string }, SessionInfo];
   "session/status": [Record<string, never>, SessionInfo | null];
   "session/close": [Record<string, never>, null];

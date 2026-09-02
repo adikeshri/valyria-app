@@ -1,9 +1,11 @@
 /**
- * Thin session state around the bridge-host: which workspace is open, the
- * negotiated capabilities, and the connection state the status bar renders.
+ * Session state around the bridge-host: which workspace is open, the negotiated
+ * capabilities, and the connection state the status bar renders.
  *
  * The real supervision (spawn / adopt / health / reap of `valyria serve`) lives
- * in the Rust `valyria-bridge`. This object just tracks what the host reports.
+ * in the Rust `valyria-bridge` + `valyria-bridge-host`. This object is a passive
+ * projection of what the host reports; `extension.ts` drives it from the single
+ * client-notification wiring (so it survives a host respawn).
  */
 import * as vscode from "vscode";
 import type { BridgeHost } from "../bridge/host";
@@ -12,7 +14,6 @@ import type { ConnectionState, SessionInfo } from "../bridge/protocol";
 export class Supervisor implements vscode.Disposable {
   private _session: SessionInfo | undefined;
   private _state: ConnectionState = "starting";
-  private readonly disposables: vscode.Disposable[] = [];
 
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
@@ -20,24 +21,7 @@ export class Supervisor implements vscode.Disposable {
   constructor(
     private readonly host: BridgeHost,
     private readonly log: vscode.LogOutputChannel
-  ) {
-    const c = host.client;
-    this.disposables.push(
-      { dispose: c.on("core/connectionState", (p) => {
-          this._state = p.state;
-          this.log.info(`connection: ${p.state}${p.detail ? ` (${p.detail})` : ""}`);
-          this._onDidChange.fire();
-        }) },
-      { dispose: c.on("core/reconnected", (p) => {
-          this.log.info(`stream resumed from seq ${p.resumeFrom}`);
-        }) },
-      host.onExit(() => {
-        this._state = "failed";
-        this._session = undefined;
-        this._onDidChange.fire();
-      })
-    );
-  }
+  ) {}
 
   get session(): SessionInfo | undefined {
     return this._session;
@@ -51,7 +35,15 @@ export class Supervisor implements vscode.Disposable {
     return this._session?.capabilities.includes(capability) ?? false;
   }
 
-  async open(workspaceRoot: string): Promise<SessionInfo> {
+  /** Driven by `extension.ts` from `core/connectionState`. */
+  setState(s: ConnectionState): void {
+    if (this._state === s) return;
+    this._state = s;
+    this.log.info(`connection: ${s}`);
+    this._onDidChange.fire();
+  }
+
+  async open(workspaceRoot: string, appliedThrough = 0): Promise<SessionInfo> {
     this._state = "connecting";
     this._onDidChange.fire();
     const mode = vscode.workspace
@@ -61,6 +53,7 @@ export class Supervisor implements vscode.Disposable {
       const info = await this.host.client.request("session/open", {
         workspaceRoot,
         permissionMode: mode,
+        appliedThrough,
       });
       this._session = info;
       this._state = "ready";
@@ -88,7 +81,6 @@ export class Supervisor implements vscode.Disposable {
   }
 
   dispose(): void {
-    for (const d of this.disposables) d.dispose();
     this._onDidChange.dispose();
   }
 }

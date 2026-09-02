@@ -114,12 +114,58 @@ activating (no Core connection yet).
 
 ---
 
-## Phase 1 — Session & event spine (walking skeleton)  ⭐
+## Phase 1 — Session & event spine (walking skeleton)  ⭐  *(code complete; live cycle needs a Core binary)*
 
 **Goal:** supervise a real Core daemon, stream its events into the extension,
 survive a window kill, re‑attach. The milestone that de‑risks everything.
 
-**Deliverables:**
+**Done (2026‑09‑02):**
+- `valyria-bridge-host` — every method implemented, no stubs. `session/restart`
+  (owned‑daemon check → `shutdown_daemon` → re‑open), `config/write`
+  (`ConfigScope::parse` → `config_path` → `write_key` → re‑read `config_show`),
+  `about/info` with a `compatibility` verdict, `search/query` with
+  `modes`+`anchors`+`limit`, `git/diff` `staged`, `model/{recommend,activate}`
+  `role`. No PTY.
+- **Supervisor lifecycle** — `core/connectionState` emits all 7 states; a
+  `supervise` task owns the pump, tracks the high‑water `last_seq`, and on
+  `PumpMessage::Closed` runs `restart()`: bounded backoff
+  (`[200,500,1000,2000,4000,8000]` ms) → `spawn_or_adopt` → swap
+  session+client into `Live` in place (never aborts itself) → new
+  `EventPump` from `last_seq` → `ready` + a `core/log` "Core restarted…"
+  notice. All attempts exhausted → `failed`.
+- **Extension `BridgeHost`** — auto‑respawn on unexpected exit with backoff,
+  `intentionalStop` guard, `markHealthy()` resets the counter, `onRespawn`
+  re‑wires the client stream and re‑opens the session from `store.lastSeq`.
+- **Ext‑host `Store`** (`extension/src/store/store.ts`) — `vscode`‑free,
+  wraps `@valyria/state`'s `applyBatch`/`setConnection`/selectors; contiguity
+  check → `warn` on a gap; `reset()` for a fresh session; `activityLines()`
+  via the `activityLine` selector.
+- **esbuild** extension‑host bundle (`extension/esbuild.mjs`) — `@valyria/state`
+  + `@valyria/protocol` + `zod` inlined into one CJS `out/extension.js`
+  (157 kB). tsc is typecheck‑only (`moduleResolution: bundler`).
+- **Activity view** renders `store.activityLines()` + the live connection
+  state, themed with `--vscode-*`, `aria-live`, CSP+nonce.
+- **Commands** — open workspace, new task, pause/resume/cancel (default to the
+  store's current task), reconnect (resume from `store.lastSeq`), restart
+  bridge, about.
+- **Tests** — `crates/valyria-bridge-host/tests/rpc_smoke.rs` (6: framing,
+  dispatch, error codes, boot notification) + `extension/test/store.test.ts`
+  (9: trace replay of both `fixtures/traces/*.jsonl` — lastSeq/task tracking,
+  drip‑vs‑batch convergence, crash‑recovery replay‑from‑0, idempotent resume
+  overlap, gap detection). `xtask check-layering` green for both crates.
+- **Launch verified** — branded window, extension activates, bridge‑host
+  spawns, `core/connectionState` `starting`→`connecting` reaches the Store +
+  Supervisor, clean shutdown; stops at `session/open: no Core binary` (the
+  boundary).
+
+**Remaining for the exit criterion:** a real `valyria` Core binary (the
+`core.lock.json` rev) on `PATH`/`$VALYRIA_BIN` to run the live
+create‑task → `kill -9` window → adopt → resume, and `kill -9` daemon →
+`restart()` cycle. The adoption path itself is already covered by
+`valyria-bridge`'s own integration tests against a real Core sidecar;
+`valyria-bridge-host` is a thin wrapper over that code.
+
+**Deliverables (original):**
 - **Finish `valyria-bridge-host` — every method, no stubs:**
   - `session/restart` (autonomy restart, G1) — port `bridge_host.rs::session_restart`:
     refuse for an adopted daemon, `shutdown_daemon()`, re‑`spawn_or_adopt`.

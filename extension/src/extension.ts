@@ -31,6 +31,7 @@ import { HardwareViewProvider } from "./views/hardware";
 import { SettingsViewProvider } from "./views/settings";
 import { ContextViewProvider } from "./views/context";
 import { FirstRunViewProvider } from "./views/firstrun";
+import { AboutViewProvider } from "./views/about";
 import { makeWebviewDispatch } from "./views/dispatch";
 import { maybePromptResume } from "./session/resume";
 import { watchNotifications } from "./session/notify";
@@ -161,6 +162,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     [HardwareViewProvider.viewId, new HardwareViewProvider(uri, supervisor, host)],
     [SettingsViewProvider.viewId, new SettingsViewProvider(uri, supervisor, host)],
     [ContextViewProvider.viewId, new ContextViewProvider(uri, store, supervisor, focus)],
+    [AboutViewProvider.viewId, new AboutViewProvider(uri, supervisor, host)],
     [FirstRunViewProvider.viewId, new FirstRunViewProvider(uri, context, store, supervisor, host, reopen)],
     [TimelineViewProvider.viewId, new TimelineViewProvider(uri, store)],
     [HistoryViewProvider.viewId, new HistoryViewProvider(uri, store, focus, dispatch)],

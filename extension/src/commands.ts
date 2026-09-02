@@ -82,27 +82,7 @@ export function registerCommands(
   });
 
   reg("valyria.showAbout", async () => {
-    let about: Record<string, unknown>;
-    try {
-      about = await host.client.request("about/info", {});
-    } catch (e) {
-      about = { error: String(e) };
-    }
-    const doc = await vscode.workspace.openTextDocument({
-      language: "json",
-      content: JSON.stringify(
-        {
-          connectionState: supervisor.state,
-          lastSeq: store.lastSeq,
-          session: supervisor.session ?? null,
-          capabilities: supervisor.caps.list(),
-          surfaces: supervisor.caps.snapshot(),
-          about,
-        },
-        null,
-        2
-      ),
-    });
-    await vscode.window.showTextDocument(doc, { preview: true });
+    // Reveal the About / Compatibility view (auto-registered `<viewId>.focus`).
+    await vscode.commands.executeCommand("valyria.about.focus");
   });
 }

@@ -22,6 +22,7 @@ import {
   type StoreState,
 } from "@valyria/state";
 import type {
+  AboutModel,
   AgentCommandsModel,
   ApprovalsModel,
   ChatModel,
@@ -514,6 +515,47 @@ export function contextModel(state: StoreState, focusId: string | undefined, con
     available: contextCapable,
     taskId: id ?? null,
     items: rows,
+  };
+}
+
+// --- About / Compatibility (§40, CORE-INTERFACE §4) ---------------
+
+export function aboutModel(input: {
+  appName: string;
+  platform: string;
+  windowsTier3: boolean;
+  connection: Connection;
+  about: { bridgeHost?: string; expectedProtocol?: string; compatibility?: string } | null;
+  session: {
+    protocolVersion: string;
+    runtimeVersion: string;
+    origin: string;
+    ownsDaemon: boolean;
+    authenticated: boolean;
+    permissionMode: string | null;
+    workspaceRoot: string;
+  } | null;
+  capabilities: string[];
+  surfaces: { surface: string; available: boolean; missing?: string; gap?: string }[];
+  models: { id: string; installed: boolean }[];
+  activeModelIds: Set<string>;
+}): AboutModel {
+  return {
+    appName: input.appName,
+    bridgeHost: input.about?.bridgeHost ?? "?",
+    expectedProtocol: input.about?.expectedProtocol ?? "?",
+    connection: input.connection,
+    platform: input.platform,
+    windowsTier3: input.windowsTier3,
+    session: input.session,
+    compatibility: input.about?.compatibility ?? (input.session ? "compatible" : "no session"),
+    capabilities: [...input.capabilities].sort(),
+    surfaces: input.surfaces,
+    models: input.models.map((m) => ({
+      id: m.id,
+      installed: m.installed,
+      active: input.activeModelIds.has(m.id),
+    })),
   };
 }
 

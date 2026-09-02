@@ -437,6 +437,18 @@ async fn session_open(
     permission_mode: Option<String>,
     applied_through: u64,
 ) -> Result<Value, RpcError> {
+    // Windows tier 3 (§39 / CORE-INTERFACE G9): Core's daemon is a UnixListener
+    // and there is no Windows sandbox. The build installs and reports versions
+    // (About surface), but an agent session is refused with the specific reason.
+    if cfg!(windows) {
+        emit_state(&out_tx, "incompatible", Some("Windows tier 3"));
+        return Err(RpcError::bridge(
+            "bridge.platform.windows_tier3",
+            "Windows is tier 3 — Core's daemon transport and sandbox are not available yet \
+             (CORE-INTERFACE G9). Versions and compatibility are shown; agent sessions are disabled.",
+        ));
+    }
+
     emit_state(&out_tx, "connecting", None);
 
     let config = build_supervisor_config(&root, permission_mode.clone())?;

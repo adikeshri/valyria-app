@@ -192,6 +192,28 @@ export interface SettingsModel {
   }[];
 }
 
+export interface AboutModel {
+  appName: string;
+  bridgeHost: string;
+  expectedProtocol: string;
+  connection: Connection;
+  platform: string;
+  windowsTier3: boolean;
+  session: {
+    protocolVersion: string;
+    runtimeVersion: string;
+    origin: string;
+    ownsDaemon: boolean;
+    authenticated: boolean;
+    permissionMode: string | null;
+    workspaceRoot: string;
+  } | null;
+  compatibility: "compatible" | "incompatible" | "no session" | string;
+  capabilities: string[];
+  surfaces: { surface: string; available: boolean; missing?: string; gap?: string }[];
+  models: { id: string; installed: boolean; active: boolean }[];
+}
+
 export interface ContextModel {
   available: boolean;
   taskId: string | null;

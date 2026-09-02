@@ -649,12 +649,41 @@ small and documented.
 
 ---
 
-## Phase 8 — Packaging, sidecar, updates, compatibility
+## Phase 8 — Packaging, sidecar, updates, compatibility  *(code done; signed installers need CI + credentials)*
 
 **Goal:** signed installers on three OSes, each carrying the bridge‑host and
 Core sidecars.
 
-**Deliverables:**
+**Done (2026‑09‑02):**
+- **`valyria.about`** — a proper About / Compatibility webview (`views/about.ts`
+  + `aboutModel`): app + `vscode.version`, platform, `valyria-bridge-host`
+  version, protocol built‑against, Core protocol + runtime, daemon origin /
+  auth, autonomy, workspace; the **compatibility verdict** from `about/info`;
+  negotiated capabilities; per‑surface on/gated with the missing capability +
+  gap; installed models with active marker. `valyria.showAbout` now reveals it.
+- **Windows tier 3 (G9)** — `valyria-bridge-host` refuses `session/open` on
+  Windows with `bridge.platform.windows_tier3` and the specific reason;
+  emits `incompatible`. The About view renders a G9 alert and still reports
+  every version. `cfg!(windows)` branch; clippy/fmt/tests green.
+- **`scripts/build.sh`** — real per‑OS gulp targets (darwin arm64/x64 + merge,
+  win32 x64/arm64, linux + deb), release `valyria-bridge-host` staged to
+  `extension/bin/`, `$VALYRIA_CORE_BIN` → `extension/bin/valyria`, signing
+  **hooks** that no‑op without credentials.
+- **`docs/PACKAGING.md`** — the sidecar model (weights never bundled / never
+  touched by an update — §38), the gulp‑target table, the signing‑credential
+  table, the update feed, and the Windows tier‑3 contract.
+- **`build/product.overlay.json`** — `updateUrl` empty in dev; PACKAGING.md
+  documents pointing it at the Valyria release feed.
+- **Tests — 68 total (+3):** `phase8.test.ts` — aboutModel assembly + sorted
+  caps + active model + "no session" verdict; render smoke: Windows tier‑3
+  shows the G9 alert and still prints the protocol version.
+
+**Deferred (need infrastructure, not code):** signed / notarized installers
+(certs), the winget / apt / snap channels, the delta‑update mechanism, and the
+"model store byte‑identical across upgrade" release‑gate test (needs two real
+builds). All hooks are wired in `build.sh`.
+
+**Deliverables (original):**
 - `scripts/build.sh` → real per‑OS gulp targets:
   `vscode-darwin-{arm64,x64,universal}-min`, `vscode-win32-{x64,arm64}`,
   `vscode-linux-{x64,arm64}-{deb,rpm}` + AppImage / Snap.

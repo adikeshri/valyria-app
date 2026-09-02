@@ -121,6 +121,12 @@
           "name": "Context",
           "type": "webview",
           "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.about",
+          "name": "About & Compatibility",
+          "type": "webview",
+          "visibility": "collapsed"
         }
       ]
     },

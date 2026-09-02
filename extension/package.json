@@ -166,6 +166,41 @@
         "category": "Valyria"
       }
     ],
+    "walkthroughs": [
+      {
+        "id": "valyria.getStarted",
+        "title": "Get started with Valyria",
+        "description": "A local-first autonomous coding agent, built in.",
+        "steps": [
+          {
+            "id": "valyria.ws.local",
+            "title": "Everything runs on this machine",
+            "description": "Valyria plans, edits and verifies code with a model that runs locally. No account, no cloud, no network at runtime.",
+            "media": { "markdown": "media/walkthrough/local.md" }
+          },
+          {
+            "id": "valyria.ws.open",
+            "title": "Open a repository",
+            "description": "Opening a folder is the authorization — the agent only reads and writes inside it.\n[Open a repository](command:valyria.openWorkspace)",
+            "media": { "markdown": "media/walkthrough/open.md" },
+            "completionEvents": ["onCommand:valyria.openWorkspace"]
+          },
+          {
+            "id": "valyria.ws.task",
+            "title": "Give the agent a task",
+            "description": "Describe a change in the Agent view. Valyria plans it, makes the edits, runs the tests, and shows you the evidence.\n[New agent task](command:valyria.newTask)",
+            "media": { "markdown": "media/walkthrough/task.md" },
+            "completionEvents": ["onCommand:valyria.newTask"]
+          },
+          {
+            "id": "valyria.ws.review",
+            "title": "Review and approve",
+            "description": "Every mutating action can require your approval. Verification is shown as evidence — an unbacked 'tests pass' reads as NOT RUN.",
+            "media": { "markdown": "media/walkthrough/review.md" }
+          }
+        ]
+      }
+    ],
     "configuration": {
       "title": "Valyria",
       "properties": {

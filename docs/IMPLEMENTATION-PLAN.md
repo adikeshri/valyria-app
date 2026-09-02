@@ -593,12 +593,40 @@ shows its origin and reflects Core's resolved value after a write.
 
 ---
 
-## Phase 7 — Branding & de‑Microsoft completeness
+## Phase 7 — Branding & de‑Microsoft completeness  *(done; icon art is a placeholder)*
 
 **Goal:** the product is unmistakably Valyria and phones home to nothing.
-*(Depends only on Phase 0; can run in parallel with 1–6.)*
 
-**Deliverables:**
+**Done (2026‑09‑02):**
+- `build/product.overlay.json` extended to 47 keys — cleared
+  `documentTelemetryUrl`, `aiConfig`, `msftInternalDomains`,
+  `agentsTelemetryAppName`, `trustedExtensionAuthAccess`, `crashReporter`,
+  `settingsSearchUrl`, `npsSurveyUrl`, `surveys`, `extensionTips`,
+  `extensionImportantTips`, the three `keyboardShortcutsUrl*`,
+  `introductoryVideosUrl`, `tipsAndTricksUrl`, `newsletterSignupUrl`;
+  `serverLicenseUrl` / `documentationUrl` / `requestFeatureUrl` → our repo;
+  gallery already Open VSX; `enableTelemetry: false`; `updateUrl: ""`.
+- **`scripts/verify-offline.sh`** — static check: every telemetry / survey /
+  marketplace endpoint in `vscode/product.json` is cleared and the gallery is
+  Open VSX. Passes. (The runtime egress‑blocked launch is the CI offline job,
+  Phase 9.)
+- **Walkthrough** — `contributes.walkthroughs` in the extension: 4 steps
+  (local‑first, open a repo, give a task, evidence‑not‑badges) with markdown
+  media under `extension/media/walkthrough/`, wired to `valyria.openWorkspace`
+  / `valyria.newTask` completion events.
+- **Icons** — `build/icons/valyria.svg` placeholder mark;
+  `bootstrap.sh` copies it into `vscode/resources/valyria/` and rasterises the
+  PNG set + `darwin/code.icns` when `rsvg-convert` / `iconutil` are available.
+- **Patches** — still zero. `bootstrap.sh` `git clean` now also preserves
+  `out*` so a re‑bootstrap at the same REF doesn't force a workbench recompile.
+- Launch verified: window titled **Valyria**, `nameLong: Valyria`, clean
+  activation.
+
+**Deferred:** final icon artwork (a real Valyrian‑steel mark, not the
+placeholder chevron); a signed favicon set. Everything downstream reads
+`build/icons/valyria.svg`, so it's a drop‑in replace.
+
+**Deliverables (original):**
 - Complete `build/product.overlay.json` — every branding field; `build/icons/`
   per platform (`.icns`, `.ico`, PNG set) copied in by `bootstrap.sh`; URL
   protocol `valyria://`; bundle identifiers; About box strings.

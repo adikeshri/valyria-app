@@ -1,0 +1,9 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Placeholder Valyria mark: a folded-steel chevron in rust/dragon-fire.
+       Final art TBD; scripts/bootstrap.sh copies build/icons/* into
+       vscode/resources/valyria/ and the .icns/.ico/PNG set is generated from
+       this by scripts/build.sh (rsvg/iconutil) before packaging. -->
+  <rect width="128" height="128" rx="24" fill="#17151b"/>
+  <path d="M28 34 L64 96 L100 34 L84 34 L64 66 L44 34 Z" fill="#c65f3b"/>
+  <path d="M44 34 L64 66 L84 34 L74 34 L64 50 L54 34 Z" fill="#f0b45c"/>
+</svg>

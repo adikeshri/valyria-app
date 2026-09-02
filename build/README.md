@@ -29,4 +29,22 @@ submodule working tree is disposable.
 1. `echo <new-tag> > build/VSCODE_REF`
 2. `scripts/bootstrap.sh` — it will report any patch that no longer applies
 3. Refresh broken patches against the new tree, re‑run
-4. `scripts/build.sh` and smoke‑test
+4. `(cd vscode && npm ci && npm run compile)` — a REF bump invalidates deps and
+   the compiled workbench (bootstrap preserves `node_modules` / `.build` /
+   `out*` across a *re‑bootstrap at the same REF*, but not across a version bump)
+5. `scripts/build.sh` and smoke‑test
+
+## Offline guarantee
+
+`scripts/verify-offline.sh` is the local canary for PLAN.md §32: it asserts the
+overlay cleared every telemetry / survey / marketplace endpoint in
+`vscode/product.json` and that the gallery points at Open VSX. The authoritative
+enforcement is the CI offline job (Phase 9), which runs the integration suite
+with the network disabled.
+
+## Icons
+
+`build/icons/valyria.svg` is a placeholder mark. `bootstrap.sh` copies
+`build/icons/*` into `vscode/resources/valyria/` and, when `rsvg-convert` /
+`iconutil` are present, rasterises the PNG set + `darwin/code.icns`. A dev build
+falls back to Code‑OSS's own icons if the tooling is missing.

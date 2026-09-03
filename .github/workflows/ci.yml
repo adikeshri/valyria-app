@@ -124,9 +124,10 @@ jobs:
         working-directory: extension
       - run: npm run check
         working-directory: extension
+      # `npm test` has a `pretest` that runs the esbuild build, so the webview
+      # render / axe tests (which load out/webviews/*.js into jsdom) and the
+      # bundle-size budget both see a fresh build.
       - run: npm test
-        working-directory: extension
-      - run: npm run compile
         working-directory: extension
       - name: Bundle-size budget
         run: bash scripts/check-bundle-size.sh

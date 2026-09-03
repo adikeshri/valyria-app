@@ -3,7 +3,7 @@
 //   2. one bundle per webview     -> out/webviews/<name>.{js,css}  (IIFE, browser)
 // plus the shared design tokens copied to out/webviews/tokens.css.
 import * as esbuild from "esbuild";
-import { cpSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
 
 const watch = process.argv.includes("--watch");
 
@@ -41,7 +41,11 @@ const webviewOpts = {
 };
 
 function copyTokens() {
-  cpSync(`${webviewsDir}/shared/tokens.css`, "out/webviews/tokens.css");
+  mkdirSync("out/webviews", { recursive: true });
+  // A plain read+write truncates/overwrites the destination without the
+  // stat/copy dance that cp/copyFile do — which has been seen to EACCES on
+  // virtiofs bind mounts when the file already exists.
+  writeFileSync("out/webviews/tokens.css", readFileSync(`${webviewsDir}/shared/tokens.css`));
 }
 
 if (watch) {

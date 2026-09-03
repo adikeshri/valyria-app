@@ -116,6 +116,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24.20"
+      # The extension's tsc follows imports into the @valyria/* source packages
+      # (they ship TS, no build step), so their deps — zod, and @valyria/protocol
+      # for @valyria/state — must resolve. That's the repo-root workspace install.
+      - run: npm ci
       - run: npm ci
         working-directory: extension
       - run: npm run check

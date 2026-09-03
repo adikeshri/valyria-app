@@ -917,6 +917,11 @@ published.
 - **Interaction** — additive `⌘I` / `⌘K ⌘H` / `⌘K ⌘R` / `⌘K ⌘L` chords;
   task‑verb command titles gated on `valyria.hasSession`; a first‑run layout
   step.
+- **De‑Microsoft** — `scripts/bootstrap.sh` removes the bundled `copilot` chat
+  extension (Code‑OSS 1.135 ships it as a built‑in). The core chat ViewPane's
+  empty state is a documented residual (patch‑tier). `README.md` gains
+  screenshots (`docs/assets/valyria-{home,workspace,review}.png`, regenerable
+  via `scripts/gen-screenshots.mjs`) and a Quickstart.
 
 **Tests:** `test/uxdiff.test.ts` (29) — layout‑bundle symmetry, ticker phrases
 by trace replay, and the Home / Workspace / Review models (legible, arrays

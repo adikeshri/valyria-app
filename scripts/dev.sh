@@ -47,16 +47,22 @@ if [ -z "${VSCODE_SKIP_PRELAUNCH:-}" ]; then
   export VSCODE_SKIP_PRELAUNCH=1
 fi
 
-# macOS caches app icons by bundle path, and the dev .app carries a frozen 1980
-# mtime so Launch Services never notices a rebrand. Bump the mtime and re-register
-# so the new Valyria icon is picked up. (`killall Dock` may still be needed once
-# on an existing checkout; scripts/refresh-macos-icon.sh does the full flush.)
+# macOS caches the Dock/Finder icon per bundle. Launch Services keys that cache
+# on Contents/Info.plist's mtime, which the Electron extractor stamps 1980 — so a
+# rebrand is never noticed. Bump Info.plist's mtime, re-seal the ad-hoc signature
+# (the rebranded Resources/ otherwise look tampered), and force a clean
+# re-register. A running Valyria keeps its launch-time tile regardless, and the
+# system icon-bitmap cache may still need scripts/refresh-macos-icon.sh (sudo).
 if [[ "$OSTYPE" == darwin* ]]; then
-  APP="$(/bin/ls -d vscode/.build/electron/*.app 2>/dev/null | head -1 || true)"
+  APP="$(/bin/ls -d "$ROOT"/vscode/.build/electron/*.app 2>/dev/null | head -1 || true)"
   if [ -n "$APP" ]; then
-    touch "$APP"
+    touch "$APP" "$APP/Contents/Info.plist" "$APP"/Contents/Resources/*.icns
+    codesign --force --sign - "$APP" >/dev/null 2>&1 || true
     LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
-    [ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$ROOT/$APP" >/dev/null 2>&1 || true
+    if [ -x "$LSREGISTER" ]; then
+      "$LSREGISTER" -u "$APP" >/dev/null 2>&1 || true
+      "$LSREGISTER" -f "$APP" >/dev/null 2>&1 || true
+    fi
   fi
 fi
 

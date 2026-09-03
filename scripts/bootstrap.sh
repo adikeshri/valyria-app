@@ -47,6 +47,22 @@ fi
 echo "==> Merging build/product.overlay.json -> vscode/product.json"
 node scripts/merge-product.mjs
 
+# 3b. Drop bundled extensions Valyria does not ship. Code-OSS 1.135 folder-scans
+#     extensions/ at runtime, so removing the directory is the whole removal.
+#     The vscode/ tree is reset every run, so this is a clean overlay-style
+#     deletion, not an edit. (`defaultChatAgent` in product.json is left alone —
+#     Code-OSS derefs it unguarded at startup, so nulling it white-screens the
+#     window; with the extension gone its chat view provider never registers.)
+#       - copilot: the built-in GitHub Copilot chat extension. Valyria has its own
+#         agent; a second "Build with Agent / Sign in" surface is a fork tell
+#         (docs/UX-DIFFERENTIATION.md).
+for ext in copilot; do
+  if [ -e "vscode/extensions/$ext" ]; then
+    echo "==> Removing bundled extension: $ext"
+    rm -rf "vscode/extensions/$ext"
+  fi
+done
+
 # 4. Branding icons. scripts/gen-icons.py writes the whole platform icon set into
 #    vscode/resources/ from build/icons/ (the app mark plus 55 re-badged document
 #    icons). It needs Pillow; `.icns` output also needs macOS `iconutil`. It fails

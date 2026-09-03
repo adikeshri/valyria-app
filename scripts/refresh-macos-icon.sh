@@ -3,10 +3,11 @@
 #
 # Why this is needed: the dev Electron bundle
 # (vscode/.build/electron/Valyria.app) is re-created at the same path on every
-# build and carries a frozen 1980 mtime, so Launch Services keeps serving
-# whatever icon it first indexed there (the stock Code-OSS icon, if the bundle
-# predates the rebrand). `scripts/dev.sh` does the cheap part (touch +
-# `lsregister -f`) on every launch; run THIS when that isn't enough.
+# build, and its Contents/Info.plist carries a frozen 1980 mtime — which is the
+# timestamp Launch Services keys its per-bundle icon cache on. So it keeps
+# serving whatever icon it first indexed there (the stock Code-OSS icon, if the
+# bundle predates the rebrand). `scripts/dev.sh` does the no-sudo part on every
+# launch; run THIS when the system icon-bitmap cache also needs clearing.
 #
 # The system-wide icon cache clear needs sudo — you will be prompted.
 set -euo pipefail
@@ -22,17 +23,26 @@ if [ ! -d "$APP" ]; then
   exit 1
 fi
 
+if pgrep -qf "$APP/Contents/MacOS/"; then
+  echo "!! Valyria is running — quit it (Cmd-Q) before running this, or its"
+  echo "   launch-time Dock tile will survive the flush." >&2
+fi
+
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 
-echo "==> touch + re-register $APP"
-touch "$APP"
+echo "==> touch Info.plist + re-seal + re-register $APP"
+touch "$APP" "$APP/Contents/Info.plist" "$APP"/Contents/Resources/*.icns
+codesign --force --sign - "$APP" >/dev/null 2>&1 || true
+"$LSREGISTER" -u "$APP" >/dev/null 2>&1 || true
 "$LSREGISTER" -f "$APP"
 
 echo "==> clearing icon caches (sudo)"
 sudo rm -rf /Library/Caches/com.apple.iconservices.store || true
 find "$(getconf DARWIN_USER_CACHE_DIR)/com.apple.iconservices"* -maxdepth 0 -exec rm -rf {} + 2>/dev/null || true
 
-echo "==> restarting Dock + Finder"
+echo "==> restarting icon services + Dock + Finder"
+killall iconservicesagent 2>/dev/null || true
+killall iconservicesd 2>/dev/null || true
 killall Dock || true
 killall Finder || true
 

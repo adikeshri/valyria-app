@@ -30,6 +30,8 @@
   "serverLicenseUrl": "https://github.com/adikeshri/valyria-app/blob/main/LICENSE",
   "reportIssueUrl": "https://github.com/adikeshri/valyria-app/issues/new",
 
+  "$chat_note": "Code-OSS 1.135 ships a built-in GitHub Copilot chat extension (extensions/copilot) — a 'Build with Agent / Sign in' panel that is a fork tell and competes with the Valyria agent. scripts/bootstrap.sh removes the extension directory (folder-scanned at runtime, so that is the whole removal). `defaultChatAgent` is intentionally NOT overridden — Code-OSS derefs it unguarded during workbench startup, so nulling it white-screens the window; with the extension gone its view provider simply never registers.",
+
   "$telemetry_note": "No telemetry, ever (PLAN.md §32). These keys are cleared so no endpoint is even resolvable; the offline job (scripts/verify-offline.sh) enforces it.",
   "enableTelemetry": false,
   "aiConfig": null,

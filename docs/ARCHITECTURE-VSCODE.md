@@ -209,10 +209,17 @@ not read as a Code‑OSS fork — all within the extension API / `configurationD
 - Remove `enableTelemetry`, `crashReporter`, `msftInternalDomains`,
   `aiConfig`, `documentationUrl`‑style MS links; keep `reportIssueUrl` → our repo
 - **Bundled Copilot chat** — Code‑OSS 1.135 ships `extensions/copilot`;
-  `bootstrap.sh` step 3b `rm -rf`s it (folder‑scanned at runtime). `product.json`
-  `defaultChatAgent` is left intact — it is dereferenced unguarded at startup, so
-  nulling it white‑screens the window. The core chat ViewPane's empty state is a
-  patch‑tier residual (docs/UX-DIFFERENTIATION.md).
+  `bootstrap.sh` step 3b `rm -rf`s it (folder‑scanned at runtime), then step 3c
+  runs `scripts/strip-copilot-refs.mjs` to remove the `compile-copilot` /
+  `watch-copilot` legs from the root `package.json` build scripts (they
+  `npm --prefix extensions/copilot` and ENOENT the whole build once the dir is
+  gone). `product.json` `defaultChatAgent` is left intact — it is dereferenced
+  unguarded at startup, so nulling it white‑screens the window. The core chat
+  view, its setup agents, the title‑bar Sign In and inline suggestions are core
+  workbench and survive the delete; `valyria-chrome` sets
+  `"chat.disableAIFeatures": true` in `configurationDefaults`, which Code‑OSS's
+  `ChatEntitlementContext` reads as a forced `hidden` state and gates all of
+  them off (docs/UX-DIFFERENTIATION.md).
 - `builtInExtensions` — the Valyria extensions bundle under
   `vscode/extensions/valyria`, `valyria-theme` and `valyria-chrome` via bootstrap
   symlinks so they compile in the standard build

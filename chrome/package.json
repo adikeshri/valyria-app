@@ -35,6 +35,7 @@
     "configurationDefaults": {
       "workbench.productIconTheme": "valyria",
       "workbench.iconTheme": "valyria-files",
+      "chat.disableAIFeatures": true,
       "window.commandCenter": false,
       "window.menuBarVisibility": "compact",
       "window.titleSeparator": "  —  ",

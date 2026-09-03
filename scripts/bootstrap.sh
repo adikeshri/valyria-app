@@ -63,6 +63,14 @@ for ext in copilot; do
   fi
 done
 
+# 3c. Code-OSS 1.135's root package.json hard-wires extensions/copilot into the
+#     aggregate build scripts (`compile` -> `compile-client compile-copilot`,
+#     `watch` -> `... watch-copilot`). With the directory gone those legs fail
+#     with ENOENT and take `npm run compile` (and preLaunch) down with them.
+#     Strip every copilot leg from the scripts block.
+echo "==> Stripping copilot build wiring from vscode/package.json"
+node scripts/strip-copilot-refs.mjs
+
 # 4. Branding icons. scripts/gen-icons.py writes the whole platform icon set into
 #    vscode/resources/ from build/icons/ (the app mark plus 55 re-badged document
 #    icons). It needs Pillow; `.icns` output also needs macOS `iconutil`. It fails

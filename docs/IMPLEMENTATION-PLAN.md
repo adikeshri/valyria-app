@@ -918,8 +918,10 @@ published.
   task‑verb command titles gated on `valyria.hasSession`; a first‑run layout
   step.
 - **De‑Microsoft** — `scripts/bootstrap.sh` removes the bundled `copilot` chat
-  extension (Code‑OSS 1.135 ships it as a built‑in). The core chat ViewPane's
-  empty state is a documented residual (patch‑tier). `README.md` gains
+  extension (Code‑OSS 1.135 ships it as a built‑in) and unwires its build legs
+  (`scripts/strip-copilot-refs.mjs`); the `valyria-chrome` built‑in sets
+  `"chat.disableAIFeatures": true` so the core chat view, setup agents,
+  title‑bar Sign In and inline suggestions stay hidden. `README.md` gains
   screenshots (`docs/assets/valyria-{home,workspace,review}.png`, regenerable
   via `scripts/gen-screenshots.mjs`) and a Quickstart.
 

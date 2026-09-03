@@ -144,28 +144,42 @@ Code-OSS 1.135 ships **GitHub Copilot chat** as a compiled-in built-in
 `defaultChatAgent` — a "Build with Agent / Sign in" panel that both reads as a
 fork tell and competes with the Valyria agent.
 
-`scripts/bootstrap.sh` **removes the extension directory** (Code-OSS
-folder-scans `extensions/` at runtime, so that is the whole removal; the
-`vscode/` tree is reset every run, so it is a clean overlay-style deletion).
+The removal has three parts, all in `scripts/bootstrap.sh` — no patch:
+
+1. **Delete the extension** — `rm -rf vscode/extensions/copilot`. Code-OSS
+   folder-scans `extensions/` at runtime, so that is the whole removal; the
+   `vscode/` tree is reset every run, so it is a clean overlay-style deletion.
+2. **Unwire the build** — `scripts/strip-copilot-refs.mjs` drops the
+   `compile-copilot` / `watch-copilot` legs the root `package.json` wires into
+   the aggregate `compile` and `watch` scripts (they `npm --prefix
+   extensions/copilot` and would ENOENT the whole build once the dir is gone).
+3. **Hide the core chat surface** — the Chat view, its setup agents, the
+   title-bar Sign In and inline suggestions are all core workbench
+   (`contrib/chat`), not the extension, and survive step 1. The `valyria-chrome`
+   built-in sets **`"chat.disableAIFeatures": true`** in `configurationDefaults`;
+   Code-OSS's `ChatEntitlementContext` reads that as a forced `hidden` state,
+   which stops `SetupAgent.registerDefaultAgents` (so no default panel
+   participant registers) and gates off every `Setup.hidden`-conditioned
+   surface. It is a plain window-scoped setting — a user who wants the built-in
+   chat back sets it to `false`. `valyria-chrome` is code-free, so the default
+   survives opening an untrusted workspace.
+
 `product.json`'s `defaultChatAgent` is deliberately **not** overridden — Code-OSS
 dereferences it unguarded during workbench startup, so nulling it white-screens
 the window.
-
-**Residual:** the *core* chat ViewPane (`vscode/out/.../contrib/chat`, not an
-extension) still renders its empty "set up GitHub Copilot" state until a viewer
-hides it. Fully removing it is patch-tier — see below.
 
 ---
 
 ## What stays VS Code (residual tells, config-only)
 
 The Explorer / Search / SCM / Run / Extensions view containers still exist (the
-activity bar can be hidden or relocated, not renamed); the core **chat view's**
-empty state survives removing the Copilot extension; the Settings editor, the
+activity bar can be hidden or relocated, not renamed); the Settings editor, the
 Extensions "Marketplace" view, workspace-trust modal wording, and the `F1`
 palette are upstream. Hiding the activity bar in Agent layout and driving
 navigation from Home covers most of the visual impact. Closing the rest needs a
 "curated shell patch set" — out of scope under the config-only constraint.
+(The core chat view's "set up GitHub Copilot" empty state *was* on this list;
+it is now suppressed by the `chat.disableAIFeatures` default — see above.)
 
 ## Standing gates
 

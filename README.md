@@ -48,6 +48,20 @@ VALYRIA_BIN=/path/to/valyria/target/debug/valyria scripts/dev.sh
 
 or set `valyria.core.binaryPath` in the launched window's settings.
 
+## Screenshots
+
+**Home** — task entry, active and recent tasks, runtime state.
+
+![Home](docs/assets/valyria-home.png)
+
+**Task Workspace** — the focused task: conversation, plan, changed files, tests, verification.
+
+![Task Workspace](docs/assets/valyria-workspace.png)
+
+**Review Changes** — agent-authored edits with Core's ownership attribution; each row opens the editor's diff.
+
+![Review Changes](docs/assets/valyria-review.png)
+
 ## Repository layout
 
 | Path | Contents |

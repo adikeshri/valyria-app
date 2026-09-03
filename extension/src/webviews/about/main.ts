@@ -6,7 +6,7 @@
  * compatibility verdict. On Windows it also carries the tier-3 notice (G9).
  */
 import { mountWebview } from "../shared/host";
-import { h, section, badge, empty } from "../shared/render";
+import { h, section, badge, empty, brandLockup } from "../shared/render";
 import type { AboutModel } from "../shared/protocol";
 import "./about.css";
 
@@ -14,6 +14,8 @@ const root = document.getElementById("root")!;
 
 function render(m: AboutModel): void {
   root.replaceChildren();
+
+  root.append(brandLockup("Local-first autonomous coding agent"));
 
   if (m.windowsTier3) {
     root.append(

@@ -1,0 +1,25 @@
+diff --git a/build/lib/electron.ts b/build/lib/electron.ts
+index f9236eaf..b8628a1d 100644
+--- a/build/lib/electron.ts
++++ b/build/lib/electron.ts
+@@ -142,14 +142,16 @@ const electronAssetResolver = electronFeed
+ export const config = {
+ 	version: electronVersion,
+ 	productAppName: product.nameLong,
+-	companyName: 'Microsoft Corporation',
+-	copyright: 'Copyright (C) 2026 Microsoft. All rights reserved',
++	// Valyria: de-Microsoft the packaged app metadata (Info.plist / PE resources).
++	// build/patches/020-debrand-electron-build.patch
++	companyName: 'Valyria',
++	copyright: `Copyright (C) ${new Date().getFullYear()} the Valyria authors. Apache-2.0.`,
+ 	darwinExecutable: product.nameShort,
+ 	darwinIcon: 'resources/darwin/code.icns',
+ 	darwinBundleIdentifier: product.darwinBundleIdentifier,
+ 	darwinApplicationCategoryType: 'public.app-category.developer-tools',
+-	darwinHelpBookFolder: 'VS Code HelpBook',
+-	darwinHelpBookName: 'VS Code HelpBook',
++	darwinHelpBookFolder: 'Valyria HelpBook',
++	darwinHelpBookName: 'Valyria HelpBook',
+ 	darwinBundleDocumentTypes: [
+ 		...darwinBundleDocumentTypes({ 'C header file': 'h', 'C source code': 'c' }, 'c'),
+ 		...darwinBundleDocumentTypes({ 'Git configuration file': ['gitattributes', 'gitconfig', 'gitignore'] }, 'config'),

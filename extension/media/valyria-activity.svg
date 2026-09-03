@@ -1,4 +1,6 @@
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M4 4L12 20L20 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M8 4L12 12L16 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
+<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- Valyria: the folded dragon-fire "V" from the wordmark (docs/assets/logo.png),
+       as a bold notched chevron. Monochrome via currentColor. -->
+  <path fill="currentColor" d="M2.7 3.2h4.6L12 15.1 16.7 3.2h4.6L14 20.8h-4L2.7 3.2z"/>
+  <path fill="currentColor" opacity="0.5" d="M9 3.2h1.9L12 6.5l1.1-3.3H15l-3 8.2L9 3.2z"/>
 </svg>

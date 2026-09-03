@@ -1,0 +1,89 @@
+diff --git a/src/vs/workbench/services/themes/browser/workbenchThemeService.ts b/src/vs/workbench/services/themes/browser/workbenchThemeService.ts
+index 69b32747..f9d8cdac 100644
+--- a/src/vs/workbench/services/themes/browser/workbenchThemeService.ts
++++ b/src/vs/workbench/services/themes/browser/workbenchThemeService.ts
+@@ -58,6 +58,50 @@ const colorThemeRulesClassName = 'contributedColorTheme';
+ const fileIconThemeRulesClassName = 'contributedFileIconTheme';
+ const productIconThemeRulesClassName = 'contributedProductIconTheme';
+ 
++// Valyria: surfaces merged over the stock pre-paint colour maps so the first
++// frame — drawn before the theme JSON loads — is the Valyria ground, not stock
++// grey/blue. build/patches/011-theme-default-hardening.patch
++const VALYRIA_DARK_INITIAL_COLORS = {
++	...COLOR_THEME_DARK_INITIAL_COLORS,
++	'activityBar.background': '#0a0a0e',
++	'activityBarBadge.background': '#ec773c',
++	'activityBarBadge.foreground': '#1f0f05',
++	'badge.background': '#ec773c',
++	'button.background': '#ec773c',
++	'button.foreground': '#1f0f05',
++	'editor.background': '#0d0d12',
++	'editor.foreground': '#f1f1f5',
++	'editorGroupHeader.tabsBackground': '#0a0a0e',
++	'focusBorder': '#ec773c',
++	'panel.background': '#0a0a0e',
++	'progressBar.background': '#ec773c',
++	'sideBar.background': '#0a0a0e',
++	'statusBar.background': '#0a0a0e',
++	'statusBar.noFolderBackground': '#0a0a0e',
++	'tab.activeBackground': '#0d0d12',
++	'titleBar.activeBackground': '#0a0a0e',
++};
++const VALYRIA_LIGHT_INITIAL_COLORS = {
++	...COLOR_THEME_LIGHT_INITIAL_COLORS,
++	'activityBar.background': '#f4f4f6',
++	'activityBarBadge.background': '#c15925',
++	'activityBarBadge.foreground': '#ffffff',
++	'badge.background': '#c15925',
++	'button.background': '#c15925',
++	'button.foreground': '#ffffff',
++	'editor.background': '#ffffff',
++	'editor.foreground': '#16161c',
++	'editorGroupHeader.tabsBackground': '#eceef1',
++	'focusBorder': '#c15925',
++	'panel.background': '#f4f4f6',
++	'progressBar.background': '#c15925',
++	'sideBar.background': '#f4f4f6',
++	'statusBar.background': '#f4f4f6',
++	'statusBar.noFolderBackground': '#f4f4f6',
++	'tab.activeBackground': '#ffffff',
++	'titleBar.activeBackground': '#f4f4f6',
++};
++
+ const themingRegistry = Registry.as<IThemingRegistry>(ThemingExtensions.ThemingContribution);
+ 
+ function validateThemeId(theme: string): string {
+@@ -152,7 +196,7 @@ export class WorkbenchThemeService extends Disposable implements IWorkbenchTheme
+ 			themeData = undefined;
+ 		}
+ 
+-		const defaultColorMap = colorThemeSetting === ThemeSettingDefaults.COLOR_THEME_LIGHT ? COLOR_THEME_LIGHT_INITIAL_COLORS : colorThemeSetting === ThemeSettingDefaults.COLOR_THEME_DARK ? COLOR_THEME_DARK_INITIAL_COLORS : undefined;
++		const defaultColorMap = colorThemeSetting === ThemeSettingDefaults.COLOR_THEME_LIGHT ? VALYRIA_LIGHT_INITIAL_COLORS : colorThemeSetting === ThemeSettingDefaults.COLOR_THEME_DARK ? VALYRIA_DARK_INITIAL_COLORS : undefined;
+ 		if (!themeData) {
+ 			const initialColorTheme = environmentService.options?.initialColorTheme;
+ 			if (initialColorTheme) {
+@@ -280,7 +324,9 @@ export class WorkbenchThemeService extends Disposable implements IWorkbenchTheme
+ 		const keepTheme = await new Promise(resolve => {
+ 			this.notificationService.prompt(
+ 				Severity.Info,
+-				nls.localize({ key: 'themeUpdatedNotification', comment: ['{0} is the name of the new default theme'] }, "VS Code has a new default theme: '{0}'.", this.getColorTheme().label),
++				// Valyria: branded default-theme copy (upstream said "VS Code …").
++				// build/patches/011-theme-default-hardening.patch
++				nls.localize({ key: 'themeUpdatedNotification', comment: ['{0} is the name of the new default theme'] }, "Valyria's default colour theme is now '{0}'.", this.getColorTheme().label),
+ 				[
+ 					toAction({
+ 						id: 'themeUpdated.tryItOut',
+@@ -396,7 +442,12 @@ export class WorkbenchThemeService extends Disposable implements IWorkbenchTheme
+ 				// current theme is no longer available
+ 				prevColorId = this.currentColorTheme.id;
+ 				const defaultTheme = this.colorThemeRegistry.findThemeBySettingsId(ThemeSettingDefaults.COLOR_THEME_DARK);
+-				await this.setColorTheme(defaultTheme, 'auto');
++				// Valyria: fall back WITHOUT persisting (upstream passed 'auto', which
++				// writes workbench.colorTheme into the user's settings.json and then
++				// wins forever). If the Valyria theme extension momentarily drops out
++				// — trust flip, reload race — we want it to come back on its own, not
++				// leave a sticky override. build/patches/011-theme-default-hardening.patch
++				await this.setColorTheme(defaultTheme, undefined);
+ 			}
+ 		}));
+ 

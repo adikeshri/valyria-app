@@ -32,11 +32,17 @@ valyria-app/
   build/
     VSCODE_REF               the pinned upstream tag (e.g. 1.135.0)
     product.overlay.json     our product.json fields, merged over vscode/product.json
-    patches/                 *.patch applied to vscode/ after checkout (keep minimal)
-    icons/                   Valyria app icons per platform
-    README.md                how the overlay + patch flow works
+    patches/                 *.patch applied to vscode/ after checkout (3, all theme/branding)
+    icons/                   source artwork: valyria.icns / .ico / -512.png (real, from the
+                             original app); scripts/gen-icons.py expands it into vscode/resources/
+    README.md                how the overlay + patch + icon flow works
 
-  extension/                 the Valyria built‑in extension (TypeScript)
+  theme/                     the Valyria colour themes — a code‑free built‑in extension
+    package.json             contributes.themes (Dark/Light/HC/HC‑Light) + configurationDefaults
+    themes/*.json            NO `main`: never disabled by workspace trust, so the
+                             default theme survives opening an untrusted repo
+
+  extension/                 the Valyria agent built‑in extension (TypeScript)
     package.json             name: "valyria", publisher: "valyria", contributes: …
     src/
       extension.ts           activate(): spawn bridge‑host, register everything
@@ -85,6 +91,21 @@ bootstrap) or a field in `build/product.overlay.json`. This keeps upstream
 bumps to: change `build/VSCODE_REF`, re‑run `bootstrap.sh`, fix any patch that
 no longer applies. Aim for **zero or near‑zero patches** — everything the agent
 needs should be reachable through the extension API.
+
+**Current patches** (`build/patches/`, applied in filename order):
+
+| Patch | Target | Why it can't be an overlay / extension |
+|---|---|---|
+| `010-valyria-default-theme.patch` | `src/…/themes/common/workbenchThemeService.ts` — `ThemeSettingDefaults` | The default `workbench.colorTheme` (and the four `preferred*` keys, incl. the `APPLICATION`‑scoped HC path) is a hard‑coded constant. `product.json` has no key for it; an extension `configurationDefaults` is dropped when the agent extension is disabled in an untrusted workspace. |
+| `011-theme-default-hardening.patch` | `src/…/themes/browser/workbenchThemeService.ts` | Cold‑start pre‑paint colour map (stock is MS grey/blue); stop the `event.removed` fallback persisting `workbench.colorTheme` to `settings.json`; branded default‑theme notification copy. |
+| `020-debrand-electron-build.patch` | `build/lib/electron.ts` `config` | `companyName` / `copyright` / `darwinHelpBook*` are string literals baked into the packaged app's Info.plist / PE resources. |
+
+On a `VSCODE_REF` bump, re‑check each: the theme‑service line numbers move often;
+`ThemeSettingDefaults` string values change most releases (`Dark 2026` was
+`Dark Modern` a version earlier). The Valyria default theme also relies on the
+code‑free `theme/` built‑in staying enabled in restricted mode
+(`extensionManifestPropertiesService`: an extension with no `main` is always
+untrusted‑supported) — verify that contract survives the bump.
 
 ## 3. Process model
 
@@ -147,13 +168,23 @@ extension must provide:
 
 - `nameShort` / `nameLong` / `applicationName` → Valyria
 - `dataFolderName` → `.valyria`
-- Icons (`build/icons/`), `win32*` identifiers, `darwinBundleIdentifier`
+- **Icons** — `scripts/gen-icons.py` writes `vscode/resources/{darwin,win32,linux}/`
+  from `build/icons/` (app `code.{icns,ico,png}`, `code.xpm`, Start‑menu tiles,
+  and all 55 per‑language document icons re‑badged). `bootstrap.sh` runs it, then
+  wipes `vscode/.build/electron` — `preLaunch.ts` only re‑brands the app bundle
+  when that directory is missing, and `darwinIcon`/`winIcon` are literals in
+  `build/lib/electron.ts` that no overlay key can point at `build/icons/`.
+- `win32*` identifiers, `darwinBundleIdentifier`; company/copyright/HelpBook via
+  `020-debrand-electron-build.patch`
+- **Default colour theme** — the `theme/` built‑in (code‑free, always enabled)
+  contributes `Valyria Dark/Light/High Contrast[ Light]` + `configurationDefaults`;
+  `010-valyria-default-theme.patch` makes it the schema default too.
 - `extensionsGallery` → Open VSX (`https://open-vsx.org/vscode/gallery`, …)
 - Remove `enableTelemetry`, `crashReporter`, `msftInternalDomains`,
   `aiConfig`, `documentationUrl`‑style MS links; keep `reportIssueUrl` → our repo
-- `builtInExtensions` — add the Valyria extension (or bundle under
-  `vscode/extensions/valyria` via bootstrap symlink so it compiles in the
-  standard build)
+- `builtInExtensions` — the Valyria extensions bundle under
+  `vscode/extensions/valyria` and `vscode/extensions/valyria-theme` via bootstrap
+  symlinks so they compile in the standard build
 - `linkProtectionTrustedDomains`, `trustedExtensionAuthAccess` as needed
 - Offline guarantee (PLAN.md §32): CI job runs the built app with the network
   disabled; no update check, no gallery ping, no telemetry endpoint resolves

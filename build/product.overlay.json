@@ -12,6 +12,8 @@
   "urlProtocol": "valyria",
   "quality": "stable",
 
+  "$theme_note": "The default colour theme is Valyria Dark. It is enforced in two places, NOT here: (1) theme/ (the code-free valyria-theme built-in) contributes.configurationDefaults; (2) build/patches/010-valyria-default-theme.patch rewrites ThemeSettingDefaults. product.json has no key for this — `initialColorTheme` is read only by the browser workbench (environmentService.options), so it is dead on desktop; the cold-start pre-paint is handled by build/patches/011-theme-default-hardening.patch.",
+
   "win32MutexName": "valyria",
   "win32DirName": "Valyria",
   "win32NameVersion": "Valyria",

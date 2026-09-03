@@ -1,0 +1,24 @@
+diff --git a/src/vs/workbench/services/themes/common/workbenchThemeService.ts b/src/vs/workbench/services/themes/common/workbenchThemeService.ts
+index 74edcdda..ed8a7e70 100644
+--- a/src/vs/workbench/services/themes/common/workbenchThemeService.ts
++++ b/src/vs/workbench/services/themes/common/workbenchThemeService.ts
+@@ -39,10 +39,15 @@ export enum ThemeSettings {
+ }
+ 
+ export namespace ThemeSettingDefaults {
+-	export const COLOR_THEME_DARK = 'Dark 2026';
+-	export const COLOR_THEME_LIGHT = 'Light 2026';
+-	export const COLOR_THEME_HC_DARK = 'Default High Contrast';
+-	export const COLOR_THEME_HC_LIGHT = 'Default High Contrast Light';
++	// Valyria: the branded distribution ships its own colour identity as the
++	// default. These ids resolve to the code-free `valyria-theme` built-in
++	// extension, which — unlike a contribution on the agent extension — is never
++	// disabled by workspace trust, so the default holds when a repo is opened.
++	// build/patches/010-valyria-default-theme.patch
++	export const COLOR_THEME_DARK = 'Valyria Dark';
++	export const COLOR_THEME_LIGHT = 'Valyria Light';
++	export const COLOR_THEME_HC_DARK = 'Valyria High Contrast';
++	export const COLOR_THEME_HC_LIGHT = 'Valyria High Contrast Light';
+ 
+ 	export const FILE_ICON_THEME = 'vs-seti';
+ 	export const PRODUCT_ICON_THEME = 'Default';

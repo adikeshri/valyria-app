@@ -1,9 +1,12 @@
 # Accessibility
 
 > **Note.** These are standing per-phase exit criteria. They now apply to the
-> Valyria **extension** and its webviews (`--vscode-*` theming, `aria-live`
-> regions, `:focus-visible`, `mountWebview`'s live region, `prefers-reduced-motion`);
-> the editor chrome's accessibility is upstream Code-OSS's.
+> Valyria **extension** and its webviews (Valyria's light/dark/high-contrast
+> palette in `tokens.css`, selected by the editor's `body.vscode-*` theme class;
+> `aria-live` regions, `:focus-visible`, `mountWebview`'s live region,
+> `prefers-reduced-motion`); the editor chrome's accessibility is upstream
+> Code-OSS's, and the bundled Valyria theme family covers its light / dark /
+> high-contrast variants.
 
 Keyboard-first navigation, visible focus, reduced-motion, and light/dark/system
 are acceptance criteria on every phase's exit, not a cleanup pass

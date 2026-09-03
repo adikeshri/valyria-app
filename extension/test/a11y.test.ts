@@ -5,9 +5,9 @@
  * keyboard-operability check: no positive tabindex, every interactive element
  * reachable.
  *
- * (jsdom has no layout engine, so `color-contrast` can't run here — the theme
- * tokens map to `--vscode-*` and contrast is the editor theme's concern. The
- * manual screen-reader pass is tracked in docs/SECURITY-REVIEW.md.)
+ * (jsdom has no layout engine, so `color-contrast` can't run here — contrast on
+ * the fixed Valyria palette in tokens.css is checked in the manual `axe`
+ * DevTools pass on the running webview, tracked in docs/SECURITY-REVIEW.md.)
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";

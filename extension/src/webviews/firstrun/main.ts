@@ -11,6 +11,7 @@ import "./firstrun.css";
 interface FirstRunModel {
   connection: string;
   hasRepo: boolean;
+  layoutMode: "agent" | "editor";
   probeState: "idle" | "running" | "done" | "failed";
   probeResult: string | null;
 }
@@ -51,6 +52,26 @@ function render(m: FirstRunModel): void {
   s2.append(probeBtn);
   if (m.probeResult) s2.append(h("p", { class: "vy-empty", text: m.probeResult }));
   wrap.append(s2);
+
+  // 3. Layout choice (docs/UX-DIFFERENTIATION.md, lever C)
+  const s3 = h(
+    "div",
+    { class: "fr-step" },
+    h("h3", { text: "3. Choose a layout" }),
+    h("p", { class: "vy-empty" }, "Agent puts the Valyria surfaces at the centre; Editor keeps the familiar VS Code shape. You can switch any time from the status bar.")
+  );
+  const choose = h("div", { class: "fr-actions" });
+  for (const mode of ["agent", "editor"] as const) {
+    const b = h(
+      "button",
+      { class: `vy-btn${m.layoutMode === mode ? " vy-btn--primary" : ""}`, type: "button", "aria-pressed": m.layoutMode === mode },
+      mode === "agent" ? "Agent layout" : "Editor layout"
+    ) as HTMLButtonElement;
+    b.addEventListener("click", () => ctrl?.command("firstRunSetLayout", { mode }));
+    choose.append(b);
+  }
+  s3.append(choose);
+  wrap.append(s3);
 
   const done = h("button", { class: "vy-btn", type: "button" }, "Done") as HTMLButtonElement;
   done.addEventListener("click", () => ctrl?.command(CMD.firstRunDismiss));

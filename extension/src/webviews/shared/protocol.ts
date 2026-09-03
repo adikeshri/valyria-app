@@ -27,6 +27,90 @@ export type Connection =
 
 // --- per-view model shapes ---------------------------------------------
 
+/** The status-bar agent ticker (docs/UX-DIFFERENTIATION.md, lever E) — a live
+ *  one-line read of what the focused task is doing. Pure projection of the
+ *  store; no clock. */
+export interface TickerModel {
+  connection: Connection;
+  hasTask: boolean;
+  taskId: string | null;
+  /** e.g. "Planning", "Editing 3 files", "Running cargo test", "Blocked: approval". */
+  phase: string | null;
+  tone: "idle" | "working" | "blocked" | "done" | "failed" | "paused";
+  /** distinct files the agent has touched in this task */
+  filesTouched: number;
+}
+
+/** The Valyria Home surface (docs/UX-DIFFERENTIATION.md, lever D) — the editor
+ *  tab you land on: a task prompt, active + recent tasks, and the runtime state. */
+export interface HomeModel {
+  connection: Connection;
+  hasRepo: boolean;
+  repoName: string | null;
+  canSubmit: boolean;
+  activeModel: string | null;
+  networkRuntime: boolean;
+  autonomy: string | null;
+  layoutMode: "agent" | "editor";
+  active: HomeTask[];
+  recent: HomeTask[];
+}
+export interface HomeTask {
+  id: string;
+  objective: string | null;
+  state: string;
+  terminal: boolean;
+  blocked: boolean;
+  filesTouched: number;
+  when: string;
+}
+
+/** The Task Workspace surface — the focused task as a full editor-area document:
+ *  conversation, plan, changed files, verification, and any pending approval in
+ *  one layout. Assembled from the same selectors the sidebar views use. */
+export interface WorkspaceModel {
+  connection: Connection;
+  taskId: string | null;
+  objective: string | null;
+  state: string | null;
+  terminal: boolean;
+  working: boolean;
+  blocked: boolean;
+  canSubmit: boolean;
+  transcript: ChatEntry[];
+  planSteps: { intent: string; status: string | null; checkpoint: boolean }[];
+  files: { path: string; change: string | null; ownership: string | null }[];
+  tests: {
+    command: string;
+    outcome: "started" | "passed" | "failed";
+    summary: string | null;
+    failureCount: number | null;
+  }[];
+  verified: { kind: string; command: string; outcome: string }[];
+  unverified: string[];
+  approval: { seq: number; prompt: string; tool: string | null; risk: string | null } | null;
+}
+
+/** The Review surface — agent-authored changes framed for approval, each row a
+ *  jump into the editor's own diff. Ownership + verification come from Core
+ *  (ledger + task_report); the app never infers ownership. */
+export interface ReviewModel {
+  connection: Connection;
+  taskId: string | null;
+  objective: string | null;
+  ledgerAvailable: boolean;
+  reportStatus: string | null;
+  files: {
+    path: string;
+    change: string | null;
+    /** agent_authored | concurrent_user_modification | pre_existing | unknown | null */
+    ownership: string | null;
+  }[];
+  verified: { kind: string; command: string; outcome: string }[];
+  unverified: string[];
+  approval: { seq: number; prompt: string; tool: string | null; risk: string | null } | null;
+}
+
 export interface ActivityModel {
   connection: Connection;
   /** humanised narrative, oldest → newest */
@@ -266,4 +350,10 @@ export const CMD = {
   firstRunOpenRepo: "firstRunOpenRepo",
   firstRunProbeTask: "firstRunProbeTask",
   firstRunDismiss: "firstRunDismiss",
+  /** open one of the editor-area surfaces: { surface: "home" | "workspace" | "review" } */
+  openSurface: "openSurface",
+  /** open the editor's own diff for an agent-changed file: { path: string } */
+  openDiff: "openDiff",
+  /** { mode: "agent" | "editor" } */
+  setLayoutMode: "setLayoutMode",
 } as const;

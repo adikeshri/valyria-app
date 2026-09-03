@@ -1,0 +1,38 @@
+#root { padding: 18px 20px; max-width: 780px; margin: 0 auto; }
+
+.home-composer {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  padding: 10px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.home-composer-input { border: none; background: transparent; padding: 2px; }
+.home-composer-input:focus { border: none; box-shadow: none; }
+.home-composer-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 6px; gap: 8px;
+}
+.home-hint { font-size: var(--text-xs); color: var(--text-tertiary); }
+
+.home-runtime { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 16px; }
+.home-linkbtn {
+  font: inherit; font-size: var(--text-xs);
+  background: none; border: none; color: var(--text-link); cursor: pointer; padding: 1px 4px;
+}
+.home-linkbtn:hover { text-decoration: underline; }
+
+.home-tasks > li.home-task {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--border-subtle);
+}
+.home-task-main { flex: 1; min-width: 0; }
+.home-task-obj {
+  display: block; font-size: var(--text-sm); font-weight: 550;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.home-task-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 3px; }
+.home-task-when { font-size: var(--text-xs); color: var(--text-tertiary); }
+
+.home-actions { display: flex; gap: 8px; margin-top: 14px; }

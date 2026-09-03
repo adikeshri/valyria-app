@@ -14,6 +14,7 @@ import type { JsonRpcClient } from "./bridge/client";
 import { registerCommands } from "./commands";
 import { Supervisor } from "./session/supervisor";
 import { TaskFocus } from "./session/focus";
+import { LayoutController } from "./session/layout";
 import { StatusBar } from "./status";
 import { Store } from "./store/store";
 import { ActivityViewProvider } from "./views/activity";
@@ -32,6 +33,8 @@ import { SettingsViewProvider } from "./views/settings";
 import { ContextViewProvider } from "./views/context";
 import { FirstRunViewProvider } from "./views/firstrun";
 import { AboutViewProvider } from "./views/about";
+import { EditorPanelManager } from "./views/editorPanels";
+import { ValyriaDocEditorProvider, VALYRIA_DOC_VIEW } from "./views/customEditors";
 import { makeWebviewDispatch } from "./views/dispatch";
 import { maybePromptResume } from "./session/resume";
 import { watchNotifications } from "./session/notify";
@@ -45,7 +48,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const store = new Store(log);
   const supervisor = new Supervisor(host, log);
   const focus = new TaskFocus();
-  context.subscriptions.push(host, supervisor, focus);
+  const layout = new LayoutController(context, log);
+  context.subscriptions.push(host, supervisor, focus, layout);
+  await layout.applyOnActivate();
 
   try {
     host.start();
@@ -55,7 +60,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  const dispatch = makeWebviewDispatch({ host, store, supervisor, focus, log });
+  const dispatch = makeWebviewDispatch({ host, store, supervisor, focus, layout, log });
+  const panels = new EditorPanelManager(
+    context.extensionUri,
+    store,
+    supervisor,
+    focus,
+    layout,
+    host,
+    dispatch,
+    log
+  );
+  context.subscriptions.push(panels);
   let resumePrompted = false;
 
   const reopen = async (root: string, appliedThrough: number): Promise<void> => {
@@ -87,7 +103,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const networkRuntime = (doc.checks ?? []).some(
         (c) => /network|online|remote.?model/i.test(c.name) && c.status === "pass" && /enabled|allowed|reachable/i.test(c.detail)
       );
-      statusBar.setRuntime({ activeModel: modelEntry?.value ?? null, networkRuntime });
+      const runtime = { activeModel: modelEntry?.value ?? null, networkRuntime };
+      statusBar.setRuntime(runtime);
+      panels.setRuntime(runtime);
     } catch {
       /* marker stays at its safe default: Local · Offline */
     }
@@ -139,8 +157,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     { dispose: () => { for (const d of clientSubs.splice(0)) d.dispose(); } }
   );
 
-  const statusBar = new StatusBar(supervisor);
+  const statusBar = new StatusBar(supervisor, store, focus, layout);
   context.subscriptions.push(statusBar);
+
+  // `valyria.hasSession` gates the task-oriented palette entries (package.json
+  // contributes.menus.commandPalette).
+  const syncSessionContext = () =>
+    void vscode.commands.executeCommand(
+      "setContext",
+      "valyria.hasSession",
+      supervisor.state === "ready" && !!supervisor.session
+    );
+  context.subscriptions.push(supervisor.onDidChange(syncSessionContext));
+  syncSessionContext();
 
   context.subscriptions.push(
     watchNotifications(store, focus, supervisor, dispatch),
@@ -163,7 +192,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     [SettingsViewProvider.viewId, new SettingsViewProvider(uri, supervisor, host)],
     [ContextViewProvider.viewId, new ContextViewProvider(uri, store, supervisor, focus)],
     [AboutViewProvider.viewId, new AboutViewProvider(uri, supervisor, host)],
-    [FirstRunViewProvider.viewId, new FirstRunViewProvider(uri, context, store, supervisor, host, reopen)],
+    [FirstRunViewProvider.viewId, new FirstRunViewProvider(uri, context, store, supervisor, host, layout, panels, reopen)],
     [TimelineViewProvider.viewId, new TimelineViewProvider(uri, store)],
     [HistoryViewProvider.viewId, new HistoryViewProvider(uri, store, focus, dispatch)],
   ];
@@ -175,7 +204,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     );
   }
 
-  registerCommands(context, host, supervisor, store, log, reopen);
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(
+      VALYRIA_DOC_VIEW,
+      new ValyriaDocEditorProvider(uri),
+      { webviewOptions: { retainContextWhenHidden: true }, supportsMultipleEditorsPerDocument: true }
+    )
+  );
+
+  registerCommands({ context, host, supervisor, store, layout, panels, log, reopen });
 
   host.onExit((code) => {
     if (code !== 0 && code !== null) {
@@ -190,6 +227,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await reopen(root, 0);
   } else {
     log.info("no folder open — waiting for 'Valyria: Open Repository for Agent'");
+  }
+
+  // Land on the Valyria Home surface instead of the Code-OSS Welcome page
+  // (docs/UX-DIFFERENTIATION.md, lever D): in Agent layout it is the centre of
+  // gravity, and with no folder open it is the natural entry point. Skipped
+  // when the window restored editors — the user's own session wins.
+  const hasRestoredEditors = vscode.window.tabGroups.all.some((g) => g.tabs.length > 0);
+  if (!hasRestoredEditors && (layout.mode === "agent" || !root)) {
+    void panels.open("home");
   }
 
   log.info("Valyria extension activated");

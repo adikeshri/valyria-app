@@ -132,46 +132,162 @@
     },
     "commands": [
       {
+        "command": "valyria.openHome",
+        "title": "Open Home",
+        "category": "Valyria",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "valyria.openWorkspacePanel",
+        "title": "Open Task Workspace",
+        "category": "Valyria",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "valyria.reviewChanges",
+        "title": "Review Changes",
+        "category": "Valyria",
+        "icon": "$(git-compare)"
+      },
+      {
         "command": "valyria.openWorkspace",
-        "title": "Valyria: Open Repository for Agent",
-        "category": "Valyria"
+        "title": "Open Repository for the Agent",
+        "category": "Valyria",
+        "icon": "$(folder-opened)"
       },
       {
         "command": "valyria.newTask",
-        "title": "Valyria: New Agent Task",
-        "category": "Valyria"
+        "title": "Start a Task",
+        "category": "Valyria",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "valyria.explainFailure",
+        "title": "Explain This Failure",
+        "category": "Valyria",
+        "icon": "$(question)"
       },
       {
         "command": "valyria.pauseTask",
-        "title": "Valyria: Pause Task",
-        "category": "Valyria"
+        "title": "Pause the Task",
+        "category": "Valyria",
+        "icon": "$(debug-pause)"
       },
       {
         "command": "valyria.resumeTask",
-        "title": "Valyria: Resume Task",
-        "category": "Valyria"
+        "title": "Resume the Task",
+        "category": "Valyria",
+        "icon": "$(debug-continue)"
       },
       {
         "command": "valyria.cancelTask",
-        "title": "Valyria: Cancel Task",
+        "title": "Cancel the Task",
+        "category": "Valyria",
+        "icon": "$(stop-circle)"
+      },
+      {
+        "command": "valyria.layout.agentMode",
+        "title": "Use Agent Layout",
         "category": "Valyria"
       },
       {
+        "command": "valyria.layout.editorMode",
+        "title": "Use Editor Layout",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.layout.toggleMode",
+        "title": "Switch Layout (Agent / Editor)",
+        "category": "Valyria",
+        "icon": "$(layout)"
+      },
+      {
         "command": "valyria.reconnect",
-        "title": "Valyria: Reconnect to Core",
+        "title": "Reconnect to Core",
         "category": "Valyria"
       },
       {
         "command": "valyria.showAbout",
-        "title": "Valyria: About / Compatibility",
+        "title": "About / Compatibility",
         "category": "Valyria"
       },
       {
         "command": "valyria.restartBridge",
-        "title": "Valyria: Restart Bridge Host",
+        "title": "Restart Bridge Host",
         "category": "Valyria"
       }
     ],
+    "customEditors": [
+      {
+        "viewType": "valyria.document",
+        "displayName": "Valyria Document",
+        "selector": [
+          { "filenamePattern": "**/.valyria/**/*.md" },
+          { "filenamePattern": "**/.valyria/**/*.json" }
+        ],
+        "priority": "default"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "valyria.newTask",
+        "key": "cmd+i",
+        "mac": "cmd+i",
+        "win": "ctrl+i",
+        "linux": "ctrl+i",
+        "when": "!terminalFocus && !inQuickOpen"
+      },
+      {
+        "command": "valyria.openHome",
+        "key": "cmd+k cmd+h",
+        "mac": "cmd+k cmd+h",
+        "win": "ctrl+k ctrl+h",
+        "linux": "ctrl+k ctrl+h"
+      },
+      {
+        "command": "valyria.reviewChanges",
+        "key": "cmd+k cmd+r",
+        "mac": "cmd+k cmd+r",
+        "win": "ctrl+k ctrl+r",
+        "linux": "ctrl+k ctrl+r"
+      },
+      {
+        "command": "valyria.layout.toggleMode",
+        "key": "cmd+k cmd+l",
+        "mac": "cmd+k cmd+l",
+        "win": "ctrl+k ctrl+l",
+        "linux": "ctrl+k ctrl+l"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "valyria.openWorkspacePanel", "when": "valyria.hasSession" },
+        { "command": "valyria.reviewChanges", "when": "valyria.hasSession" },
+        { "command": "valyria.explainFailure", "when": "valyria.hasSession" },
+        { "command": "valyria.pauseTask", "when": "valyria.hasSession" },
+        { "command": "valyria.resumeTask", "when": "valyria.hasSession" },
+        { "command": "valyria.cancelTask", "when": "valyria.hasSession" },
+        { "command": "valyria.layout.agentMode", "when": "valyria.layoutMode != agent" },
+        { "command": "valyria.layout.editorMode", "when": "valyria.layoutMode != editor" }
+      ],
+      "view/title": [
+        {
+          "command": "valyria.openHome",
+          "when": "view == valyria.chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "valyria.reviewChanges",
+          "when": "view == valyria.chat",
+          "group": "navigation@2"
+        },
+        {
+          "command": "valyria.layout.toggleMode",
+          "when": "view == valyria.chat",
+          "group": "navigation@3"
+        }
+      ]
+    },
     "walkthroughs": [
       {
         "id": "valyria.getStarted",
@@ -211,9 +327,17 @@
           {
             "id": "valyria.ws.review",
             "title": "Review and approve",
-            "description": "Every mutating action can require your approval. Verification is shown as evidence — an unbacked 'tests pass' reads as NOT RUN.",
+            "description": "Every mutating action can require your approval. Verification is shown as evidence — an unbacked 'tests pass' reads as NOT RUN.\n[Review changes](command:valyria.reviewChanges)",
             "media": {
               "markdown": "media/walkthrough/review.md"
+            }
+          },
+          {
+            "id": "valyria.ws.layout",
+            "title": "Pick a layout",
+            "description": "Agent layout makes the Valyria surfaces the centre of gravity; Editor layout keeps the familiar VS Code shape. Switch from the status bar or with the layout command.\n[Switch layout](command:valyria.layout.toggleMode)",
+            "media": {
+              "markdown": "media/walkthrough/layout.md"
             }
           }
         ]
@@ -241,6 +365,24 @@
           ],
           "default": "manual",
           "description": "Autonomy level a new workspace daemon starts under (CORE-INTERFACE G1). Changing it while a task runs is refused."
+        },
+        "valyria.layout.defaultMode": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "editor"
+          ],
+          "enumDescriptions": [
+            "The Valyria surfaces are the centre of gravity; the activity bar is hidden and the editor is a detail pane.",
+            "A faithful VS Code-shaped layout for muscle memory."
+          ],
+          "default": "editor",
+          "markdownDescription": "Which layout a workspace starts in before you pick one (docs/UX-DIFFERENTIATION.md). Your last explicit choice per workspace is remembered and wins over this."
+        },
+        "valyria.layout.applyWorkbenchDefaults": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Let Valyria apply a bundle of `workbench.*` / `window.*` settings when you switch layout mode (activity bar, tab style, command center, menu bar, …). Turn off to keep full manual control of the workbench chrome; the mode context still drives the Valyria surfaces."
         },
         "valyria.notifications.categories": {
           "type": "array",

@@ -1,0 +1,240 @@
+{
+  "$schema": "vscode://schemas/product-icon-theme",
+  "fonts": [
+    {
+      "id": "valyria-icons",
+      "src": [
+        {
+          "path": "./valyria-icons.woff",
+          "format": "woff"
+        }
+      ],
+      "weight": "normal",
+      "style": "normal"
+    }
+  ],
+  "iconDefinitions": {
+    "account": {
+      "fontCharacter": "\\E000"
+    },
+    "add": {
+      "fontCharacter": "\\E001"
+    },
+    "alert": {
+      "fontCharacter": "\\E002"
+    },
+    "arrow-down": {
+      "fontCharacter": "\\E003"
+    },
+    "arrow-left": {
+      "fontCharacter": "\\E004"
+    },
+    "arrow-right": {
+      "fontCharacter": "\\E005"
+    },
+    "arrow-up": {
+      "fontCharacter": "\\E006"
+    },
+    "bell": {
+      "fontCharacter": "\\E007"
+    },
+    "bell-dot": {
+      "fontCharacter": "\\E008"
+    },
+    "check": {
+      "fontCharacter": "\\E009"
+    },
+    "chevron-down": {
+      "fontCharacter": "\\E00A"
+    },
+    "chevron-left": {
+      "fontCharacter": "\\E00B"
+    },
+    "chevron-right": {
+      "fontCharacter": "\\E00C"
+    },
+    "chevron-up": {
+      "fontCharacter": "\\E00D"
+    },
+    "chrome-close": {
+      "fontCharacter": "\\E00E"
+    },
+    "circle-filled": {
+      "fontCharacter": "\\E00F"
+    },
+    "circle-large-outline": {
+      "fontCharacter": "\\E010"
+    },
+    "circle-outline": {
+      "fontCharacter": "\\E011"
+    },
+    "clear-all": {
+      "fontCharacter": "\\E012"
+    },
+    "close": {
+      "fontCharacter": "\\E013"
+    },
+    "close-all": {
+      "fontCharacter": "\\E014"
+    },
+    "collapse-all": {
+      "fontCharacter": "\\E015"
+    },
+    "debug-pause": {
+      "fontCharacter": "\\E016"
+    },
+    "debug-start": {
+      "fontCharacter": "\\E017"
+    },
+    "debug-stop": {
+      "fontCharacter": "\\E018"
+    },
+    "editor-layout": {
+      "fontCharacter": "\\E019"
+    },
+    "ellipsis": {
+      "fontCharacter": "\\E01A"
+    },
+    "error": {
+      "fontCharacter": "\\E01B"
+    },
+    "expand-all": {
+      "fontCharacter": "\\E01C"
+    },
+    "explorer-view-icon": {
+      "fontCharacter": "\\E01D"
+    },
+    "extensions": {
+      "fontCharacter": "\\E01E"
+    },
+    "extensions-view-icon": {
+      "fontCharacter": "\\E01F"
+    },
+    "file": {
+      "fontCharacter": "\\E020"
+    },
+    "files": {
+      "fontCharacter": "\\E021"
+    },
+    "filter": {
+      "fontCharacter": "\\E022"
+    },
+    "fold": {
+      "fontCharacter": "\\E023"
+    },
+    "gear": {
+      "fontCharacter": "\\E024"
+    },
+    "go-to-file": {
+      "fontCharacter": "\\E025"
+    },
+    "go-to-search": {
+      "fontCharacter": "\\E026"
+    },
+    "info": {
+      "fontCharacter": "\\E027"
+    },
+    "kebab-vertical": {
+      "fontCharacter": "\\E028"
+    },
+    "layout": {
+      "fontCharacter": "\\E029"
+    },
+    "layout-panel": {
+      "fontCharacter": "\\E02A"
+    },
+    "layout-sidebar-left": {
+      "fontCharacter": "\\E02B"
+    },
+    "lightbulb": {
+      "fontCharacter": "\\E02C"
+    },
+    "lightbulb-autofix": {
+      "fontCharacter": "\\E02D"
+    },
+    "list-filter": {
+      "fontCharacter": "\\E02E"
+    },
+    "loading": {
+      "fontCharacter": "\\E02F"
+    },
+    "more": {
+      "fontCharacter": "\\E030"
+    },
+    "pass-filled": {
+      "fontCharacter": "\\E031"
+    },
+    "play": {
+      "fontCharacter": "\\E032"
+    },
+    "primitive-square": {
+      "fontCharacter": "\\E033"
+    },
+    "refresh": {
+      "fontCharacter": "\\E034"
+    },
+    "remove": {
+      "fontCharacter": "\\E035"
+    },
+    "run": {
+      "fontCharacter": "\\E036"
+    },
+    "run-view-icon": {
+      "fontCharacter": "\\E037"
+    },
+    "save": {
+      "fontCharacter": "\\E038"
+    },
+    "save-all": {
+      "fontCharacter": "\\E039"
+    },
+    "search": {
+      "fontCharacter": "\\E03A"
+    },
+    "search-stop": {
+      "fontCharacter": "\\E03B"
+    },
+    "search-view-icon": {
+      "fontCharacter": "\\E03C"
+    },
+    "settings": {
+      "fontCharacter": "\\E03D"
+    },
+    "settings-gear": {
+      "fontCharacter": "\\E03E"
+    },
+    "source-control": {
+      "fontCharacter": "\\E03F"
+    },
+    "source-control-view-icon": {
+      "fontCharacter": "\\E040"
+    },
+    "split-horizontal": {
+      "fontCharacter": "\\E041"
+    },
+    "split-vertical": {
+      "fontCharacter": "\\E042"
+    },
+    "stop-circle": {
+      "fontCharacter": "\\E043"
+    },
+    "sync": {
+      "fontCharacter": "\\E044"
+    },
+    "sync-spin": {
+      "fontCharacter": "\\E045"
+    },
+    "terminal": {
+      "fontCharacter": "\\E046"
+    },
+    "terminal-view-icon": {
+      "fontCharacter": "\\E047"
+    },
+    "unfold": {
+      "fontCharacter": "\\E048"
+    },
+    "warning": {
+      "fontCharacter": "\\E049"
+    }
+  }
+}

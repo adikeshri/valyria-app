@@ -1,22 +1,34 @@
 /**
- * Command-palette / menu entries. Each is a thin wrapper over a bridge call —
- * no agent logic in the extension (PLAN.md §41 / D2).
+ * Command-palette / menu entries. Each is a thin wrapper over a bridge call or a
+ * UI action — no agent logic in the extension (PLAN.md §41 / D2).
+ *
+ * Titles are task-oriented Valyria verbs (docs/UX-DIFFERENTIATION.md, lever E):
+ * "Start a Task", "Review Changes", "Open Home", "Agent Layout".
  */
 import * as vscode from "vscode";
+import { testResultsForTask } from "@valyria/state";
 import type { BridgeHost } from "./bridge/host";
 import type { Supervisor } from "./session/supervisor";
 import type { Store } from "./store/store";
+import type { LayoutController, LayoutMode } from "./session/layout";
+import type { EditorPanelManager } from "./views/editorPanels";
+import { resolveFocus } from "./store/models";
 
 type Reopen = (root: string, appliedThrough: number) => Promise<void>;
 
-export function registerCommands(
-  context: vscode.ExtensionContext,
-  host: BridgeHost,
-  supervisor: Supervisor,
-  store: Store,
-  log: vscode.LogOutputChannel,
-  reopen: Reopen
-): void {
+export interface CommandDeps {
+  context: vscode.ExtensionContext;
+  host: BridgeHost;
+  supervisor: Supervisor;
+  store: Store;
+  layout: LayoutController;
+  panels: EditorPanelManager;
+  log: vscode.LogOutputChannel;
+  reopen: Reopen;
+}
+
+export function registerCommands(deps: CommandDeps): void {
+  const { context, host, supervisor, store, layout, panels, log, reopen } = deps;
   const reg = (id: string, fn: (...args: unknown[]) => unknown) =>
     context.subscriptions.push(vscode.commands.registerCommand(id, fn));
 
@@ -52,7 +64,7 @@ export function registerCommands(
     if (!objective) return;
     const { taskId } = await host.client.request("task/create", { objective });
     log.info(`task created: ${taskId}`);
-    void vscode.window.showInformationMessage(`Valyria task started: ${taskId}`);
+    await panels.open("workspace");
   });
 
   const taskCmd = (id: string, method: "task/pause" | "task/resume" | "task/cancel") =>
@@ -73,7 +85,6 @@ export function registerCommands(
     const root =
       supervisor.session?.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!root) return;
-    // Resume from what the store already has, so Core replays only the tail.
     await reopen(root, store.lastSeq);
   });
 
@@ -82,7 +93,45 @@ export function registerCommands(
   });
 
   reg("valyria.showAbout", async () => {
-    // Reveal the About / Compatibility view (auto-registered `<viewId>.focus`).
     await vscode.commands.executeCommand("valyria.about.focus");
+  });
+
+  // --- editor-area surfaces (docs/UX-DIFFERENTIATION.md, lever D) ---
+  reg("valyria.openHome", () => panels.open("home"));
+  reg("valyria.openWorkspacePanel", () => panels.open("workspace"));
+  reg("valyria.openReview", () => panels.open("review"));
+  reg("valyria.reviewChanges", () => panels.open("review"));
+
+  // --- dual-mode layout (lever C) ---
+  const setMode = (mode: LayoutMode) => layout.setMode(mode, { explicit: true });
+  reg("valyria.layout.setMode", (arg: unknown) => {
+    const mode = typeof arg === "string" ? arg : (arg as { mode?: string } | undefined)?.mode;
+    if (mode === "agent" || mode === "editor") return setMode(mode);
+    return layout.toggle();
+  });
+  reg("valyria.layout.agentMode", () => setMode("agent"));
+  reg("valyria.layout.editorMode", () => setMode("editor"));
+  reg("valyria.layout.toggleMode", () => layout.toggle());
+
+  // --- explain a failure (lever E): compose an objective from observed state ---
+  reg("valyria.explainFailure", async () => {
+    if (!supervisor.session) return;
+    const taskId = resolveFocus(store.getState(), undefined);
+    const failing = taskId
+      ? testResultsForTask(store.getState(), taskId)
+          .filter((t) => t.outcome === "failed")
+          .at(-1)
+      : undefined;
+    const seed = failing
+      ? `Explain why this fails and propose a fix: ${failing.summary ?? failing.command}`
+      : "Explain the most recent failure and propose a fix.";
+    const objective = await vscode.window.showInputBox({
+      prompt: "Send to the agent",
+      value: seed,
+    });
+    if (!objective) return;
+    const { taskId: id } = await host.client.request("task/create", { objective });
+    log.info(`explain-failure task created: ${id}`);
+    await panels.open("workspace");
   });
 }

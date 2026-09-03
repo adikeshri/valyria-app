@@ -1,0 +1,27 @@
+#root { padding: 16px 20px; max-width: 860px; margin: 0 auto; }
+
+.rv-head {
+  display: flex; align-items: center; gap: 8px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 12px;
+}
+.rv-obj { font-size: var(--text-md); font-weight: 650; flex: 1; }
+
+.rv-approval {
+  border: 1px solid var(--warning-border); background: var(--warning-bg);
+  border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 14px;
+}
+.rv-approval--high { border-color: var(--danger-border); background: var(--danger-bg); }
+.rv-approval-prompt { margin: 0 0 8px; font-weight: 550; }
+.rv-approval-actions { display: flex; gap: 8px; }
+
+.rv-file { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rv-path { flex: 1; min-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-filebtn {
+  font: inherit; font-size: var(--text-xs);
+  border: 1px solid var(--control-border); border-radius: var(--radius-sm);
+  background: var(--control-bg); color: var(--text-primary); cursor: pointer; padding: 3px 10px;
+}
+.rv-filebtn:hover { background: var(--control-bg-hover); }
+.rv-verify { display: flex; gap: 8px; align-items: center; }
+
+.rv-footer { display: flex; justify-content: flex-end; margin-top: 14px; }

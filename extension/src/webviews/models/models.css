@@ -1,0 +1,4 @@
+.mdl-note { margin-bottom: 8px; }
+.mdl-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.mdl-id { flex: 1 1 140px; overflow-wrap: anywhere; }
+.mdl-actions { display: flex; gap: 6px; flex-basis: 100%; margin: 2px 0 4px; }

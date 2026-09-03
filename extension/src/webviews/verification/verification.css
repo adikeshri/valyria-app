@@ -1,0 +1,4 @@
+.vf-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.vf-claim { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.vf-runid { color: var(--text-tertiary); font-size: 10px; }
+.vf-unverified { display: flex; gap: 6px; align-items: baseline; }

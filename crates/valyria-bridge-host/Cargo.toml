@@ -1,0 +1,19 @@
+[package]
+name = "valyria-bridge-host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Thin JSON-RPC 2.0 (stdio) front end for `valyria-bridge`. Spawned by the Valyria VS Code extension; replaces the Tauri host (apps/desktop/src-tauri/src/bridge_host.rs). Depends on valyria-bridge only — the layering check treats it like the bridge."
+
+[[bin]]
+name = "valyria-bridge-host"
+path = "src/main.rs"
+
+[dependencies]
+valyria-bridge = { path = "../valyria-bridge" }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-std", "io-util", "sync", "time"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

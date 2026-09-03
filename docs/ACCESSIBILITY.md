@@ -1,5 +1,10 @@
 # Accessibility
 
+> **Note.** These are standing per-phase exit criteria. They now apply to the
+> Valyria **extension** and its webviews (`--vscode-*` theming, `aria-live`
+> regions, `:focus-visible`, `mountWebview`'s live region, `prefers-reduced-motion`);
+> the editor chrome's accessibility is upstream Code-OSS's.
+
 Keyboard-first navigation, visible focus, reduced-motion, and light/dark/system
 are acceptance criteria on every phase's exit, not a cleanup pass
 ([PLAN.md](PLAN.md) D10). This is the model, what a grep can hold, and the

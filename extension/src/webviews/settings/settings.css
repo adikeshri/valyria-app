@@ -1,0 +1,4 @@
+.set-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--border-subtle); }
+.set-key { font-family: var(--font-mono); font-size: var(--text-xs); }
+.set-val { display: flex; gap: 6px; align-items: center; }
+.set-val input { width: 140px; }

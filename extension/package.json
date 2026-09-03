@@ -1,0 +1,288 @@
+{
+  "name": "valyria",
+  "displayName": "Valyria",
+  "description": "The Valyria autonomous coding agent, built in.",
+  "version": "0.1.0",
+  "publisher": "valyria",
+  "license": "Apache-2.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adikeshri/valyria-app.git"
+  },
+  "engines": {
+    "vscode": "^1.134.0"
+  },
+  "//": "Bundled as a compiled-in built-in extension (scripts/bootstrap.sh links this dir into vscode/extensions/valyria). engines.vscode tracks @types/vscode, which lags the vscode/ submodule tag by ~1 minor.",
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "valyria",
+          "title": "Valyria",
+          "icon": "media/valyria-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "valyria": [
+        {
+          "id": "valyria.firstrun",
+          "name": "Get started",
+          "type": "webview",
+          "when": "valyria.showFirstRun"
+        },
+        {
+          "id": "valyria.chat",
+          "name": "Agent",
+          "type": "webview"
+        },
+        {
+          "id": "valyria.task",
+          "name": "Task",
+          "type": "webview"
+        },
+        {
+          "id": "valyria.activity",
+          "name": "Activity",
+          "type": "webview"
+        },
+        {
+          "id": "valyria.approvals",
+          "name": "Approvals",
+          "type": "webview"
+        },
+        {
+          "id": "valyria.timeline",
+          "name": "Timeline",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.history",
+          "name": "History",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.commands",
+          "name": "Agent Commands",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.verification",
+          "name": "Verification",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.security",
+          "name": "Security & autonomy",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.models",
+          "name": "Models",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.hardware",
+          "name": "Hardware",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.settings",
+          "name": "Settings",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.context",
+          "name": "Context",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "valyria.about",
+          "name": "About & Compatibility",
+          "type": "webview",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "valyria.openWorkspace",
+        "title": "Valyria: Open Repository for Agent",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.newTask",
+        "title": "Valyria: New Agent Task",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.pauseTask",
+        "title": "Valyria: Pause Task",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.resumeTask",
+        "title": "Valyria: Resume Task",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.cancelTask",
+        "title": "Valyria: Cancel Task",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.reconnect",
+        "title": "Valyria: Reconnect to Core",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.showAbout",
+        "title": "Valyria: About / Compatibility",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.restartBridge",
+        "title": "Valyria: Restart Bridge Host",
+        "category": "Valyria"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "valyria.getStarted",
+        "title": "Get started with Valyria",
+        "description": "A local-first autonomous coding agent, built in.",
+        "steps": [
+          {
+            "id": "valyria.ws.local",
+            "title": "Everything runs on this machine",
+            "description": "Valyria plans, edits and verifies code with a model that runs locally. No account, no cloud, no network at runtime.",
+            "media": {
+              "markdown": "media/walkthrough/local.md"
+            }
+          },
+          {
+            "id": "valyria.ws.open",
+            "title": "Open a repository",
+            "description": "Opening a folder is the authorization — the agent only reads and writes inside it.\n[Open a repository](command:valyria.openWorkspace)",
+            "media": {
+              "markdown": "media/walkthrough/open.md"
+            },
+            "completionEvents": [
+              "onCommand:valyria.openWorkspace"
+            ]
+          },
+          {
+            "id": "valyria.ws.task",
+            "title": "Give the agent a task",
+            "description": "Describe a change in the Agent view. Valyria plans it, makes the edits, runs the tests, and shows you the evidence.\n[New agent task](command:valyria.newTask)",
+            "media": {
+              "markdown": "media/walkthrough/task.md"
+            },
+            "completionEvents": [
+              "onCommand:valyria.newTask"
+            ]
+          },
+          {
+            "id": "valyria.ws.review",
+            "title": "Review and approve",
+            "description": "Every mutating action can require your approval. Verification is shown as evidence — an unbacked 'tests pass' reads as NOT RUN.",
+            "media": {
+              "markdown": "media/walkthrough/review.md"
+            }
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Valyria",
+      "properties": {
+        "valyria.core.binaryPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to a `valyria` Core binary. Empty = use the bundled sidecar. Mirrors `$VALYRIA_BIN` (see docs/INTEGRATION.md)."
+        },
+        "valyria.bridge.hostPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to a valyria-bridge-host binary. Empty = use the copy bundled next to the extension (extension/bin/)."
+        },
+        "valyria.autonomy.defaultMode": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "assisted",
+            "autonomous"
+          ],
+          "default": "manual",
+          "description": "Autonomy level a new workspace daemon starts under (CORE-INTERFACE G1). Changing it while a task runs is refused."
+        },
+        "valyria.notifications.categories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "blocked",
+              "permission_required",
+              "tests_failed",
+              "waiting"
+            ]
+          },
+          "default": [
+            "blocked",
+            "permission_required"
+          ],
+          "description": "Local OS notifications to raise. No push infrastructure — local only (PLAN.md §31)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "check": "tsc --noEmit -p ./",
+    "typecheck": "tsc --noEmit -p ./",
+    "pretest": "node esbuild.mjs",
+    "test": "node --import tsx --test \"test/*.test.ts\""
+  },
+  "dependencies": {
+    "@valyria/protocol": "file:../packages/protocol",
+    "@valyria/state": "file:../packages/state",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.134.0",
+    "axe-core": "^4.13.0",
+    "esbuild": "^0.24.0",
+    "jsdom": "^30.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.0"
+  }
+}

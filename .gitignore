@@ -5,5 +5,14 @@
 # Node
 node_modules/
 
+# Extension build output + bundled sidecar
+extension/out/
+extension/bin/
+
+# Code-OSS build artifacts (the submodule tree is managed by scripts/bootstrap.sh)
+/vscode/product.json.orig
+/VSCode-*
+/.build/
+
 # OS / editor
 .DS_Store

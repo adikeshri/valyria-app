@@ -1,0 +1,4 @@
+.fr-wrap { max-width: 520px; }
+.fr-step { padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
+.fr-step h3 { margin: 0 0 4px; font-size: var(--text-md); }
+.fr-actions { display: flex; gap: 8px; margin-top: 10px; }

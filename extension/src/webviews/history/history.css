@@ -1,0 +1,10 @@
+.hist-list { list-style: none; margin: 0 0 12px; padding: 0; }
+.hist-item {
+  display: flex; gap: 8px; align-items: center; width: 100%; text-align: left;
+  padding: 5px 6px; border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-primary); font: inherit;
+  font-size: var(--text-sm); cursor: pointer;
+}
+.hist-item:hover { background: var(--bg-hover); }
+.hist-item--focused { border-color: var(--accent); background: var(--bg-active); }
+.hist-obj { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

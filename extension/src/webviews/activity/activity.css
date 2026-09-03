@@ -1,0 +1,35 @@
+#root {
+  padding: 6px 10px;
+}
+#conn {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 6px;
+}
+#conn.bad {
+  color: var(--danger);
+}
+#log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+}
+#log li {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+#empty,
+#degraded {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  padding-top: 8px;
+}
+#degraded {
+  color: var(--warning);
+}

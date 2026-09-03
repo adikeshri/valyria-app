@@ -1,0 +1,68 @@
+{
+  "$comment": "Merged over vscode/product.json by scripts/bootstrap.sh (deep merge, these keys win). Keep this list tight and reviewed — every field here is a divergence from upstream Code-OSS we have to carry across version bumps.",
+
+  "nameShort": "Valyria",
+  "nameLong": "Valyria",
+  "applicationName": "valyria",
+  "serverApplicationName": "valyria-server",
+  "dataFolderName": ".valyria-editor",
+  "sharedDataFolderName": ".valyria-editor-shared",
+  "serverDataFolderName": ".valyria-editor-server",
+  "tunnelApplicationName": "valyria-tunnel",
+  "urlProtocol": "valyria",
+  "quality": "stable",
+
+  "win32MutexName": "valyria",
+  "win32DirName": "Valyria",
+  "win32NameVersion": "Valyria",
+  "win32RegValueName": "Valyria",
+  "win32AppUserModelId": "Valyria.Valyria",
+  "win32ShellNameShort": "Va&lyria",
+  "win32TunnelServiceMutex": "valyria-tunnelservice",
+  "win32TunnelMutex": "valyria-tunnel",
+  "darwinBundleIdentifier": "app.valyria.editor",
+  "linuxIconName": "valyria",
+
+  "licenseName": "Apache-2.0",
+  "licenseUrl": "https://github.com/adikeshri/valyria-app/blob/main/LICENSE",
+  "serverLicenseUrl": "https://github.com/adikeshri/valyria-app/blob/main/LICENSE",
+  "reportIssueUrl": "https://github.com/adikeshri/valyria-app/issues/new",
+
+  "$telemetry_note": "No telemetry, ever (PLAN.md §32). These keys are cleared so no endpoint is even resolvable; the offline job (scripts/verify-offline.sh) enforces it.",
+  "enableTelemetry": false,
+  "aiConfig": null,
+  "msftInternalDomains": [],
+  "documentTelemetryUrl": "",
+  "agentsTelemetryAppName": "",
+  "trustedExtensionAuthAccess": {},
+  "crashReporter": null,
+  "settingsSearchUrl": "",
+  "surveys": [],
+  "npsSurveyUrl": "",
+  "extensionTips": {},
+  "extensionImportantTips": {},
+  "keyboardShortcutsUrlMac": "",
+  "keyboardShortcutsUrlLinux": "",
+  "keyboardShortcutsUrlWin": "",
+  "introductoryVideosUrl": "",
+  "tipsAndTricksUrl": "",
+  "newsletterSignupUrl": "",
+  "requestFeatureUrl": "https://github.com/adikeshri/valyria-app/issues/new",
+  "documentationUrl": "https://github.com/adikeshri/valyria-app",
+
+  "$gallery_note": "Open VSX, not the Microsoft Marketplace (licence + trademark). Swap for a self-hosted gallery later if desired.",
+  "extensionsGallery": {
+    "serviceUrl": "https://open-vsx.org/vscode/gallery",
+    "itemUrl": "https://open-vsx.org/vscode/item",
+    "resourceUrlTemplate": "https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}",
+    "controlUrl": "",
+    "nlsBaseUrl": ""
+  },
+
+  "$updates_note": "Pointed at our own release feed in scripts/build.sh; left empty here so a dev build never phones home.",
+  "updateUrl": "",
+  "linkProtectionTrustedDomains": [
+    "https://open-vsx.org",
+    "https://github.com/adikeshri"
+  ]
+}

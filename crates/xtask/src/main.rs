@@ -6,15 +6,11 @@
 //!                    checkout, when one is present next to this repo
 //!   verify-core      core.lock.json is internally consistent and matches
 //!                    the vendored version.txt
-//!   check-d7         the human PTY and the agent-command view never share a
-//!                    buffer: only the terminal panel touches `@xterm/xterm`,
-//!                    and the agent-command view touches no PTY plumbing
-//!   check-error-strings  no renderer surface shows a raw error string or a
-//!                    banned generic — every error goes through
-//!                    `core/errors.ts` `present()` + `<ErrorState>` (§3 / §36)
-//!   check-a11y       overlays trap focus (`useOverlayA11y`), the only tab
-//!                    strip implementation is `TabStrip.tsx`, and every image
-//!                    has an `alt`
+//!   check-extension  the Code-OSS-fork extension declares only the
+//!                    `@valyria/*` + `zod` runtime deps, references no
+//!                    xterm/PTY package (D7), `valyria-bridge-host` exposes no
+//!                    PTY methods, and no source file carries a banned generic
+//!                    error string (§36)
 //!
 //! Exit code is non-zero on the first failure so CI fails loudly.
 
@@ -28,19 +24,15 @@ fn main() -> ExitCode {
         Some("check-layering") => check_layering(&repo),
         Some("check-protocol") => check_protocol(&repo),
         Some("verify-core") => verify_core(&repo),
-        Some("check-d7") => check_d7(&repo),
-        Some("check-error-strings") => check_error_strings(&repo),
-        Some("check-a11y") => check_a11y(&repo),
+        Some("check-extension") => check_extension(&repo),
         Some("all") => check_layering(&repo)
             .and_then(|_| verify_core(&repo))
             .and_then(|_| check_protocol(&repo))
-            .and_then(|_| check_d7(&repo))
-            .and_then(|_| check_error_strings(&repo))
-            .and_then(|_| check_a11y(&repo)),
+            .and_then(|_| check_extension(&repo)),
         other => {
             eprintln!("unknown task: {other:?}");
             eprintln!(
-                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|check-d7|check-error-strings|check-a11y|all>"
+                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|check-extension|all>"
             );
             return ExitCode::from(2);
         }
@@ -65,41 +57,54 @@ fn repo_root() -> PathBuf {
 
 // --- check-layering (docs/PLAN.md D2) -------------------------------------
 
-/// The only Core crates `valyria-bridge` may depend on.
-const BRIDGE_CORE_ALLOWLIST: &[&str] = &["valyria-protocol", "valyria-types"];
+/// Per-crate allowlists of `valyria*` dependencies. Anything matching
+/// `valyria` / `valyria-*` not on a crate's list fails the build (D2).
+///
+/// `valyria-bridge` speaks the Core protocol and may see only the wire crates.
+/// `valyria-bridge-host` is a thin stdio front end and may see only the bridge.
+const LAYERING: &[(&str, &[&str])] = &[
+    (
+        "crates/valyria-bridge/Cargo.toml",
+        &["valyria-protocol", "valyria-types"],
+    ),
+    ("crates/valyria-bridge-host/Cargo.toml", &["valyria-bridge"]),
+];
 
 fn check_layering(repo: &Path) -> Result<(), String> {
-    let manifest_path = repo.join("crates/valyria-bridge/Cargo.toml");
-    let text = std::fs::read_to_string(&manifest_path)
-        .map_err(|e| format!("reading {}: {e}", manifest_path.display()))?;
-    let manifest: toml::Value =
-        toml::from_str(&text).map_err(|e| format!("parsing {}: {e}", manifest_path.display()))?;
+    let mut all_offenders = Vec::new();
 
-    let mut offenders = Vec::new();
-    for table in ["dependencies", "build-dependencies", "dev-dependencies"] {
-        let Some(deps) = manifest.get(table).and_then(|v| v.as_table()) else {
-            continue;
-        };
-        for name in deps.keys() {
-            let looks_like_core = name == "valyria" || name.starts_with("valyria-");
-            if looks_like_core && !BRIDGE_CORE_ALLOWLIST.contains(&name.as_str()) {
-                offenders.push(format!("[{table}] {name}"));
+    for (rel, allowlist) in LAYERING {
+        let manifest_path = repo.join(rel);
+        let text = std::fs::read_to_string(&manifest_path)
+            .map_err(|e| format!("reading {}: {e}", manifest_path.display()))?;
+        let manifest: toml::Value = toml::from_str(&text)
+            .map_err(|e| format!("parsing {}: {e}", manifest_path.display()))?;
+
+        for table in ["dependencies", "build-dependencies", "dev-dependencies"] {
+            let Some(deps) = manifest.get(table).and_then(|v| v.as_table()) else {
+                continue;
+            };
+            for name in deps.keys() {
+                let looks_like_core = name == "valyria" || name.starts_with("valyria-");
+                if looks_like_core && !allowlist.contains(&name.as_str()) {
+                    all_offenders.push(format!("{rel} [{table}] {name}"));
+                }
             }
         }
     }
 
-    if offenders.is_empty() {
-        println!(
-            "check-layering: ok — valyria-bridge depends only on {}",
-            BRIDGE_CORE_ALLOWLIST.join(", ")
-        );
+    if all_offenders.is_empty() {
+        for (rel, allowlist) in LAYERING {
+            println!(
+                "check-layering: ok — {rel} depends only on {}",
+                allowlist.join(", ")
+            );
+        }
         Ok(())
     } else {
         Err(format!(
-            "valyria-bridge has forbidden Core dependencies (D2):\n  {}\n\
-             The bridge may only depend on: {}",
-            offenders.join("\n  "),
-            BRIDGE_CORE_ALLOWLIST.join(", ")
+            "forbidden Core dependencies (D2):\n  {}",
+            all_offenders.join("\n  ")
         ))
     }
 }
@@ -285,217 +290,84 @@ fn check_protocol(repo: &Path) -> Result<(), String> {
     }
 }
 
-// --- check-d7 (docs/PLAN.md D7 / §4.10) --------------------------------
-//
-// The integrated terminal shares a panel between the human's shell and the
-// agent's commands, but never a buffer — confusing the two is a security
-// problem (a user who thinks the agent ran a command it did not run approves
-// the wrong things). This makes that mechanical:
-//
-//   * `@xterm/xterm` — a real writable terminal — is imported by the human
-//     terminal only (the live panel plus its mock/dispatcher).
-//   * the agent-command view is a read-only projection of `tool_*` events and
-//     must not reach for any PTY plumbing.
+// --- check-extension (ARCHITECTURE-VSCODE.md / D7) ----------------------
 
-/// Renderer files allowed to import `@xterm/xterm`.
-const XTERM_ALLOWED: &[&str] = &[
-    "apps/desktop/src/panels/LiveTerminalPanel.tsx",
-    "apps/desktop/src/panels/TerminalPanel.tsx",
-];
-
-/// The agent-command view — must stay a plain list, never a terminal.
-const AGENT_VIEW: &str = "apps/desktop/src/panels/LiveAgentCommands.tsx";
-const AGENT_VIEW_FORBIDDEN: &[&str] =
-    &["@xterm/xterm", "core/pty", "pty_write", "core://pty-output"];
-
-fn check_d7(repo: &Path) -> Result<(), String> {
-    let src = repo.join("apps/desktop/src");
-    let mut files = Vec::new();
-    collect_files(&src, "tsx", &mut files);
-    collect_files(&src, "ts", &mut files);
-
+/// Invariants for the Code-OSS-fork extension:
+///  - it declares no runtime deps beyond `@valyria/*` + `zod` (everything else
+///    is bundled or provided by the extension host);
+///  - it never pulls in an xterm package — the agent-command view is a
+///    projection of `tool_*` events, never a PTY, and it must not be able to
+///    share the integrated terminal's buffer (D7);
+///  - `valyria-bridge-host` exposes no PTY methods (the terminal is Code-OSS's).
+fn check_extension(repo: &Path) -> Result<(), String> {
     let mut offenders = Vec::new();
 
-    for file in &files {
-        let rel = file
+    let pkg_path = repo.join("extension/package.json");
+    let pkg = std::fs::read_to_string(&pkg_path)
+        .map_err(|e| format!("reading {}: {e}", pkg_path.display()))?;
+    let manifest: serde_json::Value =
+        serde_json::from_str(&pkg).map_err(|e| format!("parsing extension/package.json: {e}"))?;
+
+    const ALLOWED_DEPS: &[&str] = &["@valyria/protocol", "@valyria/state", "zod"];
+    if let Some(deps) = manifest.get("dependencies").and_then(|v| v.as_object()) {
+        for name in deps.keys() {
+            if !ALLOWED_DEPS.contains(&name.as_str()) {
+                offenders.push(format!("extension dependency not on the allowlist: {name}"));
+            }
+        }
+    }
+
+    // Banned generic error strings (§36: every user-visible error must say what
+    // happened / whether the agent stopped / what to do — "something went wrong"
+    // is not expressible).
+    const BANNED_ERRORS: &[&str] = &[
+        "something went wrong",
+        "an error occurred",
+        "unknown error",
+        "unexpected error",
+        "oops",
+    ];
+
+    // No xterm / PTY (D7) and no banned error strings in the extension source.
+    let mut ts_files = Vec::new();
+    collect_files(&repo.join("extension/src"), "ts", &mut ts_files);
+    for f in &ts_files {
+        let text = std::fs::read_to_string(f).unwrap_or_default();
+        let rel = f
             .strip_prefix(repo)
-            .unwrap_or(file)
+            .unwrap_or(f)
             .to_string_lossy()
             .replace('\\', "/");
-        let text = std::fs::read_to_string(file)
-            .map_err(|e| format!("reading {}: {e}", file.display()))?;
-
-        if text.contains("@xterm/xterm") && !XTERM_ALLOWED.contains(&rel.as_str()) {
-            offenders.push(format!(
-                "{rel} imports @xterm/xterm — only the human terminal may (D7)"
-            ));
+        if text.contains("xterm") || text.contains("node-pty") || text.contains("portable-pty") {
+            offenders.push(format!("{rel} references a terminal/PTY package (D7)"));
         }
-
-        if rel == AGENT_VIEW {
-            for needle in AGENT_VIEW_FORBIDDEN {
-                if text.contains(needle) {
-                    offenders.push(format!(
-                        "{rel} references {needle:?} — the agent-command view must not touch PTY plumbing (D7)"
-                    ));
-                }
+        let lower = text.to_lowercase();
+        for banned in BANNED_ERRORS {
+            if lower.contains(banned) {
+                offenders.push(format!(
+                    "{rel} contains a banned generic error string: {banned:?}"
+                ));
             }
         }
     }
 
-    // The allowlisted files must actually exist, or the guard is dead.
-    for allowed in XTERM_ALLOWED {
-        if !repo.join(allowed).exists() {
-            offenders.push(format!("allowlisted file {allowed} is missing"));
-        }
-    }
-    if !repo.join(AGENT_VIEW).exists() {
-        offenders.push(format!("{AGENT_VIEW} is missing"));
-    }
-
-    if offenders.is_empty() {
-        println!("check-d7: ok — human PTY and agent-command view stay separate buffers");
-        Ok(())
-    } else {
-        Err(format!(
-            "D7 separation violated:\n  {}",
-            offenders.join("\n  ")
-        ))
-    }
-}
-
-// --- check-error-strings (docs/PLAN.md §3 / PRD §36) ------------------
-//
-// Every user-visible error answers the four §36 questions, via
-// `core/errors.ts` `present()` + `<ErrorState>`. A raw `String(e)` or a bare
-// generic in JSX bypasses that — bar it mechanically.
-
-/// Renderer strings that mean "an error is being rendered raw" or "a generic
-/// stand-in is being shown".
-const ERR_BANNED: &[&str] = &[
-    "{String(e)}",
-    ">{err}",
-    ">{error}",
-    "{err}<",
-    "{error}<",
-    "title={err}",
-    "title={error}",
-    "title={String(",
-    "Something went wrong",
-    "An error occurred",
-    "Unknown error",
-    "went wrong",
-];
-
-/// The one file allowed to render presentation fields directly.
-const ERR_ALLOWED: &[&str] = &["apps/desktop/src/components/ErrorState.tsx"];
-
-fn check_error_strings(repo: &Path) -> Result<(), String> {
-    let src = repo.join("apps/desktop/src");
-    let mut files = Vec::new();
-    collect_files(&src, "tsx", &mut files);
-
-    let mut offenders = Vec::new();
-    for file in &files {
-        let rel = file
-            .strip_prefix(repo)
-            .unwrap_or(file)
-            .to_string_lossy()
-            .replace('\\', "/");
-        if ERR_ALLOWED.contains(&rel.as_str()) {
-            continue;
-        }
-        let text = std::fs::read_to_string(file)
-            .map_err(|e| format!("reading {}: {e}", file.display()))?;
-        for needle in ERR_BANNED {
-            if text.contains(needle) {
-                offenders.push(format!("{rel} contains {needle:?}"));
-            }
-        }
-    }
-
-    if !repo.join("apps/desktop/src/core/errors.ts").exists() {
-        offenders.push("apps/desktop/src/core/errors.ts is missing".to_string());
-    }
-
-    if offenders.is_empty() {
-        println!("check-error-strings: ok — errors go through present() + <ErrorState>");
-        Ok(())
-    } else {
-        Err(format!(
-            "raw / generic error strings in the renderer (§36):\n  {}\n\
-             Route them through `present()` from core/errors.ts and render <ErrorState>.",
-            offenders.join("\n  ")
-        ))
-    }
-}
-
-// --- check-a11y (docs/PLAN.md §5 Phase 9 / D10) -----------------------
-//
-// Static structural checks. The manual VoiceOver/NVDA + axe pass is
-// docs/ACCESSIBILITY.md — this gate just holds the invariants a grep can hold.
-
-/// Full-screen overlays: each must trap focus / handle Escape via the shared
-/// hook, or keyboard users get stuck behind them.
-const OVERLAY_FILES: &[&str] = &[
-    "apps/desktop/src/components/SettingsView.tsx",
-    "apps/desktop/src/components/AboutView.tsx",
-    "apps/desktop/src/components/CommandPalette.tsx",
-    "apps/desktop/src/components/LiveFirstRun.tsx",
-    "apps/desktop/src/components/FirstRunView.tsx",
-];
-
-fn check_a11y(repo: &Path) -> Result<(), String> {
-    let src = repo.join("apps/desktop/src");
-    let mut files = Vec::new();
-    collect_files(&src, "tsx", &mut files);
-
-    let mut offenders = Vec::new();
-
-    for overlay in OVERLAY_FILES {
-        let path = repo.join(overlay);
-        match std::fs::read_to_string(&path) {
-            Ok(text) => {
-                if !text.contains("useOverlayA11y") {
-                    offenders.push(format!(
-                        "{overlay} does not use useOverlayA11y (focus trap / Escape)"
-                    ));
-                }
-            }
-            Err(_) => offenders.push(format!("{overlay} is missing (overlay allowlist stale)")),
-        }
-    }
-
-    for file in &files {
-        let rel = file
-            .strip_prefix(repo)
-            .unwrap_or(file)
-            .to_string_lossy()
-            .replace('\\', "/");
-        let text = std::fs::read_to_string(file)
-            .map_err(|e| format!("reading {}: {e}", file.display()))?;
-
-        // Only TabStrip defines the tablist role.
-        if text.contains("role=\"tablist\"") && rel != "apps/desktop/src/components/TabStrip.tsx" {
-            offenders.push(format!(
-                "{rel} hand-rolls role=\"tablist\" — use <TabStrip>"
-            ));
-        }
-        // Every <img> carries an alt.
-        for (i, line) in text.lines().enumerate() {
-            if line.contains("<img ") && !line.contains("alt=") {
-                offenders.push(format!("{rel}:{} <img> without alt=", i + 1));
-            }
-        }
+    // The bridge-host must not have grown PTY methods back.
+    let host = std::fs::read_to_string(repo.join("crates/valyria-bridge-host/src/main.rs"))
+        .unwrap_or_default();
+    if host.contains("\"pty/") || host.contains("PtySession") {
+        offenders.push(
+            "valyria-bridge-host exposes PTY methods — the terminal is Code-OSS's (D7)".into(),
+        );
     }
 
     if offenders.is_empty() {
         println!(
-            "check-a11y: ok — overlays trap focus, TabStrip is the only tab strip, images have alt"
+            "check-extension: ok — deps allowlisted, no xterm/PTY (D7), no banned error strings (§36)"
         );
         Ok(())
     } else {
         Err(format!(
-            "accessibility invariants broken:\n  {}",
+            "extension invariants broken:\n  {}",
             offenders.join("\n  ")
         ))
     }

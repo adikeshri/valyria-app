@@ -1,0 +1,9 @@
+.ab-grid { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; font-size: var(--text-sm); }
+.ab-grid dt { color: var(--text-tertiary); }
+.ab-grid dd { margin: 0; overflow-wrap: anywhere; }
+.ab-verdict { font-weight: 600; }
+.ab-verdict--compatible { color: var(--success); }
+.ab-verdict--incompatible { color: var(--danger); }
+.ab-tier3 { border: 1px solid var(--danger); border-radius: var(--radius-sm); padding: 8px 10px; margin: 8px 0; background: color-mix(in srgb, var(--danger) 8%, transparent); font-size: var(--text-sm); }
+.ab-cap { display: inline-block; margin: 2px 3px 0 0; }
+.ab-surf { display: flex; gap: 6px; align-items: baseline; font-size: var(--text-xs); }

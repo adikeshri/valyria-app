@@ -1,5 +1,10 @@
 # Integrating Core: distribution, runtime setup, and models
 
+> **Partly superseded.** The Core-runtime contract, the model story, and the
+> offline guarantee still hold. The *distribution mechanism* is now
+> [PACKAGING.md](PACKAGING.md) (Code-OSS bundler + `scripts/build.sh`), not the
+> Tauri sidecar/`externalBin` flow described here.
+
 How `valyria-app` ships the Core runtime and connects to it. This document
 settles the questions [PLAN.md](PLAN.md) §4.18 and §10 leave open — packaging,
 first-run, and model acquisition — and specifies exactly how the Core tree at

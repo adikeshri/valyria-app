@@ -62,10 +62,10 @@ test("layout: every managed key is cleared then re-set, so switching is symmetri
   }
 });
 
-test("layout: agent hides the activity bar and single-tabs; editor restores both", () => {
+test("layout: agent hides the activity bar and single-tabs; editor puts it on top with multi-tabs", () => {
   assert.equal(LAYOUT_BUNDLES.agent.settings["workbench.activityBar.location"], "hidden");
   assert.equal(LAYOUT_BUNDLES.agent.settings["workbench.editor.showTabs"], "single");
-  assert.equal(LAYOUT_BUNDLES.editor.settings["workbench.activityBar.location"], "default");
+  assert.equal(LAYOUT_BUNDLES.editor.settings["workbench.activityBar.location"], "top");
   assert.equal(LAYOUT_BUNDLES.editor.settings["workbench.editor.showTabs"], "multiple");
 });
 

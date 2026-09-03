@@ -60,9 +60,11 @@ survives untrusted workspaces" trick as `theme/`):
 `chrome/`'s `configurationDefaults` (user-overridable, never locked):
 
 ```
+chat.disableAIFeatures            true         # hide the bundled Copilot chat / Sign In / inline suggestions (see "De-Microsoft")
 window.commandCenter              false        # no title-bar command dropdown
 window.menuBarVisibility          compact      # no full menu strip
 window.titleSeparator             "  —  "
+workbench.activityBar.location    top          # activity bar horizontal, above the side bars
 workbench.layoutControl.enabled   false        # no layout-control button
 workbench.startupEditor           none         # the extension opens Valyria Home instead
 workbench.editor.empty.hint       hidden       # no "Show All Commands" empty-editor hint
@@ -71,6 +73,13 @@ workbench.editor.tabActionCloseVisibility  true
 explorer.compactFolders           false
 + workbench.productIconTheme / workbench.iconTheme -> the two themes above
 ```
+
+`workbench.activityBar.location` is also a lever-C managed key: `agent` mode
+sets `hidden`, `editor` mode re-asserts `top`, and this default covers the
+pre-mode state — so the bar is horizontal everywhere except `agent`. In the
+`top` position the switcher renders as a horizontal composite bar in the side
+bar header; `build/patches/031-activitybar-top-bigger-centred.patch` enlarges
+its icons (16 → 20px) and centres the row — neither is a setting.
 
 These hold in untrusted workspaces and before the agent extension loads, because
 the built-in is code-free.
@@ -83,8 +92,8 @@ the built-in is code-free.
 - **`agent`** — activity bar hidden, single editor tabs, editor actions hidden,
   breadcrumbs off, compact tab height, panel bottom. Navigation is driven from
   the Valyria surfaces.
-- **`editor`** — activity bar on the side, multiple tabs, breadcrumbs on: a
-  faithful VS Code-shaped layout for muscle memory.
+- **`editor`** — activity bar on top (horizontal), multiple tabs, breadcrumbs
+  on: a VS Code-shaped layout for muscle memory, minus the vertical activity rail.
 
 A mode is a bundle of `workbench.*` / `window.*` settings applied at the
 **Workspace** target (a user's Global settings are never rewritten) plus

@@ -38,6 +38,7 @@
       "chat.disableAIFeatures": true,
       "window.commandCenter": false,
       "window.menuBarVisibility": "compact",
+      "workbench.activityBar.location": "top",
       "window.titleSeparator": "  —  ",
       "workbench.layoutControl.enabled": false,
       "workbench.startupEditor": "none",

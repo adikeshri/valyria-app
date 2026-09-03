@@ -38,7 +38,7 @@ export const LAYOUT_BUNDLES: Readonly<Record<LayoutMode, LayoutBundle>> = {
   },
   editor: {
     settings: {
-      "workbench.activityBar.location": "default",
+      "workbench.activityBar.location": "top",
       "workbench.editor.showTabs": "multiple",
       "workbench.editor.editorActionsLocation": "default",
       "window.density.editorTabHeight": "default",

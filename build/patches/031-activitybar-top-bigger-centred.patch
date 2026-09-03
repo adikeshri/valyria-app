@@ -1,0 +1,45 @@
+diff --git a/src/vs/workbench/browser/parts/media/paneCompositePart.css b/src/vs/workbench/browser/parts/media/paneCompositePart.css
+index 42908982..92d33aac 100644
+--- a/src/vs/workbench/browser/parts/media/paneCompositePart.css
++++ b/src/vs/workbench/browser/parts/media/paneCompositePart.css
+@@ -379,3 +379,40 @@
+ 	margin: 12px;
+ 	text-align: center;
+ }
++
++/* ------------------------------------------------------------------------- *
++ * Valyria: with workbench.activityBar.location = "top" the view-container
++ * switcher renders as a horizontal composite bar in a `.header-or-footer`
++ * area of the Primary Side Bar (CompositeBarPosition.TOP -> createHeaderArea).
++ * Upstream draws it small (~16px) and left-hugging; Valyria wants it larger
++ * and centred. The header area is a fixed 35px, so the glyph grows but the
++ * item box does not. `.header-or-footer` also covers the "bottom" location;
++ * the in-`.title` composite bar is left alone.
++ * build/patches/031-activitybar-top-bigger-centred.patch
++ * ------------------------------------------------------------------------- */
++.monaco-workbench .pane-composite-part > .header-or-footer.has-composite-bar > .composite-bar-container > .composite-bar,
++.monaco-workbench .pane-composite-part > .header-or-footer.has-composite-bar > .composite-bar-container > .composite-bar > .monaco-action-bar,
++.monaco-workbench .pane-composite-part > .header-or-footer.has-composite-bar > .composite-bar-container > .composite-bar > .monaco-action-bar > .actions-container {
++	width: 100%;
++}
++
++.monaco-workbench .pane-composite-part > .header-or-footer.has-composite-bar > .composite-bar-container > .composite-bar > .monaco-action-bar > .actions-container {
++	justify-content: center;
++}
++
++.monaco-workbench .pane-composite-part > .header-or-footer.has-composite-bar > .composite-bar-container {
++	--activity-bar-icon-size: 20px;
++}
++
++.monaco-workbench .pane-composite-part > .header-or-footer.has-composite-bar > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.icon {
++	padding: 0 6px;
++}
++
++.monaco-workbench .pane-composite-part > .header-or-footer.has-composite-bar > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.icon .action-label.codicon:not(.codicon-more) {
++	font-size: 20px;
++}
++
++.monaco-workbench .pane-composite-part > .header-or-footer.has-composite-bar > .composite-bar-container > .composite-bar > .monaco-action-bar .action-item.icon .action-label:not(.codicon) {
++	width: 20px;
++	height: 20px;
++}

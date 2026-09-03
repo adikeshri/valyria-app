@@ -900,7 +900,8 @@ published.
   chrome/dist` CI step keep it honest.
 - **Dual‑mode layout** — `extension/src/session/layout.ts` (`LayoutController`)
   + pure `layoutBundles.ts`. `agent` hides the activity bar / single‑tabs /
-  drops breadcrumbs; `editor` restores them. A mode writes only user‑overridable
+  drops breadcrumbs; `editor` puts the activity bar on top (horizontal) with
+  multi‑tabs and breadcrumbs. A mode writes only user‑overridable
   `workbench.*` at the Workspace target and sets `valyria.layoutMode`; switching
   is symmetric (`resolveLayoutSettings`). Per‑workspace memory in
   `workspaceState`; `valyria.layout.defaultMode` (ships `editor`) +

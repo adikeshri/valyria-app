@@ -4,71 +4,125 @@
 
 <h1 align="center">Valyria App</h1>
 
-<p align="center">
-  A full VS&nbsp;Code-class editor — a branded <b>Code&nbsp;-&nbsp;OSS</b>
-  distribution — with the <a href="../valyria">Valyria</a> autonomous coding
-  agent shipped as a bundled built-in extension. Local-first: inference runs on
-  your machine, no account, no telemetry.
-</p>
+A branded [Code - OSS](https://github.com/microsoft/vscode) distribution that
+ships the [Valyria](../valyria) coding agent as a built-in extension. The editor
+is upstream Code - OSS, untouched; the agent is a client of the Valyria Core
+runtime, which runs as a supervised local daemon — one per workspace, outside the
+editor process — so a crashed window never kills a running task.
 
-## Shape
+## Status
 
-| Path | What it is |
+Pre-release. `scripts/dev.sh` builds and launches the branded window with the
+agent active. Running a live agent task needs a `valyria` Core binary (see
+[Quickstart](#quickstart)). Signed installers are not yet published.
+
+## It doesn't feel like a VS Code fork
+
+The editor is upstream, but the shell is Valyria's — within the extension API and
+`configurationDefaults`, **no editor patches**
+([docs/UX-DIFFERENTIATION.md](docs/UX-DIFFERENTIATION.md)):
+
+| | |
 |---|---|
-| `vscode/` | Code&nbsp;-&nbsp;OSS submodule, pinned by `build/VSCODE_REF` (never edited in place) |
-| `build/` | the branding overlay (`product.overlay.json`) + patches, applied by `scripts/bootstrap.sh` |
-| `extension/` | the **Valyria** built-in extension — every agent surface (Agent, Task, Activity, Timeline, Approvals, Verification, Agent Commands, Models, Hardware, Settings, Context, About, First-run) |
-| `crates/valyria-bridge/` | the only code that speaks Core's protocol — socket client, session supervisor, event pump |
-| `crates/valyria-bridge-host/` | the stdio JSON-RPC front end the extension spawns (the role the Tauri host played, minus Tauri) |
-| `packages/protocol` · `packages/state` | generated wire types + zod decoders; the pure, synchronous event reducer |
+| ![Valyria Home](docs/assets/valyria-home.png) | **Home** replaces the Welcome page — a task prompt, active + recent tasks, the `Local · Offline · Model` marker, the layout switch. |
+| ![Task Workspace](docs/assets/valyria-workspace.png) | **Task Workspace** — the focused task as one document: conversation, plan, changed files (with Core's ledger ownership), tests, and verification where a category with no evidence reads `NOT RUN`. |
+| ![Review Changes](docs/assets/valyria-review.png) | **Review Changes** — agent-authored edits framed for approval; each row opens the editor's own diff. Ownership (`agent` / `also edited by you`) comes from Core, never inferred. |
 
-The agent lives entirely in the extension and talks to Core only through
-`valyria-bridge-host`. The editor itself — files, search, diff, git, terminal,
-debug, tasks — is upstream Code&nbsp;-&nbsp;OSS and the extension does not touch it.
+- **Dual-mode layout** — a per-workspace switch (`⌘K ⌘L`) between an **agent**
+  layout (activity bar hidden, single tabs, Home at the centre) and a familiar
+  **editor** layout. Ships `editor`; nothing is locked.
+- **Status-bar agent ticker** — `Planning` → `Running cargo test` →
+  `Editing 3 files` → `Blocked: approval` → `Task done`, live off the event stream.
+- **Product icon theme** — the workbench codicons replaced by a solid geometric
+  Valyria family. File-type icons stay stock (Seti); folders are Valyria's.
 
-## Run it
+<p align="center"><img src="docs/assets/valyria-product-icons.png" alt="Valyria product icon theme" width="620"></p>
+
+## Layout
+
+| Path | Contents |
+|---|---|
+| `vscode/` | Code - OSS submodule, pinned by `build/VSCODE_REF`; branded by `scripts/bootstrap.sh`, never edited in place |
+| `build/` | Branding overlay and patches |
+| `extension/` | The Valyria built-in extension — the agent UI, the dual-mode layout, the editor-area surfaces |
+| `theme/`, `chrome/` | Code-free built-ins: the Valyria colour themes; the product icon theme, a file icon theme (Seti files + Valyria folders), and the chrome defaults |
+| `crates/valyria-bridge/` | The only code that speaks Core's protocol: transport client, session supervisor, event pump |
+| `crates/valyria-bridge-host/` | stdio JSON-RPC front end the extension spawns |
+| `packages/protocol`, `packages/state` | Generated wire types and decoders; the pure event reducer |
+| `core.lock.json` | Pinned Core revision and protocol version the bridge builds against |
+
+## Requirements
+
+- Node `24` — `brew install node@24` on macOS; `scripts/node-guard.sh` locates it
+- Rust, version pinned in `rust-toolchain.toml`
+- Python 3 with Pillow (branding icons) — fontTools is optional (product-icon regen; `chrome/dist/` is committed)
+- Linux or macOS
+
+## Quickstart
 
 ```bash
-brew install node@24          # one-time; keg-only, non-invasive (see scripts/node-guard.sh)
-scripts/bootstrap.sh          # submodule + overlay + patches
-scripts/install-deps.sh       # ~5-10 min, ~1 GB
-scripts/dev.sh                # watch + launch the branded Valyria window
+scripts/bootstrap.sh       # submodule + branding overlay + patches + workbench icons
+scripts/install-deps.sh    # Code - OSS and extension dependencies (~1 GB, one-time)
+scripts/dev.sh             # build valyria-bridge-host, watch the extension, launch the window
 ```
 
-`valyria-app` is a **client** of the Valyria Core runtime, not a second
-implementation of it. Core plans, edits, runs and verifies; the app is the
-window onto that work, and the place a developer approves what the agent may do.
+Then, in the launched window:
 
-## Documents
+1. **Open a repository** — `Valyria: Open Repository for the Agent` (opening a
+   folder *is* the authorization; the agent only reads and writes inside it).
+2. **Pick a layout** — first-run offers Agent vs Editor; switch any time from the
+   status bar or `⌘K ⌘L`.
+3. **Start a task** — `⌘I`, or type in **Home** (`⌘K ⌘H`). The plan, edits,
+   commands, tests and verification stream into the **Task Workspace**;
+   `⌘K ⌘R` opens **Review Changes**.
 
-| Document | What it covers |
-|---|---|
-| [docs/ARCHITECTURE-VSCODE.md](docs/ARCHITECTURE-VSCODE.md) | **Primary.** The Code-OSS-fork architecture — repo topology, process model, branding checklist, what each old Tauri piece became |
-| [docs/IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md) | **Primary.** The phase-by-phase build plan (0–11), what shipped per phase, standing gates, capability-gap → phase map |
-| [docs/PACKAGING.md](docs/PACKAGING.md) | Sidecars, per-OS gulp targets, signing credentials, the update feed, Windows tier 3 |
-| [docs/SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md) | Hardening checklist — process boundary, webview CSP, secrets/network, errors, trust; automated gates + per-release manual passes |
-| [docs/CORE-INTERFACE.md](docs/CORE-INTERFACE.md) | What Core's protocol offers, the capability gaps (G1–G15), and how each surface degrades until Core closes them |
-| [docs/PLAN.md](docs/PLAN.md) | The original Tauri build plan. Still the reference for Core, the protocol, and the design decisions (D1–D14); **superseded on the app shell** by ARCHITECTURE-VSCODE.md |
+### Core binary
 
-Start with the design decisions in PLAN §1 and the gap list in CORE-INTERFACE §2
-— between them they explain nearly every structural choice.
+`dev.sh` builds `valyria-bridge-host` into `extension/bin/`; the extension spawns
+it, and it supervises a `valyria serve` daemon per workspace. It uses the bundled
+Core sidecar by default. To use a local Core build instead:
 
-## The shape of it
+```bash
+VALYRIA_BIN=/path/to/valyria/target/debug/valyria scripts/dev.sh
+```
 
-```text
+or set `valyria.core.binaryPath` in the launched window's settings.
+
+### Regenerating assets
+
+```bash
+python3 chrome/tools/build_icons.py    # product icon WOFF + themes  -> chrome/dist/
+node scripts/gen-screenshots.mjs       # the README surface screenshots -> docs/assets/
+```
+
+## Architecture
+
+```
 ┌─ Valyria (Electron / branded Code-OSS) ──────┐     ┌─ valyria serve (Core) ─────┐
 │  workbench + editor  ── upstream, untouched   │     │                            │
 │  ext host (Node)                              │     │  one daemon per workspace  │
 │    └─ extension "valyria"                     │     │  agent loop, tools, index, │
 │         child_process ─ valyria-bridge-host ──┼─────►  verification, ledger      │
-│              (stdio JSON-RPC)   NDJSON / Unix │     │                            │
+│              (stdio JSON-RPC)   socket / pipe │     │                            │
 └──────────────────────────────────────────────┘     └────────────────────────────┘
-        UI process may die                            runtime survives independently
 ```
 
-Core runs as a supervised sidecar daemon, never inside the UI process, so a
-crashed window never kills a running task. The extension owns no socket — that
-lives inside `valyria-bridge-host`.
+The extension owns no socket — the Core connection lives entirely inside
+`valyria-bridge-host` — and reaches the editor only as an extension. Files,
+search, diff, git, terminal, and debug are upstream Code - OSS.
+
+Full detail in [docs/ARCHITECTURE-VSCODE.md](docs/ARCHITECTURE-VSCODE.md).
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [docs/ARCHITECTURE-VSCODE.md](docs/ARCHITECTURE-VSCODE.md) | Repo topology, process model, branding |
+| [docs/UX-DIFFERENTIATION.md](docs/UX-DIFFERENTIATION.md) | The Valyria UX/editor identity: icons, chrome defaults, dual-mode layout, agent-as-editor surfaces |
+| [docs/INTEGRATION.md](docs/INTEGRATION.md) | How Core is pinned and consumed; the first-run model |
+| [docs/CORE-INTERFACE.md](docs/CORE-INTERFACE.md) | The Core protocol surface the app relies on |
+| [docs/PACKAGING.md](docs/PACKAGING.md), [docs/RELEASING.md](docs/RELEASING.md) | Building and shipping signed installers |
+| [docs/SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md) | Process boundary, webview CSP, trust model |
 
 ## License
 

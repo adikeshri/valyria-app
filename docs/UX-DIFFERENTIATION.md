@@ -137,12 +137,31 @@ it land **beside** it as a detail pane (`dispatch.ts` `fileColumn()`).
   "Open Home", "Explain This Failure", "Use Agent Layout". Task-scoped entries
   are gated on `valyria.hasSession`.
 
+## De-Microsoft: the bundled Copilot
+
+Code-OSS 1.135 ships **GitHub Copilot chat** as a compiled-in built-in
+(`vscode/extensions/copilot`) and wires it as `product.json`'s
+`defaultChatAgent` — a "Build with Agent / Sign in" panel that both reads as a
+fork tell and competes with the Valyria agent.
+
+`scripts/bootstrap.sh` **removes the extension directory** (Code-OSS
+folder-scans `extensions/` at runtime, so that is the whole removal; the
+`vscode/` tree is reset every run, so it is a clean overlay-style deletion).
+`product.json`'s `defaultChatAgent` is deliberately **not** overridden — Code-OSS
+dereferences it unguarded during workbench startup, so nulling it white-screens
+the window.
+
+**Residual:** the *core* chat ViewPane (`vscode/out/.../contrib/chat`, not an
+extension) still renders its empty "set up GitHub Copilot" state until a viewer
+hides it. Fully removing it is patch-tier — see below.
+
 ---
 
 ## What stays VS Code (residual tells, config-only)
 
 The Explorer / Search / SCM / Run / Extensions view containers still exist (the
-activity bar can be hidden or relocated, not renamed); the Settings editor, the
+activity bar can be hidden or relocated, not renamed); the core **chat view's**
+empty state survives removing the Copilot extension; the Settings editor, the
 Extensions "Marketplace" view, workspace-trust modal wording, and the `F1`
 palette are upstream. Hiding the activity bar in Agent layout and driving
 navigation from Home covers most of the visual impact. Closing the rest needs a

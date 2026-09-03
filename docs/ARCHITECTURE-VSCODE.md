@@ -208,8 +208,13 @@ not read as a Code‑OSS fork — all within the extension API / `configurationD
 - `extensionsGallery` → Open VSX (`https://open-vsx.org/vscode/gallery`, …)
 - Remove `enableTelemetry`, `crashReporter`, `msftInternalDomains`,
   `aiConfig`, `documentationUrl`‑style MS links; keep `reportIssueUrl` → our repo
+- **Bundled Copilot chat** — Code‑OSS 1.135 ships `extensions/copilot`;
+  `bootstrap.sh` step 3b `rm -rf`s it (folder‑scanned at runtime). `product.json`
+  `defaultChatAgent` is left intact — it is dereferenced unguarded at startup, so
+  nulling it white‑screens the window. The core chat ViewPane's empty state is a
+  patch‑tier residual (docs/UX-DIFFERENTIATION.md).
 - `builtInExtensions` — the Valyria extensions bundle under
-  `vscode/extensions/valyria` and `vscode/extensions/valyria-theme` via bootstrap
+  `vscode/extensions/valyria`, `valyria-theme` and `valyria-chrome` via bootstrap
   symlinks so they compile in the standard build
 - `linkProtectionTrustedDomains`, `trustedExtensionAuthAccess` as needed
 - Offline guarantee (PLAN.md §32): CI job runs the built app with the network

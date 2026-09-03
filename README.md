@@ -62,6 +62,10 @@ or set `valyria.core.binaryPath` in the launched window's settings.
 
 ![Review Changes](docs/assets/valyria-review.png)
 
+**Editor** — the full workbench with the agent alongside.
+
+![Editor](docs/assets/valyria-editor.png)
+
 ## Repository layout
 
 | Path | Contents |

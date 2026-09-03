@@ -1,0 +1,47 @@
+#root { padding: 16px 20px; max-width: 860px; margin: 0 auto; }
+
+.ws-head {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 12px;
+}
+.ws-obj { font-size: var(--text-md); font-weight: 650; flex: 1; min-width: 200px; }
+
+.ws-composer { margin-bottom: 12px; }
+.ws-composer-row { display: flex; justify-content: flex-end; margin-top: 6px; }
+
+.ws-approval {
+  border: 1px solid var(--warning-border); background: var(--warning-bg);
+  border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 14px;
+}
+.ws-approval--high { border-color: var(--danger-border); background: var(--danger-bg); }
+.ws-approval-prompt { margin: 0 0 6px; font-weight: 550; }
+.ws-approval-meta { display: flex; gap: 6px; margin: 0 0 8px; }
+.ws-approval-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.ws-plan { list-style: decimal; margin: 0; padding-left: 20px; }
+.ws-plan-step { padding: 3px 0; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.ws-plan-step--done .ws-plan-intent { color: var(--text-secondary); }
+.ws-plan-intent { font-size: var(--text-sm); }
+
+.ws-file { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ws-filebtn {
+  font: inherit; font-family: var(--font-mono); font-size: var(--text-xs);
+  background: none; border: none; color: var(--text-link); cursor: pointer;
+  padding: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ws-filebtn:hover { text-decoration: underline; }
+
+.ws-test { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ws-test-sum { font-size: var(--text-xs); color: var(--text-secondary); }
+.ws-verify { display: flex; gap: 8px; align-items: center; }
+
+.ws-log { list-style: none; margin: 0; padding: 0; max-height: 40vh; overflow-y: auto; }
+.ws-turn { display: flex; gap: 8px; padding: 4px 0; align-items: baseline; }
+.ws-role {
+  flex: 0 0 44px; font-size: var(--text-xs); text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-tertiary);
+}
+.ws-turn--you .ws-role { color: var(--accent); }
+.ws-text { font-size: var(--text-sm); }
+
+.ws-footer { display: flex; justify-content: flex-end; margin-top: 14px; }

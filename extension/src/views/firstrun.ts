@@ -3,6 +3,8 @@ import { WebviewBase } from "./webviewBase";
 import type { Store } from "../store/store";
 import type { Supervisor } from "../session/supervisor";
 import type { BridgeHost } from "../bridge/host";
+import type { LayoutController, LayoutMode } from "../session/layout";
+import type { EditorPanelManager } from "./editorPanels";
 
 const SEEN_KEY = "valyria.seenFirstRun";
 const CTX_KEY = "valyria.showFirstRun";
@@ -22,6 +24,8 @@ export class FirstRunViewProvider extends WebviewBase {
     private readonly store: Store,
     private readonly supervisor: Supervisor,
     private readonly host: BridgeHost,
+    private readonly layout: LayoutController,
+    private readonly panels: EditorPanelManager,
     private readonly reopen: (root: string, appliedThrough: number) => Promise<void>
   ) {
     super(extensionUri);
@@ -49,6 +53,7 @@ export class FirstRunViewProvider extends WebviewBase {
     return {
       connection: this.supervisor.state,
       hasRepo: !!vscode.workspace.workspaceFolders?.length,
+      layoutMode: this.layout.mode,
       probeState,
       probeResult:
         probeState === "done"
@@ -59,7 +64,7 @@ export class FirstRunViewProvider extends WebviewBase {
     };
   }
 
-  protected async onCommand(name: string): Promise<void> {
+  protected async onCommand(name: string, args: unknown): Promise<void> {
     if (name === "firstRunOpenRepo") {
       const picked = await vscode.window.showOpenDialog({
         canSelectFolders: true,
@@ -77,9 +82,16 @@ export class FirstRunViewProvider extends WebviewBase {
       } catch (e) {
         void vscode.window.showErrorMessage(`Valyria: ${String(e)}`);
       }
+    } else if (name === "firstRunSetLayout") {
+      const mode = (args as { mode?: string } | undefined)?.mode;
+      if (mode === "agent" || mode === "editor") {
+        await this.layout.setMode(mode as LayoutMode, { explicit: true });
+        this.push();
+      }
     } else if (name === "firstRunDismiss") {
       await this.context.globalState.update(SEEN_KEY, true);
       await vscode.commands.executeCommand("setContext", CTX_KEY, false);
+      await this.panels.open("home");
     }
   }
 
@@ -87,6 +99,7 @@ export class FirstRunViewProvider extends WebviewBase {
     return [
       { dispose: this.store.onDidChange(refresh) },
       this.supervisor.onDidChange(refresh),
+      this.layout.onDidChange(refresh),
       vscode.workspace.onDidChangeWorkspaceFolders(refresh),
     ];
   }

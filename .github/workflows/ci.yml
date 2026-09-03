@@ -131,6 +131,8 @@ jobs:
         working-directory: extension
       - name: Bundle-size budget
         run: bash scripts/check-bundle-size.sh
+      - name: Valyria workbench icons (chrome/dist coherence)
+        run: node scripts/check-chrome-icons.mjs
 
   branded-editor:
     name: Branded Code-OSS (bootstrap · overlay · offline check)
@@ -143,10 +145,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24.20"
-      - name: Icon tooling (Pillow for scripts/gen-icons.py)
-        run: python3 -m pip install --user Pillow
-      - name: Bootstrap (submodule + overlay + patches)
+      - name: Icon tooling (Pillow for scripts/gen-icons.py, fontTools for chrome/)
+        run: python3 -m pip install --user Pillow "fonttools==4.60.0"
+      - name: Bootstrap (submodule + overlay + patches + icons)
         run: scripts/bootstrap.sh
+      # chrome/dist/ is generated and committed — fail if it drifted from the
+      # glyph library, the same guard the shared packages use for codegen.
+      - name: Committed icon assets are up to date
+        run: git diff --exit-code chrome/dist
       - name: Offline guarantee (static)
         run: scripts/verify-offline.sh
       # The full `npm ci && npm run compile` in vscode/ + the per-OS installer

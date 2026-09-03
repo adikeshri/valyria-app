@@ -1,11 +1,23 @@
 /**
- * Status-bar presence: the things PLAN.md §4.1 / §32 say must always be visible
- * — connection status, and the permanent `Local · Offline · Model: <id>` marker
- * (which reflects observed state, not a hard-coded string).
+ * Status-bar presence.
+ *
+ * Two jobs:
+ *   1. The things PLAN.md §4.1 / §32 say must always be visible — the Core
+ *      connection state and the permanent `Local · Offline · Model` marker
+ *      (reflecting observed state, never a hard-coded string).
+ *   2. The Valyria identity cues (docs/UX-DIFFERENTIATION.md, lever E) — a live
+ *      **agent ticker** that narrates the focused task ("Planning", "Editing 3
+ *      files", "Blocked: approval", "Verifying"), and a one-click **layout mode**
+ *      toggle. A moving status bar is a Valyria tell; a stationary one is a
+ *      VS Code tell.
  */
 import * as vscode from "vscode";
 import type { Supervisor } from "./session/supervisor";
+import type { Store } from "./store/store";
+import type { TaskFocus } from "./session/focus";
+import type { LayoutController } from "./session/layout";
 import type { ConnectionState } from "./bridge/protocol";
+import { tickerModel } from "./store/models";
 
 const STATE_LABEL: Record<ConnectionState, string> = {
   starting: "$(loading~spin) Valyria: starting",
@@ -17,26 +29,72 @@ const STATE_LABEL: Record<ConnectionState, string> = {
   failed: "$(error) Valyria: offline",
 };
 
+const TICKER_ICON: Record<string, string> = {
+  idle: "sparkle",
+  working: "loading~spin",
+  blocked: "shield",
+  paused: "debug-pause",
+  done: "pass-filled",
+  failed: "error",
+};
+
 export class StatusBar implements vscode.Disposable {
+  private readonly ticker: vscode.StatusBarItem;
   private readonly item: vscode.StatusBarItem;
   private readonly offline: vscode.StatusBarItem;
+  private readonly layoutItem: vscode.StatusBarItem;
   private readonly disposables: vscode.Disposable[] = [];
   private activeModel: string | null = null;
   private networkRuntime = false;
 
-  constructor(private readonly supervisor: Supervisor) {
-    this.item = vscode.window.createStatusBarItem("valyria.status", vscode.StatusBarAlignment.Left, 100);
+  constructor(
+    private readonly supervisor: Supervisor,
+    private readonly store: Store,
+    private readonly focus: TaskFocus,
+    private readonly layout: LayoutController
+  ) {
+    this.ticker = vscode.window.createStatusBarItem(
+      "valyria.ticker",
+      vscode.StatusBarAlignment.Left,
+      101
+    );
+    this.ticker.command = "valyria.openWorkspacePanel";
+
+    this.item = vscode.window.createStatusBarItem(
+      "valyria.status",
+      vscode.StatusBarAlignment.Left,
+      100
+    );
     this.item.command = "valyria.showAbout";
-    this.offline = vscode.window.createStatusBarItem("valyria.offline", vscode.StatusBarAlignment.Left, 99);
+
+    this.offline = vscode.window.createStatusBarItem(
+      "valyria.offline",
+      vscode.StatusBarAlignment.Left,
+      99
+    );
     this.offline.command = "valyria.showAbout";
+
+    this.layoutItem = vscode.window.createStatusBarItem(
+      "valyria.layout",
+      vscode.StatusBarAlignment.Left,
+      98
+    );
+    this.layoutItem.command = "valyria.layout.toggleMode";
+
     this.disposables.push(
+      this.ticker,
       this.item,
       this.offline,
-      supervisor.onDidChange(() => this.render())
+      this.layoutItem,
+      supervisor.onDidChange(() => this.render()),
+      { dispose: store.onDidChange(() => this.render()) },
+      focus.onDidChange(() => this.render()),
+      this.layout.onDidChange(() => this.render())
     );
     this.render();
     this.item.show();
     this.offline.show();
+    this.layoutItem.show();
   }
 
   /** Called by extension.ts when config / doctor data reveals the active model
@@ -50,6 +108,24 @@ export class StatusBar implements vscode.Disposable {
   private render(): void {
     const state = this.supervisor.state;
     const s = this.supervisor.session;
+
+    // --- agent ticker -------------------------------------------------
+    const t = tickerModel(this.store.getState(), this.focus.pinned, state);
+    if (t.hasTask && t.phase) {
+      this.ticker.text = `$(${TICKER_ICON[t.tone] ?? "sparkle"}) ${t.phase}`;
+      this.ticker.tooltip = new vscode.MarkdownString(
+        `**Valyria** — ${t.phase}\n\n${t.filesTouched} file(s) touched · open the Task Workspace`
+      );
+      this.ticker.backgroundColor =
+        t.tone === "blocked" || t.tone === "failed"
+          ? new vscode.ThemeColor("statusBarItem.warningBackground")
+          : undefined;
+      this.ticker.show();
+    } else {
+      this.ticker.hide();
+    }
+
+    // --- connection --------------------------------------------------
     this.item.text = STATE_LABEL[state];
 
     const net = this.networkRuntime ? "Network runtime" : "Local · Offline";
@@ -77,6 +153,13 @@ export class StatusBar implements vscode.Disposable {
         : state === "degraded"
           ? new vscode.ThemeColor("statusBarItem.warningBackground")
           : undefined;
+
+    // --- layout mode ----------------------------------------------
+    const mode = this.layout.mode;
+    this.layoutItem.text = `$(layout) ${mode === "agent" ? "Agent" : "Editor"}`;
+    this.layoutItem.tooltip = new vscode.MarkdownString(
+      `Valyria layout: **${mode}**\n\nClick to switch to ${mode === "agent" ? "Editor" : "Agent"} layout.`
+    );
   }
 
   dispose(): void {

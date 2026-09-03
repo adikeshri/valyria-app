@@ -15,6 +15,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "check:rust": "cargo run -q -p xtask -- all",
-    "check:offline": "scripts/verify-offline.sh"
+    "check:offline": "scripts/verify-offline.sh",
+    "check:chrome": "node scripts/check-chrome-icons.mjs",
+    "build:icons": "python3 chrome/tools/build_icons.py"
   }
 }

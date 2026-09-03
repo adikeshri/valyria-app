@@ -54,11 +54,24 @@ node scripts/merge-product.mjs
 echo "==> Generating branding icons (scripts/gen-icons.py)"
 python3 scripts/gen-icons.py
 
-# 5. Link the Valyria built-in extensions into the Code-OSS tree. The gulp build
+# 5. Regenerate the Valyria workbench icon assets if font tooling is present.
+#    chrome/dist/ is committed, so this is optional — CI and a fontTools-less
+#    machine use the checked-in output. The check always runs.
+echo "==> Valyria workbench icons (chrome/)"
+if python3 -c "import fontTools" 2>/dev/null; then
+  python3 chrome/tools/build_icons.py
+else
+  echo "    fontTools not installed — using committed chrome/dist/ (pip install fonttools to regenerate)"
+fi
+node scripts/check-chrome-icons.mjs
+
+# 6. Link the Valyria built-in extensions into the Code-OSS tree. The gulp build
 #    (and dev scanBuiltinExtensions) picks up every directory under extensions/.
 #      - extension/  the agent UI (has a `main`; disabled in untrusted workspaces)
 #      - theme/      the Valyria colour themes (code-free; ALWAYS enabled, which is
 #                    why the default theme survives opening an untrusted repo)
+#      - chrome/     product + file icon themes + chrome defaults (code-free, same
+#                    reason: the identity holds in an untrusted workspace)
 if [ ! -e vscode/extensions/valyria ]; then
   echo "==> Linking extension/ -> vscode/extensions/valyria"
   ln -s ../../extension vscode/extensions/valyria
@@ -67,8 +80,12 @@ if [ ! -e vscode/extensions/valyria-theme ]; then
   echo "==> Linking theme/ -> vscode/extensions/valyria-theme"
   ln -s ../../theme vscode/extensions/valyria-theme
 fi
+if [ ! -e vscode/extensions/valyria-chrome ]; then
+  echo "==> Linking chrome/ -> vscode/extensions/valyria-chrome"
+  ln -s ../../chrome vscode/extensions/valyria-chrome
+fi
 
-# 6. Check the Node toolchain now that vscode/.nvmrc exists.
+# 7. Check the Node toolchain now that vscode/.nvmrc exists.
 echo "==> Checking Node toolchain against vscode/.nvmrc"
 # shellcheck source=scripts/node-guard.sh
 if source scripts/node-guard.sh; then

@@ -7,6 +7,7 @@
  * trace replay.
  */
 import {
+  activeTasks,
   activityLine,
   agentCommandsForTask,
   changedFilesForTask,
@@ -30,12 +31,16 @@ import type {
   ContextModel,
   HardwareModel,
   HistoryModel,
+  HomeModel,
   ModelsModel,
+  ReviewModel,
   SecurityModel,
   SettingsModel,
   TaskModel,
+  TickerModel,
   TimelineModel,
   VerificationModel,
+  WorkspaceModel,
 } from "../webviews/shared/protocol";
 
 /** The task the panels focus on: an explicit pick, else the most recent. */
@@ -582,5 +587,245 @@ export function historyModel(state: StoreState, focusId: string | undefined): Hi
   return {
     focusedTaskId: focused,
     groups: [...byDay.entries()].map(([day, tasks]) => ({ day, tasks })),
+  };
+}
+
+// --- Status-bar agent ticker (docs/UX-DIFFERENTIATION.md, lever E) --------
+
+const TOOL_VERB: Record<string, string> = {
+  read_file: "Reading",
+  list_dir: "Reading",
+  search: "Searching",
+  grep: "Searching",
+  write_file: "Editing",
+  edit_file: "Editing",
+  apply_patch: "Editing",
+  run_command: "Running",
+};
+
+/** A 1–3 word phase for the status bar, derived from the focused task's event
+ *  tail. Pure and clock-free so trace replay asserts the exact string. */
+export function tickerModel(
+  state: StoreState,
+  focusId: string | undefined,
+  connection: Connection
+): TickerModel {
+  const id = resolveFocus(state, focusId);
+  const task = id ? state.tasks[id] : undefined;
+  const filesTouched = id ? changedFilesForTask(state, id).length : 0;
+
+  if (!id || !task) {
+    return { connection, hasTask: false, taskId: null, phase: null, tone: "idle", filesTouched: 0 };
+  }
+  if (task.state === "waiting_for_permission") {
+    return { connection, hasTask: true, taskId: id, phase: "Blocked: approval", tone: "blocked", filesTouched };
+  }
+  if (task.state === "paused") {
+    return { connection, hasTask: true, taskId: id, phase: "Paused", tone: "paused", filesTouched };
+  }
+  if (task.terminal) {
+    const failed = task.state === "failed";
+    return {
+      connection,
+      hasTask: true,
+      taskId: id,
+      phase: failed ? "Task failed" : "Task done",
+      tone: failed ? "failed" : "done",
+      filesTouched,
+    };
+  }
+
+  const evs = eventsForTask(state, id);
+  let phase = task.state.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  for (let i = evs.length - 1; i >= 0 && i >= evs.length - 16; i--) {
+    const e = evs[i]!;
+    if (e.kind === "test_started") { phase = "Running tests"; break; }
+    if (e.kind === "test_failed") { phase = "Tests failing"; break; }
+    if (e.kind === "test_passed") { phase = "Tests passing"; break; }
+    if (e.kind === "verification_evidence") { phase = "Verifying"; break; }
+    if (e.kind === "plan_created") { phase = "Planning"; break; }
+    if (e.kind === "tool_started") {
+      const p = asRecord(e.payload);
+      const tool = typeof p["tool"] === "string" ? (p["tool"] as string) : "";
+      const input = asRecord(p["input"]);
+      const prog = typeof input["program"] === "string" ? (input["program"] as string) : null;
+      if (tool === "run_command" && prog) { phase = `Running ${prog}`; break; }
+      const verb = TOOL_VERB[tool];
+      if (verb === "Editing" && filesTouched > 0) {
+        phase = `Editing ${filesTouched} file${filesTouched === 1 ? "" : "s"}`;
+        break;
+      }
+      if (verb) { phase = verb; break; }
+    }
+    if (e.kind === "file_changed" && filesTouched > 0) {
+      phase = `Editing ${filesTouched} file${filesTouched === 1 ? "" : "s"}`;
+      break;
+    }
+  }
+  return { connection, hasTask: true, taskId: id, phase, tone: "working", filesTouched };
+}
+
+// --- Valyria Home (docs/UX-DIFFERENTIATION.md, lever D) ------------------
+
+function homeTask(t: {
+  id: string;
+  objective: string | null;
+  state: string;
+  terminal: boolean;
+  lastTs: number;
+}, filesTouched: number): HomeModel["active"][number] {
+  return {
+    id: t.id,
+    objective: t.objective,
+    state: t.state,
+    terminal: t.terminal,
+    blocked: t.state === "waiting_for_permission",
+    filesTouched,
+    when: new Date(t.lastTs).toISOString().slice(0, 10),
+  };
+}
+
+export function homeModel(
+  state: StoreState,
+  input: {
+    connection: Connection;
+    hasRepo: boolean;
+    repoName: string | null;
+    activeModel: string | null;
+    networkRuntime: boolean;
+    autonomy: string | null;
+    layoutMode: "agent" | "editor";
+  }
+): HomeModel {
+  const busy = activeTasks(state).some(
+    (t) => t.state !== "paused" && t.state !== "waiting_for_permission"
+  );
+  const active = activeTasks(state).map((t) => homeTask(t, changedFilesForTask(state, t.id).length));
+  const recent = tasksByRecency(state)
+    .filter((t) => t.terminal)
+    .slice(0, 8)
+    .map((t) => homeTask(t, changedFilesForTask(state, t.id).length));
+
+  return {
+    connection: input.connection,
+    hasRepo: input.hasRepo,
+    repoName: input.repoName,
+    canSubmit: input.connection === "ready" && !busy,
+    activeModel: input.activeModel,
+    networkRuntime: input.networkRuntime,
+    autonomy: input.autonomy,
+    layoutMode: input.layoutMode,
+    active,
+    recent,
+  };
+}
+
+// --- Task Workspace (docs/UX-DIFFERENTIATION.md, lever D) ----------------
+
+interface ReportInput {
+  status?: string;
+  verified?: { kind: string; command: string; outcome: string; run_id?: string }[];
+  unverified?: string[];
+}
+
+export function workspaceModel(
+  state: StoreState,
+  focusId: string | undefined,
+  input: {
+    connection: Connection;
+    ownership: Record<string, string>;
+    report: ReportInput | null;
+    rollbackCapable?: boolean;
+  }
+): WorkspaceModel {
+  const chat = chatModel(state, focusId, input.connection);
+  const task = taskModel(state, focusId, input.rollbackCapable ?? false);
+  const ap = task.taskId ? pendingApprovalFor(state, task.taskId) : undefined;
+  const apP = asRecord(ap?.payload);
+
+  return {
+    connection: input.connection,
+    taskId: chat.taskId,
+    objective: chat.objective,
+    state: chat.state,
+    terminal: chat.terminal,
+    working: chat.working,
+    blocked: chat.blocked,
+    canSubmit: chat.canSubmit,
+    transcript: chat.transcript,
+    planSteps: task.planSteps,
+    files: task.files.map((f) => ({
+      path: f.path,
+      change: f.change,
+      ownership: input.ownership[f.path] ?? null,
+    })),
+    tests: task.tests.map((t) => ({
+      command: t.command,
+      outcome: t.outcome,
+      summary: t.summary,
+      failureCount: t.failureCount,
+    })),
+    verified: (input.report?.verified ?? []).map((v) => ({
+      kind: v.kind,
+      command: v.command,
+      outcome: v.outcome,
+    })),
+    unverified: input.report?.unverified ?? [],
+    approval: ap
+      ? {
+          seq: ap.seq,
+          prompt: typeof apP["prompt"] === "string" ? (apP["prompt"] as string) : "Approval requested",
+          tool: typeof apP["tool"] === "string" ? (apP["tool"] as string) : null,
+          risk: typeof apP["risk"] === "string" ? (apP["risk"] as string) : null,
+        }
+      : null,
+  };
+}
+
+// --- Review (docs/UX-DIFFERENTIATION.md, lever D) -----------------------
+
+export function reviewModel(
+  state: StoreState,
+  focusId: string | undefined,
+  input: {
+    connection: Connection;
+    ledgerAvailable: boolean;
+    ownership: Record<string, string>;
+    report: ReportInput | null;
+  }
+): ReviewModel {
+  const id = resolveFocus(state, focusId);
+  const task = id ? state.tasks[id] : undefined;
+  const files = id
+    ? changedFilesForTask(state, id).map((f) => ({
+        path: f.path,
+        change: f.change,
+        ownership: input.ownership[f.path] ?? null,
+      }))
+    : [];
+  const ap = id ? pendingApprovalFor(state, id) : undefined;
+  const apP = asRecord(ap?.payload);
+
+  return {
+    connection: input.connection,
+    taskId: id ?? null,
+    objective: task?.objective ?? null,
+    ledgerAvailable: input.ledgerAvailable,
+    reportStatus: input.report?.status ?? null,
+    files,
+    verified: (input.report?.verified ?? []).map((v) => ({
+      kind: v.kind,
+      command: v.command,
+      outcome: v.outcome,
+    })),
+    unverified: input.report?.unverified ?? [],
+    approval: ap
+      ? {
+          seq: ap.seq,
+          prompt: typeof apP["prompt"] === "string" ? (apP["prompt"] as string) : "Approval requested",
+          tool: typeof apP["tool"] === "string" ? (apP["tool"] as string) : null,
+          risk: typeof apP["risk"] === "string" ? (apP["risk"] as string) : null,
+        }
+      : null,
   };
 }

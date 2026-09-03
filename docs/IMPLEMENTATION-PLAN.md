@@ -882,6 +882,54 @@ published.
 
 ---
 
+## Phase 12 — UX & editor identity  *(done; full detail in [UX-DIFFERENTIATION.md](UX-DIFFERENTIATION.md))*
+
+**Goal:** the app stops reading as "a VS Code fork" — within the extension API /
+`configurationDefaults`, **no new `build/patches/`**.
+
+**Done:**
+- **`chrome/`** — a third code‑free built‑in (`valyria-chrome`, no `main`, same
+  untrusted‑workspace reasoning as `theme/`): a **product icon theme**
+  (solid‑geometric family, 74 glyphs, generated to a deterministic WOFF by
+  `chrome/tools/build_icons.py` from a primitive library), a **file icon theme**
+  = the built‑in **Seti** theme (vendored MIT copy in `chrome/vendor/seti/`)
+  with only the **folder** icons swapped for Valyria's — file‑type icons
+  untouched — and the chrome `configurationDefaults` (no command center, compact
+  menu, `startupEditor: none`, no layout‑control button, …). `chrome/dist/` is
+  committed; `scripts/check-chrome-icons.mjs` + a `git diff --exit-code
+  chrome/dist` CI step keep it honest.
+- **Dual‑mode layout** — `extension/src/session/layout.ts` (`LayoutController`)
+  + pure `layoutBundles.ts`. `agent` hides the activity bar / single‑tabs /
+  drops breadcrumbs; `editor` restores them. A mode writes only user‑overridable
+  `workbench.*` at the Workspace target and sets `valyria.layoutMode`; switching
+  is symmetric (`resolveLayoutSettings`). Per‑workspace memory in
+  `workspaceState`; `valyria.layout.defaultMode` (ships `editor`) +
+  `valyria.layout.applyWorkbenchDefaults`.
+- **Editor‑area surfaces** — `extension/src/views/editorPanels.ts`: **Home**
+  (opens instead of the Welcome page — `startupEditor: none` + an activate
+  opener), **Task Workspace**, **Review Changes** (`git.openChange` into the
+  editor's own diff; ownership + `NOT RUN` straight from Core's ledger /
+  `task_report`). Files opened from a surface land **beside** it in Agent
+  layout. Plus a `valyria.document` custom viewer for `.valyria/` markdown/JSON.
+- **Status‑bar agent ticker** — `status.ts` + `tickerModel`: a live phase read
+  (`Planning` → `Running cargo test` → `Editing 3 files` → `Blocked: approval` →
+  `Task done`), pure over the event tail. Plus a layout‑mode toggle item.
+- **Interaction** — additive `⌘I` / `⌘K ⌘H` / `⌘K ⌘R` / `⌘K ⌘L` chords;
+  task‑verb command titles gated on `valyria.hasSession`; a first‑run layout
+  step.
+
+**Tests:** `test/uxdiff.test.ts` (29) — layout‑bundle symmetry, ticker phrases
+by trace replay, and the Home / Workspace / Review models (legible, arrays
+always, `NOT RUN` explicit, ownership verbatim). The 4 new webviews joined
+`test/a11y.test.ts` (axe + keyboard). **129 extension tests**, `tsc` clean.
+
+**Exit:** icon + chrome identity applied on launch; the layout switch is
+keyboard‑reachable and locks nothing; Home replaces the Welcome page; a11y
+sweep covers every new surface; `chrome/dist` drift‑checked; no new patch, no
+new decoder, layering unchanged.
+
+---
+
 ## Capability‑gap → phase map (CORE‑INTERFACE §2)
 
 | Gap | What it blocks | Phase | Behaviour until Core ships it |
@@ -899,17 +947,21 @@ published.
 
 ## Current state
 
-**Phases 0–11 are landed on `chore/migration`.** `scripts/bootstrap.sh` →
+**Phases 0–12 are landed on `chore/migration`.** `scripts/bootstrap.sh` →
 `scripts/install-deps.sh` → `scripts/dev.sh` launches a branded **Valyria**
-window; the extension activates with 16 agent surfaces (Agent, Task, Activity,
+window; the extension activates with the agent surfaces (Agent, Task, Activity,
 Timeline, Approvals, Agent Commands, Verification, Security & autonomy, Models,
-Hardware, Settings, Context, About, First‑run) all rendered from `@valyria/state`
-projections over the `valyria-bridge-host` event stream.
+Hardware, Settings, Context, About, First‑run) plus the Phase‑12 editor‑area
+surfaces (Home, Task Workspace, Review) and a dual‑mode layout — all rendered
+from `@valyria/state` projections over the `valyria-bridge-host` event stream.
+Three code‑free built‑ins carry the identity: `theme/` (colour), `chrome/`
+(icons + chrome defaults), plus the agent extension itself.
 
 Green locally and in CI: `cargo fmt --all --check`, `cargo clippy --workspace
 -D warnings`, `cargo test --workspace`, `xtask all` (4 gates), the extension's
-`tsc` + **100 tests** (trace replay, jsdom render, axe a11y, soak) +
-bundle‑size budget, and `scripts/verify-offline.sh`.
+`tsc` + **129 tests** (trace replay, jsdom render, axe a11y, soak, UX‑diff) +
+bundle‑size budget, `scripts/check-chrome-icons.mjs`, and
+`scripts/verify-offline.sh`.
 
 **What still needs a human or real infrastructure** (tracked in the phase notes
 above and `docs/SECURITY-REVIEW.md`):

@@ -42,6 +42,16 @@ valyria-app/
     themes/*.json            NO `main`: never disabled by workspace trust, so the
                              default theme survives opening an untrusted repo
 
+  chrome/                    the Valyria workbench identity — a code‑free built‑in
+    package.json             contributes.productIconThemes + iconThemes + the chrome
+                             configurationDefaults (no command center, compact menu,
+                             startupEditor:none, …). NO `main`, same trust reasoning.
+    vendor/seti/             stock Seti file icon theme + font (MIT), vendored
+    tools/build_icons.py     builds dist/ — product‑icon WOFF from a primitive glyph
+                             library; file icon theme = vendored Seti + Valyria folders
+    dist/                    generated + committed; scripts/check-chrome-icons.mjs gates it
+                             See docs/UX-DIFFERENTIATION.md.
+
   extension/                 the Valyria agent built‑in extension (TypeScript)
     package.json             name: "valyria", publisher: "valyria", contributes: …
     src/
@@ -163,6 +173,22 @@ extension must provide:
 - **Context Inspector**, **Model Manager**, **Hardware**, **First‑run**,
   **Autonomy control**, **Security overview** — as today, gated by `hello`
   capabilities (D6)
+
+### UX identity (docs/UX-DIFFERENTIATION.md)
+
+On top of the surfaces above, the app carries a Valyria‑specific UX so it does
+not read as a Code‑OSS fork — all within the extension API / `configurationDefaults`
+(no new patches):
+
+- **`chrome/`** built‑in — the product icon theme, a file icon theme (stock Seti
+  file icons + Valyria folder icons), and chrome defaults (lever A/B).
+- **Dual‑mode layout** (`extension/src/session/layout.ts`) — a per‑workspace
+  `agent` / `editor` switch that applies a bundle of `workbench.*` settings and a
+  `valyria.layoutMode` context (lever C).
+- **Editor‑area surfaces** (`extension/src/views/editorPanels.ts`) — Home (lands
+  instead of the Welcome page), Task Workspace, Review Changes (lever D).
+- **Status‑bar agent ticker** + task‑verb command palette + a `⌘I` /
+  `⌘K` chord family (lever E).
 
 ## 5. Branding / de‑Microsoft checklist (`build/product.overlay.json` + patches)
 

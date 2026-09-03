@@ -9,12 +9,14 @@ import type { BridgeHost } from "../bridge/host";
 import type { Supervisor } from "../session/supervisor";
 import type { TaskFocus } from "../session/focus";
 import type { Store } from "../store/store";
+import type { LayoutController } from "../session/layout";
 
 export interface DispatchDeps {
   host: BridgeHost;
   store: Store;
   supervisor: Supervisor;
   focus: TaskFocus;
+  layout: LayoutController;
   log: vscode.LogOutputChannel;
 }
 
@@ -24,10 +26,22 @@ function argStr(args: unknown, key: string): string | undefined {
 }
 
 export function makeWebviewDispatch(deps: DispatchDeps): (name: string, args: unknown) => void {
-  const { host, store, supervisor, focus, log } = deps;
+  const { host, store, supervisor, focus, layout, log } = deps;
 
   const targetTask = (args: unknown): string | undefined =>
     argStr(args, "taskId") ?? focus.pinned ?? store.currentTaskId();
+
+  /** In Agent layout a Valyria surface owns editor column one, so files/diffs
+   *  open beside it as a detail pane. */
+  const fileColumn = (): vscode.ViewColumn =>
+    layout.mode === "agent" ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active;
+
+  const resolveWorkspaceUri = (path: string): vscode.Uri => {
+    const root = supervisor.session?.workspaceRoot;
+    return root && !path.startsWith("/")
+      ? vscode.Uri.joinPath(vscode.Uri.file(root), path)
+      : vscode.Uri.file(path);
+  };
 
   return (name: string, args: unknown): void => {
     void (async () => {
@@ -86,17 +100,52 @@ export function makeWebviewDispatch(deps: DispatchDeps): (name: string, args: un
             const path = argStr(args, "path");
             if (!path) return;
             const line = (args as Record<string, unknown>)["line"];
-            const root = supervisor.session?.workspaceRoot;
-            const uri =
-              root && !path.startsWith("/")
-                ? vscode.Uri.joinPath(vscode.Uri.file(root), path)
-                : vscode.Uri.file(path);
-            const opts: vscode.TextDocumentShowOptions = { preview: true };
+            const uri = resolveWorkspaceUri(path);
+            const opts: vscode.TextDocumentShowOptions = {
+              preview: true,
+              viewColumn: fileColumn(),
+            };
             if (typeof line === "number" && line > 0) {
               const pos = new vscode.Position(line - 1, 0);
               opts.selection = new vscode.Range(pos, pos);
             }
             await vscode.window.showTextDocument(uri, opts);
+            break;
+          }
+          case CMD.openDiff: {
+            const path = argStr(args, "path");
+            if (!path) return;
+            const uri = resolveWorkspaceUri(path);
+            // Prefer the built-in Git extension's change view (working tree vs
+            // HEAD); fall back to just opening the file if Git isn't present.
+            try {
+              await vscode.commands.executeCommand("git.openChange", uri);
+            } catch {
+              await vscode.window.showTextDocument(uri, {
+                preview: true,
+                viewColumn: fileColumn(),
+              });
+            }
+            break;
+          }
+          case CMD.openSurface: {
+            const surface = argStr(args, "surface");
+            const cmd =
+              surface === "home"
+                ? "valyria.openHome"
+                : surface === "workspace"
+                  ? "valyria.openWorkspacePanel"
+                  : surface === "review"
+                    ? "valyria.openReview"
+                    : null;
+            if (cmd) await vscode.commands.executeCommand(cmd);
+            break;
+          }
+          case CMD.setLayoutMode: {
+            const mode = argStr(args, "mode");
+            if (mode === "agent" || mode === "editor") {
+              await layout.setMode(mode, { explicit: true });
+            }
             break;
           }
           case CMD.rollbackTo: {

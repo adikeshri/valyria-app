@@ -1,0 +1,55 @@
+{
+  "name": "valyria-theme",
+  "displayName": "Valyria Themes",
+  "description": "The Valyria colour identity — Dark, Light, and High Contrast.",
+  "version": "0.1.0",
+  "publisher": "valyria",
+  "license": "Apache-2.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adikeshri/valyria-app.git"
+  },
+  "engines": {
+    "vscode": "^1.134.0"
+  },
+  "//": "Code-free by design. A theme extension with no `main` is never disabled by workspace trust (extensionManifestPropertiesService: `!manifest.main` => untrusted-supported), so the Valyria default survives opening an untrusted repo — which a contribution on the agent extension does not. Bundled built-in: scripts/bootstrap.sh symlinks this dir to vscode/extensions/valyria-theme.",
+  "categories": [
+    "Themes"
+  ],
+  "contributes": {
+    "themes": [
+      {
+        "id": "Valyria Dark",
+        "label": "Valyria Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/valyria-dark.json"
+      },
+      {
+        "id": "Valyria Light",
+        "label": "Valyria Light",
+        "uiTheme": "vs",
+        "path": "./themes/valyria-light.json"
+      },
+      {
+        "id": "Valyria High Contrast",
+        "label": "Valyria High Contrast",
+        "uiTheme": "hc-black",
+        "path": "./themes/valyria-hc-dark.json"
+      },
+      {
+        "id": "Valyria High Contrast Light",
+        "label": "Valyria High Contrast Light",
+        "uiTheme": "hc-light",
+        "path": "./themes/valyria-hc-light.json"
+      }
+    ],
+    "configurationDefaults": {
+      "workbench.colorTheme": "Valyria Dark",
+      "workbench.preferredDarkColorTheme": "Valyria Dark",
+      "workbench.preferredLightColorTheme": "Valyria Light",
+      "workbench.preferredHighContrastColorTheme": "Valyria High Contrast",
+      "workbench.preferredHighContrastLightColorTheme": "Valyria High Contrast Light"
+    }
+  }
+}

@@ -39,5 +39,26 @@ npm --prefix extension run watch &
 WATCH_PID=$!
 trap 'kill $WATCH_PID 2>/dev/null || true' EXIT
 
+# Prepare the Electron app bundle up front (normally done by code.sh's
+# preLaunch), so we can refresh its icon registration before it launches.
+if [ -z "${VSCODE_SKIP_PRELAUNCH:-}" ]; then
+  echo "==> preparing Electron + built-ins (preLaunch)"
+  ( cd vscode && node build/lib/preLaunch.ts )
+  export VSCODE_SKIP_PRELAUNCH=1
+fi
+
+# macOS caches app icons by bundle path, and the dev .app carries a frozen 1980
+# mtime so Launch Services never notices a rebrand. Bump the mtime and re-register
+# so the new Valyria icon is picked up. (`killall Dock` may still be needed once
+# on an existing checkout; scripts/refresh-macos-icon.sh does the full flush.)
+if [[ "$OSTYPE" == darwin* ]]; then
+  APP="$(/bin/ls -d vscode/.build/electron/*.app 2>/dev/null | head -1 || true)"
+  if [ -n "$APP" ]; then
+    touch "$APP"
+    LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+    [ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$ROOT/$APP" >/dev/null 2>&1 || true
+  fi
+fi
+
 echo "==> launching Valyria (Code-OSS dev build)"
 exec ./vscode/scripts/code.sh "$@"

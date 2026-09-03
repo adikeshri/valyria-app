@@ -1,9 +1,35 @@
 <svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
-  <!-- Placeholder Valyria mark: a folded-steel chevron in rust/dragon-fire.
-       Final art TBD; scripts/bootstrap.sh copies build/icons/* into
-       vscode/resources/valyria/ and the .icns/.ico/PNG set is generated from
-       this by scripts/build.sh (rsvg/iconutil) before packaging. -->
-  <rect width="128" height="128" rx="24" fill="#17151b"/>
-  <path d="M28 34 L64 96 L100 34 L84 34 L64 66 L44 34 Z" fill="#c65f3b"/>
-  <path d="M44 34 L64 66 L84 34 L74 34 L64 50 L54 34 Z" fill="#f0b45c"/>
+  <!-- Valyria vector mark: angular dragon-fire "V" from the wordmark
+       (docs/assets/logo.png), on the dark Valyria ground. This is the canonical
+       vector source of the brand mark. The OS/app icons are NOT built from it —
+       those come from build/icons/valyria.icns via scripts/gen-icons.py. -->
+  <defs>
+    <linearGradient id="fire" x1="20" y1="14" x2="108" y2="118" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f7b45c"/>
+      <stop offset="0.42" stop-color="#ec773c"/>
+      <stop offset="1" stop-color="#b5401d"/>
+    </linearGradient>
+    <radialGradient id="ember" cx="64" cy="52" r="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ec773c" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ec773c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="26" fill="#0d0d12"/>
+  <rect width="128" height="128" rx="26" fill="url(#ember)"/>
+
+  <!-- circuit stubs, echoing the logo's traced background -->
+  <g stroke="#ec773c" stroke-width="3" stroke-linecap="round" opacity="0.5" fill="none">
+    <path d="M14 44 h12 l6 6"/>
+    <path d="M114 40 h-12 l-6 6"/>
+    <circle cx="12" cy="44" r="3.2" fill="#ec773c" stroke="none"/>
+    <circle cx="116" cy="40" r="3.2" fill="#ec773c" stroke="none"/>
+  </g>
+
+  <!-- folded dragon-fire V -->
+  <path d="M30 26 L52 26 L64 78 L76 26 L98 26 L72 104 L56 104 Z"
+        fill="url(#fire)" stroke="#7a2a12" stroke-width="2" stroke-linejoin="round"/>
+  <!-- inner fold highlight -->
+  <path d="M46 32 L58 32 L64 58 L70 32 L82 32 L66 80 L62 80 Z"
+        fill="#0d0d12" opacity="0.30"/>
 </svg>

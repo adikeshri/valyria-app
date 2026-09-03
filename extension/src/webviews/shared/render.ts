@@ -27,6 +27,29 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/**
+ * The Valyria brand lockup — the folded dragon-fire "V" mark plus the wordmark,
+ * for the top of the About and first-run surfaces. Static inline SVG, so it
+ * needs no webview resource root and no extra CSP allowance.
+ */
+const BRAND_MARK_SVG = `<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vy-fire" x1="4" y1="3" x2="26" y2="27" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f7b45c"/><stop offset=".42" stop-color="#ec773c"/><stop offset="1" stop-color="#b5401d"/></linearGradient></defs><rect width="30" height="30" rx="7" fill="#131318"/><path d="M6.5 6h4.4l4.1 12.4L19.1 6h4.4l-6.1 18h-2.8L6.5 6z" fill="url(#vy-fire)"/></svg>`;
+
+export function brandLockup(tagline?: string): HTMLElement {
+  const wrap = h("div", { class: "vy-brand" });
+  const mark = h("span", { class: "vy-brand-mark" });
+  mark.innerHTML = BRAND_MARK_SVG;
+  wrap.append(
+    mark,
+    h(
+      "span",
+      { class: "vy-brand-text" },
+      h("span", { class: "vy-brand-name", text: "Valyria" }),
+      tagline ? h("span", { class: "vy-brand-tag", text: tagline }) : null
+    )
+  );
+  return wrap;
+}
+
 /** A titled section with a body. */
 export function section(title: string, ...body: (Node | string | false | null)[]): HTMLElement {
   return h(

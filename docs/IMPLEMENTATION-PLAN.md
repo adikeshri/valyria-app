@@ -25,8 +25,12 @@ Code‑OSS base already meets them):
    path; the command palette reaches all of them.
 2. **Focus visible & trapped correctly** — modals and overlays trap focus and
    restore it; no keyboard traps.
-3. **Theme correct** — light / dark / high‑contrast, driven by `--vscode-*`
-   theme variables, never hard‑coded colour.
+3. **Theme correct** — light / dark / high‑contrast. The editor ships the
+   **Valyria Dark / Light / High Contrast** family (the code‑free `theme/`
+   built‑in) and defaults to Valyria Dark; the webview surfaces carry Valyria's
+   own palette (`src/webviews/shared/tokens.css`) selected by the editor's
+   `body.vscode-*` theme class, so they track whichever Valyria theme is active.
+   Never a `--vscode-*` var — the values are Valyria's.
 4. **Reduced motion** honoured (`workbench.reduceMotion`).
 5. **`axe` clean** on every webview in CI.
 6. **No new event decoder without a trace fixture** (D5); decoder‑coverage +
@@ -144,7 +148,7 @@ survive a window kill, re‑attach. The milestone that de‑risks everything.
   + `@valyria/protocol` + `zod` inlined into one CJS `out/extension.js`
   (157 kB). tsc is typecheck‑only (`moduleResolution: bundler`).
 - **Activity view** renders `store.activityLines()` + the live connection
-  state, themed with `--vscode-*`, `aria-live`, CSP+nonce.
+  state, themed with the Valyria palette, `aria-live`, CSP+nonce.
 - **Commands** — open workspace, new task, pause/resume/cancel (default to the
   store's current task), reconnect (resume from `store.lastSeq`), restart
   bridge, about.
@@ -220,10 +224,10 @@ says so.
   (`out/webviews/<name>.{js,css}`), plus `tokens.css` copied alongside.
   `npm run watch` watches both.
 - **Design tokens** — `src/webviews/shared/tokens.css`: the Tauri panels' token
-  *names* (`--bg-canvas`, `--text-primary`, `--accent`, `--own-agent`, …)
-  resolved to `--vscode-*` theme variables, so webviews follow the editor's
-  active theme (light / dark / any HC) with no media queries. Reduced‑motion
-  honoured; base reset + `.visually-hidden` + `:focus-visible` ring.
+  *names* (`--bg-canvas`, `--text-primary`, `--accent`, `--own-agent`, …) carry
+  Valyria's own light/dark/HC values, chosen by the `body.vscode-*` class the
+  webview host sets, so each agent surface matches the active Valyria theme.
+  Reduced‑motion honoured; base reset + `.visually-hidden` + `:focus-visible` ring.
 - **Message protocol** — `src/webviews/shared/protocol.ts`: host→webview
   `{type:"state",view,model}` / `{type:"focus"}`; webview→host `{type:"ready"}`
   / `{type:"command",name,args}`. Per‑view model interfaces (`ActivityModel`).
@@ -265,8 +269,8 @@ the visual pass happens.
   `extension/src/webviews/*` (one entry per view, or one app + a `view` param).
   `npm --prefix extension run watch` rebuilds webviews too.
 - **Design tokens** — port `packages/ui` tokens to a webview stylesheet that
-  maps every colour/spacing token onto `--vscode-*` theme variables; verified
-  in light, dark, and both high‑contrast themes.
+  carries Valyria's own light/dark/HC palette, selected by the editor theme; the
+  bundled Valyria theme family keeps the surrounding editor consistent.
 - **Message protocol** (typed, one module): `host → webview` `{type:"state",
   view, model}`; `webview → host` `{type:"ready"}` and `{type:"command",
   name, args}`. The webview holds no logic — it renders a view‑model and emits
@@ -614,22 +618,31 @@ shows its origin and reflects Core's resolved value after a write.
   (local‑first, open a repo, give a task, evidence‑not‑badges) with markdown
   media under `extension/media/walkthrough/`, wired to `valyria.openWorkspace`
   / `valyria.newTask` completion events.
-- **Icons** — `build/icons/valyria.svg` placeholder mark;
-  `bootstrap.sh` copies it into `vscode/resources/valyria/` and rasterises the
-  PNG set + `darwin/code.icns` when `rsvg-convert` / `iconutil` are available.
-- **Patches** — still zero. `bootstrap.sh` `git clean` now also preserves
-  `out*` so a re‑bootstrap at the same REF doesn't force a workbench recompile.
+- **Icons** — the real Valyria artwork lives in `build/icons/`
+  (`valyria.icns` — complete Retina set incl. 1024px, `valyria.ico`,
+  `valyria-512.png`). `scripts/gen-icons.py` (Pillow; `iconutil` for `.icns`)
+  writes the whole platform set into `vscode/resources/` — app `code.{icns,ico,png}`,
+  RPM `code.xpm`, Start‑menu tiles, and all 55 per‑language document icons with
+  the blue VS Code corner badge replaced by a Valyria one. `bootstrap.sh` calls
+  it with no `|| true` (a broken icon build is visible) and then wipes
+  `vscode/.build/electron` so `preLaunch.ts` re‑brands the app bundle
+  (`darwinIcon` / `winIcon` are string literals in `build/lib/electron.ts` — no
+  product.json key redirects them).
+- **Patches** — three, in `build/patches/`:
+  `010-valyria-default-theme.patch` (ThemeSettingDefaults → Valyria ids),
+  `011-theme-default-hardening.patch` (pre‑paint colours, no settings.json
+  write‑back, branded notification copy),
+  `020-debrand-electron-build.patch` (company / copyright / HelpBook strings).
+  `bootstrap.sh` `git clean` no longer preserves `out*` — the patches touch
+  `src/`, so a re‑bootstrap must force the workbench recompile.
 - Launch verified: window titled **Valyria**, `nameLong: Valyria`, clean
   activation.
 
-**Deferred:** final icon artwork (a real Valyrian‑steel mark, not the
-placeholder chevron); a signed favicon set. Everything downstream reads
-`build/icons/valyria.svg`, so it's a drop‑in replace.
-
 **Deliverables (original):**
 - Complete `build/product.overlay.json` — every branding field; `build/icons/`
-  per platform (`.icns`, `.ico`, PNG set) copied in by `bootstrap.sh`; URL
-  protocol `valyria://`; bundle identifiers; About box strings.
+  per platform (`.icns`, `.ico`, PNG set) written into `vscode/resources/` by
+  `scripts/gen-icons.py`; URL protocol `valyria://`; bundle identifiers; About
+  box strings.
 - Open VSX gallery wired and smoke‑tested (search, install, update); Microsoft
   Marketplace URLs removed.
 - Telemetry / crash‑reporter / `aiConfig` / MS‑internal‑domain fields cleared;
@@ -638,13 +651,15 @@ placeholder chevron); a signed favicon set. Everything downstream reads
 - **Offline guarantee** — a fresh launch on a network‑disabled machine makes
   zero outbound connections (no update check, no gallery ping, no telemetry
   endpoint resolvable).
-- `build/patches/` minimised — anything achievable via the extension API is
-  moved there; each remaining patch is small and documented in
-  `build/patches/README.md`.
+- `build/patches/` minimised — anything achievable via the extension API stays
+  out of it. Three remain (default theme, theme hardening, electron de‑brand),
+  each small and documented in `build/patches/README.md` and
+  `docs/ARCHITECTURE-VSCODE.md §branding`.
 
 **Exit:** fresh launch, network disabled → zero outbound connections; branding
-consistent across window title, About, dock/taskbar, installer name;
-`bootstrap.sh` on a clean checkout yields the branded tree with N patches, N
+consistent across window title, About, dock/taskbar, installer name, **and the
+default colour theme (which must survive opening an untrusted repo)**;
+`bootstrap.sh` on a clean checkout yields the branded tree with 3 patches, each
 small and documented.
 
 ---
@@ -905,7 +920,9 @@ above and `docs/SECURITY-REVIEW.md`):
 - The full `npm ci && npm run compile` in `vscode/` + per‑OS **signed /
   notarized installers** (credentials, bigger runners — `docs/PACKAGING.md`).
 - Manual VoiceOver / NVDA passes and a keyboard‑only full‑task traversal.
-- Final icon artwork (drop‑in replace of `build/icons/valyria.svg`).
+- A visual pass on the packaged Dock / Finder / installer icons (the artwork
+  ships — `build/icons/valyria.icns` + `scripts/gen-icons.py` — but a designer
+  sign‑off on the small‑size document‑icon badge is still open).
 
 Toolchain note: the machine's default Homebrew `node` may be too old (or broken
 by a `simdjson` dylib bump — `brew reinstall node` fixes that).

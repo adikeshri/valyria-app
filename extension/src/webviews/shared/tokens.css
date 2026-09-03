@@ -1,82 +1,322 @@
 /*
  * Valyria webview design tokens.
  *
- * The token *names* are the ones the ported panels from apps/desktop/src/styles/
- * tokens.css already use. Their *values* here resolve to VS Code's own theme
- * variables, so every webview follows the editor's active colour theme
- * (light / dark / any high-contrast) with no media queries and no JS.
+ * Valyria's OWN palette — the rust / dragon-fire identity carried over from the
+ * original desktop app (apps/desktop/src/styles/tokens.css) — selected by the
+ * EDITOR's active colour theme, not the OS. The webview host puts one of
+ * `vscode-light` / `vscode-dark` / `vscode-high-contrast`
+ * (+ `vscode-high-contrast-light`) on <body>; we key off those so the agent
+ * surfaces track the bundled Valyria Dark / Light / High Contrast themes.
  *
- * Rule (ARCHITECTURE-VSCODE.md standing gates): never hard-code a colour — go
- * through a --vscode-* var with a literal only as the last-resort fallback.
+ * `:root, body.vscode-light` carries the light palette — `:root` alone is the
+ * sub-second frame before the body class lands; `@media (prefers-color-scheme:
+ * dark)` covers that pre-class frame on a dark OS. Every `body.vscode-*` block
+ * (0,0,1,1) outranks the media-query `:root` (0,0,1,0), so the host's real theme
+ * always wins once it reports in — including flipping BACK to light.
+ *
+ * Rule (docs/IMPLEMENTATION-PLAN.md standing gates): never a `--vscode-*` var —
+ * these are Valyria values. The surrounding editor is kept consistent by the
+ * `valyria-theme` built-in (theme/), not by borrowing host theme variables here.
  */
 
-:root {
-  color-scheme: light dark;
+:root,
+body.vscode-light {
+  color-scheme: light;
 
-  /* ---- brand accent ---- */
-  --accent: var(--vscode-textLink-foreground, #3794ff);
-  --accent-strong: var(--vscode-textLink-activeForeground, var(--accent));
-  --accent-soft: var(--vscode-editor-selectionHighlightBackground, rgba(55, 148, 255, 0.15));
-  --accent-contrast: var(--vscode-button-foreground, #fff);
+  /* ---- brand ---- rust / dragon-fire, sampled from the Valyria mark. */
+  --accent-h: 20;
+  --accent: #c15925;
+  --accent-strong: #a2481a;
+  --accent-soft: rgba(193, 89, 37, 0.12);
+  --accent-contrast: #ffffff;
 
   /* ---- surfaces ---- */
-  --bg-canvas: var(--vscode-sideBar-background, var(--vscode-editor-background, #1e1e1e));
-  --bg-surface: var(--vscode-editorWidget-background, var(--bg-canvas));
-  --bg-surface-raised: var(--vscode-editorHoverWidget-background, var(--bg-surface));
-  --bg-sunken: var(--vscode-editor-background, var(--bg-canvas));
-  --bg-hover: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.1));
-  --bg-active: var(--vscode-list-activeSelectionBackground, var(--accent-soft));
-  --bg-overlay: var(--vscode-widget-shadow, rgba(0, 0, 0, 0.4));
+  --bg-canvas: #f4f4f6;
+  --bg-surface: #ffffff;
+  --bg-surface-raised: #ffffff;
+  --bg-sunken: #eceef1;
+  --bg-hover: rgba(15, 15, 20, 0.05);
+  --bg-active: rgba(193, 89, 37, 0.1);
+  --bg-overlay: rgba(20, 18, 30, 0.45);
 
   /* ---- borders ---- */
-  --border-subtle: var(--vscode-editorWidget-border, transparent);
-  --border: var(--vscode-widget-border, var(--vscode-editorWidget-border, rgba(128, 128, 128, 0.25)));
-  --border-strong: var(--vscode-contrastBorder, var(--border));
+  --border-subtle: rgba(20, 20, 30, 0.08);
+  --border: rgba(20, 20, 30, 0.13);
+  --border-strong: rgba(20, 20, 30, 0.22);
 
   /* ---- text ---- */
-  --text-primary: var(--vscode-foreground, #ccc);
-  --text-secondary: var(--vscode-descriptionForeground, #a0a0a0);
-  --text-tertiary: var(--vscode-disabledForeground, #808080);
-  --text-on-accent: var(--vscode-button-foreground, #fff);
-  --text-link: var(--vscode-textLink-foreground, var(--accent));
+  --text-primary: #16161c;
+  --text-secondary: #55566a;
+  --text-tertiary: #8a8b9c;
+  --text-on-accent: #ffffff;
+  --text-link: var(--accent-strong);
 
   /* ---- semantic ---- */
-  --success: var(--vscode-testing-iconPassed, var(--vscode-charts-green, #89d185));
-  --warning: var(--vscode-editorWarning-foreground, var(--vscode-charts-yellow, #cca700));
-  --danger: var(--vscode-editorError-foreground, var(--vscode-errorForeground, #f14c4c));
-  --info: var(--vscode-editorInfo-foreground, var(--vscode-charts-blue, #3794ff));
+  --success: #1a8a52;
+  --success-bg: #e6f6ee;
+  --success-border: #b7e6cc;
+  --warning: #a15c00;
+  --warning-bg: #fff3d9;
+  --warning-border: #f3d68e;
+  --danger: #c62c40;
+  --danger-bg: #fdeaec;
+  --danger-border: #f5b9c2;
+  --info: #2263c4;
+  --info-bg: #e9f1ff;
+  --info-border: #bcd6ff;
 
   /* ---- diff / ownership (agent vs human — D7) ---- */
-  --diff-add-bg: var(--vscode-diffEditor-insertedTextBackground, rgba(137, 209, 133, 0.2));
-  --diff-add-text: var(--vscode-charts-green, #89d185);
-  --diff-del-bg: var(--vscode-diffEditor-removedTextBackground, rgba(241, 76, 76, 0.2));
-  --diff-del-text: var(--vscode-charts-red, #f14c4c);
-  --own-agent: var(--vscode-charts-purple, #b180d7);
-  --own-agent-bg: color-mix(in srgb, var(--own-agent) 16%, transparent);
-  --own-user: var(--vscode-charts-blue, #3794ff);
-  --own-user-bg: color-mix(in srgb, var(--own-user) 16%, transparent);
-  --own-existing: var(--text-tertiary);
-  --own-existing-bg: color-mix(in srgb, var(--own-existing) 14%, transparent);
+  --diff-add-bg: #e3f7e9;
+  --diff-add-text: #17703c;
+  --diff-add-border: #a9e2bc;
+  --diff-del-bg: #fdeaea;
+  --diff-del-text: #a5303f;
+  --diff-del-border: #f2b9bf;
+  --own-agent: #6d3cf5;
+  --own-agent-bg: rgba(109, 60, 245, 0.12);
+  --own-user: #0f9d8c;
+  --own-user-bg: rgba(15, 157, 140, 0.12);
+  --own-existing: #8a8b9c;
+  --own-existing-bg: rgba(138, 139, 156, 0.12);
 
   /* ---- code ---- */
-  --code-bg: var(--vscode-textCodeBlock-background, var(--bg-sunken));
-  --font-ui: var(--vscode-font-family);
-  --font-mono: var(--vscode-editor-font-family, ui-monospace, Menlo, Consolas, monospace);
-  --text-xs: 11px;
-  --text-sm: var(--vscode-font-size, 13px);
-  --text-base: var(--vscode-font-size, 13px);
-  --text-md: calc(var(--vscode-font-size, 13px) + 1px);
-  --text-lg: calc(var(--vscode-font-size, 13px) + 4px);
-  --text-xl: calc(var(--vscode-font-size, 13px) + 9px);
+  --code-bg: #fbfbfd;
+  --code-line-number: #b4b5c4;
+  --code-keyword: #8a3fd1;
+  --code-string: #1a8a52;
+  --code-comment: #8a8b9c;
+  --code-fn: #2263c4;
+  --code-selection: rgba(98, 62, 245, 0.16);
+
+  /* ---- controls ---- */
+  --control-bg: #eceef1;
+  --control-bg-hover: #e2e4e8;
+  --control-border: rgba(20, 20, 30, 0.18);
+  --input-bg: #ffffff;
+
+  /* ---- type ---- */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --text-xs: 11.5px;
+  --text-sm: 12.5px;
+  --text-base: 13.5px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
 
   /* ---- shape / motion ---- */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 9px;
-  --focus-ring: 0 0 0 1px var(--vscode-focusBorder, var(--accent));
-  --dur-fast: 90ms;
-  --dur-base: 150ms;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(20, 18, 30, 0.06);
+  --shadow-md: 0 4px 16px rgba(20, 18, 30, 0.1);
+  --shadow-lg: 0 12px 40px rgba(20, 18, 30, 0.18);
+  --focus-ring: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--accent);
+  --dur-fast: 100ms;
+  --dur-base: 160ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ---- Valyria Dark ---- */
+body.vscode-dark {
+  color-scheme: dark;
+
+  --accent: hsl(20 82% 58%);
+  --accent-strong: hsl(20 88% 67%);
+  --accent-soft: hsla(20, 75%, 55%, 0.16);
+  --accent-contrast: #1f0f05;
+
+  --bg-canvas: #0d0d12;
+  --bg-surface: #131318;
+  --bg-surface-raised: #191921;
+  --bg-sunken: #0a0a0e;
+  --bg-hover: rgba(255, 255, 255, 0.055);
+  --bg-active: rgba(221, 138, 80, 0.16);
+  --bg-overlay: rgba(5, 5, 10, 0.6);
+
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border: rgba(255, 255, 255, 0.11);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --text-primary: #f1f1f5;
+  --text-secondary: #a6a7bb;
+  --text-tertiary: #6f7086;
+  --text-on-accent: #14101f;
+  --text-link: var(--accent-strong);
+
+  --success: #4fd48a;
+  --success-bg: rgba(79, 212, 138, 0.12);
+  --success-border: rgba(79, 212, 138, 0.3);
+  --warning: #e8b04b;
+  --warning-bg: rgba(232, 176, 75, 0.12);
+  --warning-border: rgba(232, 176, 75, 0.3);
+  --danger: #f2687e;
+  --danger-bg: rgba(242, 104, 126, 0.12);
+  --danger-border: rgba(242, 104, 126, 0.32);
+  --info: #6ba4ff;
+  --info-bg: rgba(107, 164, 255, 0.12);
+  --info-border: rgba(107, 164, 255, 0.3);
+
+  --diff-add-bg: rgba(79, 212, 138, 0.12);
+  --diff-add-text: #6be0a2;
+  --diff-add-border: rgba(79, 212, 138, 0.28);
+  --diff-del-bg: rgba(242, 104, 126, 0.12);
+  --diff-del-text: #f68a9b;
+  --diff-del-border: rgba(242, 104, 126, 0.28);
+  --own-agent: #b09bff;
+  --own-agent-bg: rgba(176, 155, 255, 0.16);
+  --own-user: #43d9c4;
+  --own-user-bg: rgba(67, 217, 196, 0.14);
+  --own-existing: #83849a;
+  --own-existing-bg: rgba(131, 132, 154, 0.14);
+
+  --code-bg: #101015;
+  --code-line-number: #4c4d5e;
+  --code-keyword: #c197ff;
+  --code-string: #77dba0;
+  --code-comment: #6f7086;
+  --code-fn: #7fb0ff;
+  --code-selection: rgba(168, 130, 255, 0.22);
+
+  --control-bg: #20202a;
+  --control-bg-hover: #2a2a37;
+  --control-border: rgba(255, 255, 255, 0.14);
+  --input-bg: #0f0f14;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --focus-ring: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  /* pre-class frame only — any body.vscode-* block outranks this once it lands */
+  :root {
+    color-scheme: dark;
+    --accent: hsl(20 82% 58%);
+    --accent-strong: hsl(20 88% 67%);
+    --accent-contrast: #1f0f05;
+    --bg-canvas: #0d0d12;
+    --bg-surface: #131318;
+    --bg-surface-raised: #191921;
+    --bg-sunken: #0a0a0e;
+    --bg-hover: rgba(255, 255, 255, 0.055);
+    --border-subtle: rgba(255, 255, 255, 0.07);
+    --border: rgba(255, 255, 255, 0.11);
+    --text-primary: #f1f1f5;
+    --text-secondary: #a6a7bb;
+    --text-tertiary: #6f7086;
+    --control-bg: #20202a;
+    --control-bg-hover: #2a2a37;
+    --control-border: rgba(255, 255, 255, 0.14);
+    --input-bg: #0f0f14;
+  }
+}
+
+/* ---- Valyria High Contrast (dark) ---- */
+body.vscode-high-contrast {
+  color-scheme: dark;
+
+  --accent: #f7b45c;
+  --accent-strong: #ffd0a0;
+  --accent-soft: rgba(247, 180, 92, 0.22);
+  --accent-contrast: #000000;
+
+  --bg-canvas: #000000;
+  --bg-surface: #000000;
+  --bg-surface-raised: #0a0a0e;
+  --bg-sunken: #000000;
+  --bg-hover: rgba(255, 255, 255, 0.12);
+  --bg-active: rgba(247, 180, 92, 0.24);
+  --bg-overlay: rgba(0, 0, 0, 0.8);
+
+  --border-subtle: #ffa869;
+  --border: #ffa869;
+  --border-strong: #f7b45c;
+
+  --text-primary: #ffffff;
+  --text-secondary: #e8e8ee;
+  --text-tertiary: #c8c8d2;
+  --text-on-accent: #000000;
+  --text-link: #ffb184;
+
+  --success: #5ff0a0;
+  --warning: #ffc766;
+  --danger: #ff8a9c;
+  --info: #7fb8ff;
+
+  --diff-add-text: #8ff0b8;
+  --diff-del-text: #ff8a9c;
+  --own-agent: #d9b6ff;
+  --own-user: #5fe6d4;
+  --own-existing: #c8c8d2;
+
+  --code-bg: #000000;
+  --code-line-number: #b9b9c6;
+  --code-keyword: #d9b6ff;
+  --code-string: #8ff0b8;
+  --code-comment: #c8c8d2;
+  --code-fn: #9fc8ff;
+
+  --control-bg: #000000;
+  --control-bg-hover: #1a1a22;
+  --control-border: #ffa869;
+  --input-bg: #000000;
+
+  --focus-ring: 0 0 0 2px #000000, 0 0 0 4px #f7b45c;
+}
+
+/* ---- Valyria High Contrast Light ---- */
+body.vscode-high-contrast.vscode-high-contrast-light {
+  color-scheme: light;
+
+  --accent: #7a2a12;
+  --accent-strong: #5a1c0a;
+  --accent-soft: rgba(122, 42, 18, 0.14);
+  --accent-contrast: #ffffff;
+
+  --bg-canvas: #ffffff;
+  --bg-surface: #ffffff;
+  --bg-surface-raised: #ffffff;
+  --bg-sunken: #f4f4f6;
+  --bg-hover: rgba(0, 0, 0, 0.08);
+  --bg-active: rgba(122, 42, 18, 0.14);
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+
+  --border-subtle: #8a3a10;
+  --border: #8a3a10;
+  --border-strong: #7a2a12;
+
+  --text-primary: #000000;
+  --text-secondary: #20202a;
+  --text-tertiary: #33343f;
+  --text-on-accent: #ffffff;
+  --text-link: #7a2a12;
+
+  --success: #0a6a3a;
+  --warning: #7a4500;
+  --danger: #a5000f;
+  --info: #1a4f9e;
+
+  --diff-add-text: #0a5a32;
+  --diff-del-text: #a5000f;
+  --own-agent: #5a1a9e;
+  --own-user: #0a6a5e;
+  --own-existing: #33343f;
+
+  --code-bg: #ffffff;
+  --code-line-number: #3a3a46;
+  --code-keyword: #5a1a9e;
+  --code-string: #0a5a32;
+  --code-comment: #33343f;
+  --code-fn: #1a4f9e;
+
+  --control-bg: #ffffff;
+  --control-bg-hover: #f0f0f2;
+  --control-border: #8a3a10;
+  --input-bg: #ffffff;
+
+  --focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px #7a2a12;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -100,7 +340,7 @@ body {
   font-family: var(--font-ui);
   font-size: var(--text-base);
   color: var(--text-primary);
-  background: transparent; /* the webview host paints the sidebar ground */
+  background: transparent; /* the webview host paints the (Valyria-themed) ground */
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -126,6 +366,27 @@ a:hover {
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* ---- brand lockup (shared by About / first-run headers) ---- */
+.vy-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 2px 0 12px;
+}
+.vy-brand svg { display: block; flex: none; }
+.vy-brand-mark { display: flex; flex: none; }
+.vy-brand-text { display: flex; flex-direction: column; line-height: 1.25; }
+.vy-brand-name {
+  font-size: var(--text-lg);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+}
+.vy-brand-tag {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
 }
 
 /* ---- shared components (.vy-*) ---- */
@@ -170,17 +431,21 @@ button.vy-btn {
   font: inherit;
   font-size: var(--text-sm);
   padding: 5px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius-sm);
-  background: var(--vscode-button-secondaryBackground, var(--bg-hover));
-  color: var(--vscode-button-secondaryForeground, var(--text-primary));
+  background: var(--control-bg);
+  color: var(--text-primary);
   cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
 }
+button.vy-btn:hover:not(:disabled) { background: var(--control-bg-hover); }
 button.vy-btn--primary {
-  background: var(--vscode-button-background, var(--accent));
-  color: var(--vscode-button-foreground, #fff);
+  background: var(--accent);
+  color: var(--accent-contrast);
   border-color: transparent;
+  font-weight: 600;
 }
+button.vy-btn--primary:hover:not(:disabled) { background: var(--accent-strong); }
 button.vy-btn:disabled { opacity: 0.5; cursor: default; }
 textarea.vy-input, input.vy-input {
   width: 100%;
@@ -188,9 +453,13 @@ textarea.vy-input, input.vy-input {
   font: inherit;
   font-size: var(--text-sm);
   padding: 6px 8px;
-  border: 1px solid var(--vscode-input-border, var(--border));
+  border: 1px solid var(--control-border);
   border-radius: var(--radius-sm);
-  background: var(--vscode-input-background, var(--bg-surface));
-  color: var(--vscode-input-foreground, var(--text-primary));
+  background: var(--input-bg);
+  color: var(--text-primary);
   resize: vertical;
+}
+textarea.vy-input:focus, input.vy-input:focus {
+  outline: none;
+  border-color: var(--accent);
 }

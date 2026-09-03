@@ -19,11 +19,16 @@ fi
 echo "==> Checking out $REF in vscode/"
 git -C vscode fetch --depth 1 origin "tag" "$REF" 2>/dev/null || git -C vscode fetch --depth 1 origin "$REF"
 git -C vscode checkout --force --detach "$REF"
-# Keep the expensive-to-rebuild trees: deps, electron, and the compiled
-# workbench/extensions. With near-zero patches these stay valid across a
-# re-bootstrap; run `(cd vscode && npm run compile)` after a REF bump.
-git -C vscode clean -fdx -e node_modules -e .build -e out -e out-build -e out-vscode
+# Keep the expensive-to-rebuild trees: deps and the downloaded toolchains under
+# .build. The compiled workbench (out*) is NOT kept — we carry source patches
+# (build/patches/), and a preserved out* would mask them until the next manual
+# `npm run compile`. preLaunch.ts recompiles out* on demand when it is missing.
+git -C vscode clean -fdx -e node_modules -e .build
 git -C vscode reset --hard "$REF"
+# The Electron app bundle is re-branded (icon + Info.plist) by `npm run electron`,
+# which preLaunch.ts skips whenever .build/electron/version already matches. Wipe
+# it so icon/name changes in this script actually reach the launched app.
+rm -rf vscode/.build/electron
 
 # 2. Apply patches in filename order.
 shopt -s nullglob
@@ -42,44 +47,25 @@ fi
 echo "==> Merging build/product.overlay.json -> vscode/product.json"
 node scripts/merge-product.mjs
 
-# 4. Branding assets. Copy build/icons/* into the resource tree, and — when the
-#    tooling is available — rasterise valyria.svg into the platform icon set
-#    (.icns / .ico / PNGs) the bundler expects. Missing tooling is a warning,
-#    not a failure: Code-OSS falls back to its own icons for a dev build.
-if compgen -G "build/icons/*" > /dev/null; then
-  echo "==> Copying build/icons/* -> vscode/resources/valyria/"
-  mkdir -p vscode/resources/valyria
-  cp -R build/icons/* vscode/resources/valyria/
+# 4. Branding icons. scripts/gen-icons.py writes the whole platform icon set into
+#    vscode/resources/ from build/icons/ (the app mark plus 55 re-badged document
+#    icons). It needs Pillow; `.icns` output also needs macOS `iconutil`. It fails
+#    loudly — no `|| true`, no `2>/dev/null` — so a broken icon build is visible.
+echo "==> Generating branding icons (scripts/gen-icons.py)"
+python3 scripts/gen-icons.py
 
-  SVG=build/icons/valyria.svg
-  if [ -f "$SVG" ]; then
-    RES=vscode/resources
-    if command -v rsvg-convert >/dev/null 2>&1; then
-      for s in 16 32 64 128 256 512 1024; do
-        rsvg-convert -w $s -h $s "$SVG" -o "$RES/valyria/icon-$s.png" || true
-      done
-      cp "$RES/valyria/icon-512.png" "$RES/linux/code.png" 2>/dev/null || true
-    else
-      echo "    (rsvg-convert not found — skipping PNG rasterisation; dev build uses stock icons)"
-    fi
-    if command -v iconutil >/dev/null 2>&1 && [ -f "$RES/valyria/icon-1024.png" ]; then
-      ICONSET="$(mktemp -d)/valyria.iconset"; mkdir -p "$ICONSET"
-      for s in 16 32 128 256 512; do
-        cp "$RES/valyria/icon-$s.png" "$ICONSET/icon_${s}x${s}.png" 2>/dev/null || true
-      done
-      cp "$RES/valyria/icon-1024.png" "$ICONSET/icon_512x512@2x.png" 2>/dev/null || true
-      iconutil -c icns "$ICONSET" -o "$RES/darwin/code.icns" 2>/dev/null \
-        && echo "    darwin/code.icns generated" || true
-    fi
-  fi
-fi
-
-# 5. Link the Valyria extension into the Code-OSS build as a compiled-in
-#    built-in extension. The vscode gulp build compiles every directory under
-#    extensions/.
+# 5. Link the Valyria built-in extensions into the Code-OSS tree. The gulp build
+#    (and dev scanBuiltinExtensions) picks up every directory under extensions/.
+#      - extension/  the agent UI (has a `main`; disabled in untrusted workspaces)
+#      - theme/      the Valyria colour themes (code-free; ALWAYS enabled, which is
+#                    why the default theme survives opening an untrusted repo)
 if [ ! -e vscode/extensions/valyria ]; then
   echo "==> Linking extension/ -> vscode/extensions/valyria"
   ln -s ../../extension vscode/extensions/valyria
+fi
+if [ ! -e vscode/extensions/valyria-theme ]; then
+  echo "==> Linking theme/ -> vscode/extensions/valyria-theme"
+  ln -s ../../theme vscode/extensions/valyria-theme
 fi
 
 # 6. Check the Node toolchain now that vscode/.nvmrc exists.
@@ -98,5 +84,8 @@ cat <<'EOF'
 Next:
   scripts/install-deps.sh    # ~5-10 min, ~1GB — Code-OSS + extension deps
   scripts/dev.sh             # watch + launch the branded editor
+
+If the macOS Dock still shows the old icon after a rebrand:
+  scripts/refresh-macos-icon.sh   # flush Launch Services' icon cache, then relaunch
 
 EOF

@@ -4,7 +4,7 @@
  * task. No model step — the first release runs on Core's built-in offline model.
  */
 import { mountWebview } from "../shared/host";
-import { h } from "../shared/render";
+import { h, brandLockup } from "../shared/render";
 import { CMD } from "../shared/protocol";
 import "./firstrun.css";
 
@@ -23,7 +23,7 @@ function render(m: FirstRunModel): void {
   const wrap = h("div", { class: "fr-wrap" });
 
   wrap.append(
-    h("h2", { text: "Welcome to Valyria" }),
+    brandLockup("Local-first autonomous coding agent"),
     h("p", { class: "vy-empty" }, "Valyria plans, edits and verifies code with a model that runs entirely on this machine. No account, no cloud, no network at runtime.")
   );
 

@@ -1,4 +1,20 @@
 .fr-wrap { max-width: 520px; }
 .fr-step { padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
 .fr-step h3 { margin: 0 0 4px; font-size: var(--text-md); }
+.fr-step .vy-btn { margin-top: 8px; margin-right: 6px; }
 .fr-actions { display: flex; gap: 8px; margin-top: 10px; }
+.fr-skip { opacity: 0.85; }
+
+.fr-bar {
+  height: 6px;
+  margin: 8px 0 4px;
+  background: var(--vscode-progressBar-background, rgba(128, 128, 128, 0.25));
+  border-radius: 3px;
+  overflow: hidden;
+}
+.fr-bar-fill {
+  height: 100%;
+  width: 0;
+  background: var(--vscode-progressBar-background, #0e70c0);
+  transition: width 0.3s ease;
+}

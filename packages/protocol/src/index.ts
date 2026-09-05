@@ -16,4 +16,4 @@ export * from "./events/registry.js";
 /** Protocol version this package's schemas were vendored at. Mirrors
  *  schemas/version.txt and core.lock.json; the generated copy supersedes this
  *  once codegen has run. */
-export const VENDORED_PROTOCOL_VERSION = "1.0.0" as const;
+export const VENDORED_PROTOCOL_VERSION = "1.11.0" as const;

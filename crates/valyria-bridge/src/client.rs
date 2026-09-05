@@ -20,9 +20,9 @@ use valyria_protocol::{
     ConfigSetRequest, ConfigShowResponse, DoctorRunResponse, GitBranchesResponse, GitDiffRequest,
     GitDiffResponse, GitLogRequest, GitLogResponse, GitStatusResponse, HardwareProbeResponse,
     HelloResponse, IndexStatusResponse, LedgerChangesRequest, LedgerChangesResponse,
-    ModelActivateRequest, ModelIdRequest, ModelInspectResponse, ModelListResponse,
-    ModelRecommendRequest, ModelRecommendResponse, ModelRemoveResponse, PlanGetResponse,
-    SearchQueryRequest, SearchQueryResponse, TaskListResponse, TaskReportResponse,
+    ModelActivateRequest, ModelIdRequest, ModelInspectResponse, ModelInstallRequest,
+    ModelListResponse, ModelRecommendRequest, ModelRecommendResponse, ModelRemoveResponse,
+    PlanGetResponse, SearchQueryRequest, SearchQueryResponse, TaskListResponse, TaskReportResponse,
     TaskRollbackResponse, TaskStatusResponse, WorkspaceStatusResponse,
 };
 
@@ -394,10 +394,25 @@ impl CoreClient {
     }
 
     /// Begin a model install. Returns immediately; progress arrives as
-    /// `model_install_progress` / `_completed` / `_failed` events.
-    pub async fn model_install(&self, id: &str) -> Result<()> {
-        self.ack(Request::ModelInstall(ModelIdRequest { id: id.to_string() }))
-            .await
+    /// `model_install_progress` / `_completed` / `_failed` events. `accept_license`
+    /// is the user's acknowledgement of the model's license — Core refuses the
+    /// install (`model.license_not_accepted`) without it.
+    pub async fn model_install(&self, id: &str, accept_license: bool) -> Result<()> {
+        self.ack(Request::ModelInstall(ModelInstallRequest {
+            id: id.to_string(),
+            accept_license,
+        }))
+        .await
+    }
+
+    /// Cancel an in-flight `model_install` for `id`. Idempotent — acks even
+    /// when nothing is downloading. The task emits `model_install_failed`
+    /// with code `model_store.cancelled`.
+    pub async fn model_install_cancel(&self, id: &str) -> Result<()> {
+        self.ack(Request::ModelInstallCancel(ModelIdRequest {
+            id: id.to_string(),
+        }))
+        .await
     }
 
     pub async fn model_remove(&self, id: &str) -> Result<ModelRemoveResponse> {

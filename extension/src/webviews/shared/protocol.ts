@@ -234,19 +234,63 @@ export interface SecurityModel {
   compatible: boolean | null;
 }
 
+/** A model install the event stream is tracking (§20). */
+export interface ModelInstallRow {
+  id: string;
+  /** "downloading" | "verifying" | "probing" while running. */
+  phase: string | null;
+  downloadedBytes: number;
+  totalBytes: number;
+  status: "running" | "completed" | "failed";
+  /** `model_store.*` code on failure (`model_store.cancelled` for a cancel). */
+  code: string | null;
+  message: string | null;
+  /** 0..1, or null when the total is not yet known. */
+  fraction: number | null;
+}
+
+/** One row of the model manager — a catalog model joined with local state,
+ *  hardware fit for the focused role, and any live install. */
+export interface ModelRow {
+  id: string;
+  displayName: string;
+  family: string;
+  quantization: string;
+  parametersB: number;
+  contextLength: number;
+  sizeBytes: number;
+  installed: boolean;
+  license: string;
+  /** `ModelRole` names this model currently serves. */
+  activeRoles: string[];
+  /** Fit for the focused role, from `model/recommend`. Null when hardware
+   *  scoring is unavailable or the model is not a candidate for the role. */
+  fit: "comfortable" | "tight" | "will_not_fit" | null;
+  fitDetail: string | null;
+  /** Catalog role suitability 0..100 for the focused role, when scored. */
+  suitability: number | null;
+  /** True when this is Core's top pick for the focused role. */
+  recommended: boolean;
+  /** The live install for this model, if the stream has seen one. */
+  install: ModelInstallRow | null;
+}
+
 export interface ModelsModel {
+  /** `model_manage` — install / cancel / activate / remove are reachable. */
   manageCapable: boolean;
+  /** `hardware` — the shortlist can be fit-scored. */
+  hardwareCapable: boolean;
   hasList: boolean;
-  models: {
-    id: string;
-    family: string;
-    quantization: string;
-    sizeBytes: number;
-    installed: boolean;
-    license: string;
-    active: boolean;
-  }[];
-  bindings: { key: string; value: string; origin: string }[];
+  /** The role the shortlist + recommendation are scoped to. */
+  role: string;
+  /** Every assignable `ModelRole`, for the activate control. */
+  roles: string[];
+  /** Core's recommended model id for `role`, if anything fits. */
+  recommendedId: string | null;
+  /** Recommended first, then other fitting, then non-fitting, then the rest. */
+  models: ModelRow[];
+  /** Role→model bindings from `model/list` (`active_roles`), for the summary. */
+  bindings: { role: string; modelId: string }[];
 }
 
 export interface HardwareModel {
@@ -264,7 +308,16 @@ export interface HardwareModel {
   recommendation: {
     role: string;
     recommendedId: string | null;
-    candidates: { id: string; fits: boolean; reason: string | null }[];
+    candidates: {
+      id: string;
+      displayName: string;
+      sizeBytes: number | null;
+      /** "comfortable" | "tight" | "will_not_fit" */
+      fitKind: string;
+      fitDetail: string | null;
+      suitability: number | null;
+      installed: boolean;
+    }[];
   } | null;
 }
 
@@ -341,10 +394,20 @@ export const CMD = {
   /** { checkpointId: string, intent?: string } */
   rollbackTo: "rollbackTo",
   refreshVerification: "refreshVerification",
-  /** { id: string, action: "install" | "remove" | "activate" } */
-  manageModel: "manageModel",
+  /** { id: string } — host runs model/inspect, shows the license, installs on accept */
+  installModel: "installModel",
+  /** { id: string } — cancel an in-flight install */
+  cancelModelInstall: "cancelModelInstall",
+  /** { id: string, role: string } */
+  activateModel: "activateModel",
+  /** { id: string } */
+  removeModel: "removeModel",
+  /** { role: string } — re-scope the shortlist + recommendation */
+  setModelRole: "setModelRole",
   refreshModels: "refreshModels",
   refreshHardware: "refreshHardware",
+  /** open the Models view (from the Hardware recommendation) */
+  openModelManager: "openModelManager",
   /** { key: string, value: string } */
   writeConfig: "writeConfig",
   firstRunOpenRepo: "firstRunOpenRepo",

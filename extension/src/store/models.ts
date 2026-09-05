@@ -365,42 +365,157 @@ export function securityModel(input: {
   };
 }
 
-// --- Models (§20, §37 — inventory only; the app never downloads weights) ---
+// --- Models (§20, §21, §37 — select, install, activate; weights are Core's) ---
+
+/** Every assignable `ModelRole` (Core's `valyria_model_registry::ModelRole`). */
+export const MODEL_ROLES = [
+  "primary_coder",
+  "fast_coder",
+  "planner",
+  "reviewer",
+  "embedder",
+  "reranker",
+  "autocomplete",
+  "summarizer",
+] as const;
+
+export const DEFAULT_MODEL_ROLE = "primary_coder";
 
 interface ModelSummary {
   id: string;
   family: string;
+  display_name?: string;
   quantization: string;
+  parameters_b?: number;
+  context_length?: number;
   size_bytes: number;
   installed: boolean;
   license: string;
+  active_roles?: string[];
+}
+
+interface RecommendCandidate {
+  id: string;
+  display_name?: string;
+  size_bytes?: number;
+  fit_kind?: string;
+  fit_detail?: string | null;
+  suitability?: number;
+  installed?: boolean;
+}
+interface RecommendResult {
+  role: string;
+  recommended: unknown;
+  candidates: unknown[];
+}
+
+const FIT_KINDS = ["comfortable", "tight", "will_not_fit"] as const;
+type FitKind = (typeof FIT_KINDS)[number];
+
+interface ModelInstallLike {
+  id: string;
+  phase: string | null;
+  downloadedBytes: number;
+  totalBytes: number;
+  status: "running" | "completed" | "failed";
+  code: string | null;
+  message: string | null;
+}
+
+function installRow(m: ModelInstallLike): import("../webviews/shared/protocol").ModelInstallRow {
+  const fraction =
+    m.totalBytes > 0 ? Math.max(0, Math.min(1, m.downloadedBytes / m.totalBytes)) : null;
+  return {
+    id: m.id,
+    phase: m.phase,
+    downloadedBytes: m.downloadedBytes,
+    totalBytes: m.totalBytes,
+    status: m.status,
+    code: m.code,
+    message: m.message,
+    fraction: m.status === "completed" ? 1 : fraction,
+  };
 }
 
 export function modelsModel(input: {
   models: ModelSummary[] | null;
-  configEntries: { key: string; value: string; origin: string }[] | null;
+  recommend: RecommendResult | null;
+  installs: ModelInstallLike[];
+  role: string;
   manageCapable: boolean;
+  hardwareCapable: boolean;
 }): ModelsModel {
-  const activeIds = new Set(
-    (input.configEntries ?? [])
-      .filter((e) => /(^|\.)model(\.|$)/i.test(e.key) || /model_id|active_model/i.test(e.key))
-      .map((e) => e.value)
-  );
-  return {
-    manageCapable: input.manageCapable,
-    hasList: input.models !== null,
-    models: (input.models ?? []).map((m) => ({
+  const role = input.role || DEFAULT_MODEL_ROLE;
+  const installById = new Map(input.installs.map((i) => [i.id, i]));
+
+  const rec = input.recommend && input.recommend.role === role ? input.recommend : null;
+  const recById = new Map<string, RecommendCandidate>();
+  for (const raw of rec?.candidates ?? []) {
+    const c = raw as RecommendCandidate;
+    if (c && typeof c.id === "string") recById.set(c.id, c);
+  }
+  const recRecommended = rec?.recommended as RecommendCandidate | null | undefined;
+  const recommendedId =
+    recRecommended && typeof recRecommended.id === "string" ? recRecommended.id : null;
+
+  const rows: ModelsModel["models"] = (input.models ?? []).map((m) => {
+    const c = recById.get(m.id);
+    const install = installById.get(m.id);
+    const fk = c?.fit_kind;
+    const fit: FitKind | null = (FIT_KINDS as readonly string[]).includes(fk ?? "")
+      ? (fk as FitKind)
+      : null;
+    return {
       id: m.id,
+      displayName: m.display_name ?? m.id,
       family: m.family,
       quantization: m.quantization,
+      parametersB: m.parameters_b ?? 0,
+      contextLength: m.context_length ?? 0,
       sizeBytes: m.size_bytes,
       installed: m.installed,
       license: m.license,
-      active: activeIds.has(m.id),
-    })),
-    bindings: (input.configEntries ?? [])
-      .filter((e) => /(^|\.)model(\.|role)/i.test(e.key))
-      .map((e) => ({ key: e.key, value: e.value, origin: e.origin })),
+      activeRoles: (m.active_roles ?? []).slice().sort(),
+      fit,
+      fitDetail: c?.fit_detail ?? null,
+      suitability: typeof c?.suitability === "number" ? c.suitability : null,
+      recommended: m.id === recommendedId,
+      install: install ? installRow(install) : null,
+    };
+  });
+
+  // Recommended first, then fitting (by suitability desc), then non-fitting,
+  // then everything the recommender didn't score.
+  const rank = (r: (typeof rows)[number]): number => {
+    if (r.recommended) return 0;
+    if (r.fit === "comfortable") return 1;
+    if (r.fit === "tight") return 2;
+    if (r.fit === "will_not_fit") return 4;
+    return 3;
+  };
+  rows.sort((a, b) => {
+    const d = rank(a) - rank(b);
+    if (d !== 0) return d;
+    const s = (b.suitability ?? -1) - (a.suitability ?? -1);
+    if (s !== 0) return s;
+    return a.displayName.localeCompare(b.displayName);
+  });
+
+  const bindings: { role: string; modelId: string }[] = [];
+  for (const m of input.models ?? []) {
+    for (const boundRole of m.active_roles ?? []) bindings.push({ role: boundRole, modelId: m.id });
+  }
+  bindings.sort((a, b) => a.role.localeCompare(b.role));
+
+  return {
+    manageCapable: input.manageCapable,
+    hardwareCapable: input.hardwareCapable,
+    hasList: input.models !== null,
+    role,
+    roles: [...MODEL_ROLES],
+    recommendedId,
+    models: rows,
+    bindings,
   };
 }
 
@@ -451,11 +566,18 @@ export function hardwareModel(input: {
       ? {
           role: input.recommend.role,
           recommendedId: str(asRecord(input.recommend.recommended)["id"]),
-          candidates: input.recommend.candidates.map((c) => ({
-            id: str(asRecord(c)["id"]) ?? "?",
-            fits: asRecord(c)["fits"] === true,
-            reason: str(asRecord(c)["reason"] ?? asRecord(c)["explanation"]),
-          })),
+          candidates: input.recommend.candidates.map((c) => {
+            const r = asRecord(c);
+            return {
+              id: str(r["id"]) ?? "?",
+              displayName: str(r["display_name"]) ?? str(r["id"]) ?? "?",
+              sizeBytes: num(r["size_bytes"]),
+              fitKind: str(r["fit_kind"]) ?? "unknown",
+              fitDetail: str(r["fit_detail"]),
+              suitability: num(r["suitability"]),
+              installed: r["installed"] === true,
+            };
+          }),
         }
       : null,
   };

@@ -1,0 +1,52 @@
+diff --git a/src/vs/workbench/browser/parts/editor/media/letterpress-dark.svg b/src/vs/workbench/browser/parts/editor/media/letterpress-dark.svg
+index f200fdc2..fa66fcd5 100644
+--- a/src/vs/workbench/browser/parts/editor/media/letterpress-dark.svg
++++ b/src/vs/workbench/browser/parts/editor/media/letterpress-dark.svg
+@@ -1,4 +1,6 @@
+-<!-- Valyria: the empty-editor-group watermark is the "V" mark, not stock Code's sidebar-and-lines glyph. build/patches/032-valyria-letterpress-watermark.patch -->
++<!-- Valyria: the empty-editor-group watermark is the dragon head from the wordmark (docs/assets/logo.png), vector-traced. build/patches/032-valyria-letterpress-watermark.patch -->
+ <svg width="260" height="260" viewBox="0 0 260 260" opacity="0.3" xmlns="http://www.w3.org/2000/svg">
+-<path d="M35 40L80 40L130 150L180 40L225 40L145 220L115 220Z"/>
++<g transform="translate(12.00 69.68) scale(0.4048)">
++<path d="M67 278 L58 262 L45 279 Z M299 245 L297 243 L290 245 L276 253 L263 264 L252 279 L284 279 L288 266 Z M0 226 L0 242 L2 238 Z M265 201 L240 213 L198 242 L201 256 L214 279 L224 279 L234 252 L247 230 L267 203 Z M256 190 L215 169 L204 167 L125 226 L125 229 L136 231 L177 229 L253 194 Z M218 132 L207 129 L193 129 L168 134 L122 150 L79 169 L58 181 L60 183 L131 180 L133 182 L102 207 L69 246 L70 251 L87 279 L120 279 L123 276 L196 279 L178 248 L159 246 L92 245 L91 242 L98 232 L118 213 L174 169 L172 165 L145 161 L145 159 L195 142 L217 138 L220 136 Z M134 96 L130 100 L130 109 L135 115 L143 115 L150 108 L149 99 L143 95 Z M123 23 L132 34 L240 128 L256 133 L277 133 L278 130 L224 87 L225 85 L329 123 L343 131 L358 146 L355 148 L222 147 L209 148 L203 151 L216 161 L239 169 L354 172 L356 177 L350 193 L344 201 L297 207 L270 227 L272 231 L293 229 L354 231 L356 233 L319 263 L321 265 L377 256 L409 256 L435 262 L446 268 L458 279 L521 279 L524 271 L523 262 L504 275 L492 275 L482 269 L465 253 L425 226 L409 217 L386 212 L385 208 L466 213 L491 218 L502 226 L509 243 L525 235 L534 235 L544 240 L554 254 L555 275 L560 272 L579 243 L583 226 L579 212 L564 180 L531 180 L501 169 L490 161 L462 131 L429 118 L413 109 L346 63 L293 19 L290 21 L293 29 L323 77 L331 85 L363 96 L373 101 L376 106 L247 66 L161 36 L131 23 Z M533 201 L544 202 L552 212 L550 214 L541 210 Z M380 137 L384 136 L438 151 L472 179 L411 177 L405 173 Z" fill="currentColor" fill-rule="evenodd"/>
++</g>
+ </svg>
+diff --git a/src/vs/workbench/browser/parts/editor/media/letterpress-hcDark.svg b/src/vs/workbench/browser/parts/editor/media/letterpress-hcDark.svg
+index 01bb8fa8..01f8858a 100644
+--- a/src/vs/workbench/browser/parts/editor/media/letterpress-hcDark.svg
++++ b/src/vs/workbench/browser/parts/editor/media/letterpress-hcDark.svg
+@@ -1,4 +1,6 @@
+-<!-- Valyria: the empty-editor-group watermark is the "V" mark, not stock Code's sidebar-and-lines glyph. build/patches/032-valyria-letterpress-watermark.patch -->
++<!-- Valyria: the empty-editor-group watermark is the dragon head from the wordmark (docs/assets/logo.png), vector-traced. build/patches/032-valyria-letterpress-watermark.patch -->
+ <svg width="260" height="260" viewBox="0 0 260 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+-<path d="M35 40L80 40L130 150L180 40L225 40L145 220L115 220Z" fill="#3C3C3C"/>
++<g transform="translate(12.00 69.68) scale(0.4048)">
++<path d="M67 278 L58 262 L45 279 Z M299 245 L297 243 L290 245 L276 253 L263 264 L252 279 L284 279 L288 266 Z M0 226 L0 242 L2 238 Z M265 201 L240 213 L198 242 L201 256 L214 279 L224 279 L234 252 L247 230 L267 203 Z M256 190 L215 169 L204 167 L125 226 L125 229 L136 231 L177 229 L253 194 Z M218 132 L207 129 L193 129 L168 134 L122 150 L79 169 L58 181 L60 183 L131 180 L133 182 L102 207 L69 246 L70 251 L87 279 L120 279 L123 276 L196 279 L178 248 L159 246 L92 245 L91 242 L98 232 L118 213 L174 169 L172 165 L145 161 L145 159 L195 142 L217 138 L220 136 Z M134 96 L130 100 L130 109 L135 115 L143 115 L150 108 L149 99 L143 95 Z M123 23 L132 34 L240 128 L256 133 L277 133 L278 130 L224 87 L225 85 L329 123 L343 131 L358 146 L355 148 L222 147 L209 148 L203 151 L216 161 L239 169 L354 172 L356 177 L350 193 L344 201 L297 207 L270 227 L272 231 L293 229 L354 231 L356 233 L319 263 L321 265 L377 256 L409 256 L435 262 L446 268 L458 279 L521 279 L524 271 L523 262 L504 275 L492 275 L482 269 L465 253 L425 226 L409 217 L386 212 L385 208 L466 213 L491 218 L502 226 L509 243 L525 235 L534 235 L544 240 L554 254 L555 275 L560 272 L579 243 L583 226 L579 212 L564 180 L531 180 L501 169 L490 161 L462 131 L429 118 L413 109 L346 63 L293 19 L290 21 L293 29 L323 77 L331 85 L363 96 L373 101 L376 106 L247 66 L161 36 L131 23 Z M533 201 L544 202 L552 212 L550 214 L541 210 Z M380 137 L384 136 L438 151 L472 179 L411 177 L405 173 Z" fill="#3C3C3C" fill-rule="evenodd"/>
++</g>
+ </svg>
+diff --git a/src/vs/workbench/browser/parts/editor/media/letterpress-hcLight.svg b/src/vs/workbench/browser/parts/editor/media/letterpress-hcLight.svg
+index f379aeaf..3cc3bad4 100644
+--- a/src/vs/workbench/browser/parts/editor/media/letterpress-hcLight.svg
++++ b/src/vs/workbench/browser/parts/editor/media/letterpress-hcLight.svg
+@@ -1,4 +1,6 @@
+-<!-- Valyria: the empty-editor-group watermark is the "V" mark, not stock Code's sidebar-and-lines glyph. build/patches/032-valyria-letterpress-watermark.patch -->
++<!-- Valyria: the empty-editor-group watermark is the dragon head from the wordmark (docs/assets/logo.png), vector-traced. build/patches/032-valyria-letterpress-watermark.patch -->
+ <svg width="260" height="260" viewBox="0 0 260 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+-<path d="M35 40L80 40L130 150L180 40L225 40L145 220L115 220Z" fill="#D9D9D9"/>
++<g transform="translate(12.00 69.68) scale(0.4048)">
++<path d="M67 278 L58 262 L45 279 Z M299 245 L297 243 L290 245 L276 253 L263 264 L252 279 L284 279 L288 266 Z M0 226 L0 242 L2 238 Z M265 201 L240 213 L198 242 L201 256 L214 279 L224 279 L234 252 L247 230 L267 203 Z M256 190 L215 169 L204 167 L125 226 L125 229 L136 231 L177 229 L253 194 Z M218 132 L207 129 L193 129 L168 134 L122 150 L79 169 L58 181 L60 183 L131 180 L133 182 L102 207 L69 246 L70 251 L87 279 L120 279 L123 276 L196 279 L178 248 L159 246 L92 245 L91 242 L98 232 L118 213 L174 169 L172 165 L145 161 L145 159 L195 142 L217 138 L220 136 Z M134 96 L130 100 L130 109 L135 115 L143 115 L150 108 L149 99 L143 95 Z M123 23 L132 34 L240 128 L256 133 L277 133 L278 130 L224 87 L225 85 L329 123 L343 131 L358 146 L355 148 L222 147 L209 148 L203 151 L216 161 L239 169 L354 172 L356 177 L350 193 L344 201 L297 207 L270 227 L272 231 L293 229 L354 231 L356 233 L319 263 L321 265 L377 256 L409 256 L435 262 L446 268 L458 279 L521 279 L524 271 L523 262 L504 275 L492 275 L482 269 L465 253 L425 226 L409 217 L386 212 L385 208 L466 213 L491 218 L502 226 L509 243 L525 235 L534 235 L544 240 L554 254 L555 275 L560 272 L579 243 L583 226 L579 212 L564 180 L531 180 L501 169 L490 161 L462 131 L429 118 L413 109 L346 63 L293 19 L290 21 L293 29 L323 77 L331 85 L363 96 L373 101 L376 106 L247 66 L161 36 L131 23 Z M533 201 L544 202 L552 212 L550 214 L541 210 Z M380 137 L384 136 L438 151 L472 179 L411 177 L405 173 Z" fill="#D9D9D9" fill-rule="evenodd"/>
++</g>
+ </svg>
+diff --git a/src/vs/workbench/browser/parts/editor/media/letterpress-light.svg b/src/vs/workbench/browser/parts/editor/media/letterpress-light.svg
+index 7dd2f521..4ee3875d 100644
+--- a/src/vs/workbench/browser/parts/editor/media/letterpress-light.svg
++++ b/src/vs/workbench/browser/parts/editor/media/letterpress-light.svg
+@@ -1,4 +1,6 @@
+-<!-- Valyria: the empty-editor-group watermark is the "V" mark, not stock Code's sidebar-and-lines glyph. build/patches/032-valyria-letterpress-watermark.patch -->
++<!-- Valyria: the empty-editor-group watermark is the dragon head from the wordmark (docs/assets/logo.png), vector-traced. build/patches/032-valyria-letterpress-watermark.patch -->
+ <svg width="260" height="260" viewBox="0 0 260 260" opacity="0.1" xmlns="http://www.w3.org/2000/svg">
+-<path d="M35 40L80 40L130 150L180 40L225 40L145 220L115 220Z"/>
++<g transform="translate(12.00 69.68) scale(0.4048)">
++<path d="M67 278 L58 262 L45 279 Z M299 245 L297 243 L290 245 L276 253 L263 264 L252 279 L284 279 L288 266 Z M0 226 L0 242 L2 238 Z M265 201 L240 213 L198 242 L201 256 L214 279 L224 279 L234 252 L247 230 L267 203 Z M256 190 L215 169 L204 167 L125 226 L125 229 L136 231 L177 229 L253 194 Z M218 132 L207 129 L193 129 L168 134 L122 150 L79 169 L58 181 L60 183 L131 180 L133 182 L102 207 L69 246 L70 251 L87 279 L120 279 L123 276 L196 279 L178 248 L159 246 L92 245 L91 242 L98 232 L118 213 L174 169 L172 165 L145 161 L145 159 L195 142 L217 138 L220 136 Z M134 96 L130 100 L130 109 L135 115 L143 115 L150 108 L149 99 L143 95 Z M123 23 L132 34 L240 128 L256 133 L277 133 L278 130 L224 87 L225 85 L329 123 L343 131 L358 146 L355 148 L222 147 L209 148 L203 151 L216 161 L239 169 L354 172 L356 177 L350 193 L344 201 L297 207 L270 227 L272 231 L293 229 L354 231 L356 233 L319 263 L321 265 L377 256 L409 256 L435 262 L446 268 L458 279 L521 279 L524 271 L523 262 L504 275 L492 275 L482 269 L465 253 L425 226 L409 217 L386 212 L385 208 L466 213 L491 218 L502 226 L509 243 L525 235 L534 235 L544 240 L554 254 L555 275 L560 272 L579 243 L583 226 L579 212 L564 180 L531 180 L501 169 L490 161 L462 131 L429 118 L413 109 L346 63 L293 19 L290 21 L293 29 L323 77 L331 85 L363 96 L373 101 L376 106 L247 66 L161 36 L131 23 Z M533 201 L544 202 L552 212 L550 214 L541 210 Z M380 137 L384 136 L438 151 L472 179 L411 177 L405 173 Z" fill="currentColor" fill-rule="evenodd"/>
++</g>
+ </svg>

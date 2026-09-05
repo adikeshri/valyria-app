@@ -21,12 +21,12 @@ repository = "https://github.com/adikeshri/valyria-app"
 [workspace.dependencies]
 # Core wire contract. The ONLY Core crates the app may depend on (D2).
 # Pinned to core.lock.json's git_rev; a bump moves this rev in the same PR.
-# Bumped for the CORE-INTERFACE gap closure (protocol 1.0.0 -> 1.9.0,
-# gaps G1-G15). Points at the head of the Core gap-closure branch stack
-# until those PRs land on Core `main`, at which point this rev moves to
-# the merge commit with no other change.
-valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "865f98e30b05a6950eb5b61656f042b6f248a33d" }
-valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "865f98e30b05a6950eb5b61656f042b6f248a33d" }
+# Bumped for protocol 1.11.0 — license-gated + cancellable model install
+# (model_install_cancel, ModelInstallRequest.accept_license, license_text /
+# license_accepted_at_ms on model_inspect, display_name / parameters_b /
+# context_length / active_roles on model_list).
+valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "50a6bb8cbfddea985e90f233d44cba3dd955ccdd" }
+valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "50a6bb8cbfddea985e90f233d44cba3dd955ccdd" }
 
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "net"] }
 futures = "0.3"

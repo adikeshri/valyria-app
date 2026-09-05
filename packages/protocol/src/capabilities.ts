@@ -9,7 +9,8 @@
 // logic: the renderer reads it, it does not branch on version strings.
 
 /** Capabilities the pinned Core (core.lock.json) advertises today.
- *  Protocol 1.9.0 — the CORE-INTERFACE gap-closure set (G1–G15). */
+ *  Protocol 1.11.0 — the CORE-INTERFACE gap-closure set (G1–G15) plus the
+ *  license-gated / cancellable model-install surface under `model_manage`. */
 export const KNOWN_CAPABILITIES = [
   "plan",
   "doctor",

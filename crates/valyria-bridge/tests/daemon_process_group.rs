@@ -11,6 +11,11 @@
 //! that group — even though nothing in this crate asked for that.
 //!
 //! Skips (does not fail) when no Core binary is available.
+//!
+//! Process groups are a POSIX concept — the whole file is unix-only so the
+//! Windows build doesn't see `locate_core` / `git` / `fixture` as dead code
+//! (their only caller is the unix-only test).
+#![cfg(unix)]
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -69,7 +74,6 @@ fn fixture() -> (tempfile::TempDir, PathBuf) {
 /// The pgid `ps` reports for `pid`, or `None` if the process is gone or `ps`
 /// can't be read (never a panic — a flaky read must not fail the test the
 /// wrong way, it should just not assert anything false).
-#[cfg(unix)]
 fn pgid_of(pid: u32) -> Option<i32> {
     let out = std::process::Command::new("ps")
         .args(["-o", "pgid=", "-p", &pid.to_string()])
@@ -78,7 +82,6 @@ fn pgid_of(pid: u32) -> Option<i32> {
     String::from_utf8_lossy(&out.stdout).trim().parse().ok()
 }
 
-#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn spawned_daemon_is_detached_from_the_launching_process_group() {
     let Some(bin) = locate_core() else {

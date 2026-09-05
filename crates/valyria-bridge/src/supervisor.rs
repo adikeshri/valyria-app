@@ -9,7 +9,12 @@
 //!     with bounded backoff, `hello`, write pid + meta.json → SPAWNED
 //! ```
 //!
-//! The daemon is meant to **outlive the UI** (`kill_on_drop` defaults off).
+//! The daemon is meant to **outlive the UI**, on two independent levels:
+//! `kill_on_drop` defaults off (dropping the `Session` here never explicitly
+//! kills it), and the spawned process is detached into its own OS process
+//! group (`detach_from_launcher_process_group`) so a signal delivered to the
+//! *launching* group — closing the terminal that started the app, or the app
+//! quitting in a way that signals its own group — cannot reach it either.
 //! Tests flip `kill_daemon_on_drop` so a panicking test never orphans a
 //! process.
 
@@ -158,6 +163,37 @@ fn platform_precheck() -> Result<()> {
     ))
 }
 
+/// Take the about-to-spawn Core daemon out of the launching process's job
+/// group, so it truly outlives the UI (PLAN.md D1) rather than merely
+/// surviving an explicit kill.
+///
+/// Without this, `valyria serve` inherits the process group of whatever
+/// launched the app (the dev shell that `exec`'d Electron, or Electron
+/// itself). Closing that controlling terminal, or the app quitting in a way
+/// that sends a job-control signal to its own process group (SIGHUP on
+/// terminal close, SIGTERM to `-pgid`), delivers the same signal to every
+/// process still in that group — bridge-host *and* the daemon it spawned,
+/// even though `kill_on_drop` is off and nothing in this crate asked for
+/// that. `Session::shutdown_daemon`'s explicit `child.start_kill()` still
+/// targets the child's pid directly, so it is unaffected by which group the
+/// child sits in.
+fn detach_from_launcher_process_group(cmd: &mut Command) {
+    #[cfg(unix)]
+    {
+        // pgroup 0: the child becomes the leader of a brand-new process
+        // group (gid == its own pid), detached from the parent's.
+        cmd.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        // CREATE_NEW_PROCESS_GROUP (winbase.h): excludes the child from the
+        // parent's console process group, so Ctrl+C / console-close signals
+        // sent to that group don't reach it either.
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
+    }
+}
+
 /// Adopt a running daemon for this workspace, or spawn one.
 pub async fn spawn_or_adopt(config: SupervisorConfig) -> Result<Session> {
     platform_precheck()?;
@@ -194,6 +230,7 @@ pub async fn spawn_or_adopt(config: SupervisorConfig) -> Result<Session> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    detach_from_launcher_process_group(&mut cmd);
     if let Some(mode) = &config.permission_mode {
         cmd.arg("--permission-mode").arg(mode);
     }

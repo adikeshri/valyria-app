@@ -122,6 +122,25 @@ export interface TestProjection {
   runs: TestRunProjection[];
 }
 
+/** A model install folded from `model_install_progress` / `_completed` /
+ *  `_failed` (workspace-global events, `task_id: null`). One entry per model
+ *  id; the latest event wins. Survives a reconnect because those events
+ *  replay from the journal like any other. */
+export interface ModelInstallProjection {
+  id: string;
+  /** "downloading" | "verifying" | "probing" while running; unchanged on a
+   *  terminal event. */
+  phase: string | null;
+  downloadedBytes: number;
+  totalBytes: number;
+  status: "running" | "completed" | "failed";
+  /** `model_store.*` code on a failure (e.g. `model_store.cancelled`). */
+  code: string | null;
+  message: string | null;
+  /** seq of the last event that touched this install — the sort/staleness key. */
+  lastSeq: number;
+}
+
 export interface StoreState {
   connection: ConnectionState;
   /** contiguity cursor: the highest seq applied. `0` before the first event
@@ -136,6 +155,8 @@ export interface StoreState {
   files: Record<string, FileChangeProjection[]>;
   /** per-task test outcomes (§4.11) */
   tests: Record<string, TestProjection>;
+  /** in-flight and recently-finished model installs, keyed by model id (§20) */
+  modelInstalls: Record<string, ModelInstallProjection>;
   /** append-only; corrections arrive as later events, earlier rows never mutate (PLAN §3) */
   events: EventRow[];
 }
@@ -150,6 +171,7 @@ export function emptyStore(): StoreState {
     approvals: {},
     files: {},
     tests: {},
+    modelInstalls: {},
     events: [],
   };
 }

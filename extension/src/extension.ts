@@ -93,17 +93,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const refreshRuntimeMarker = async (): Promise<void> => {
     if (supervisor.state !== "ready") return;
     try {
-      const cfg = (await host.client.request("config/show", {})) as {
-        entries?: { key: string; value: string }[];
-      };
-      const modelEntry = (cfg.entries ?? []).find((e) => /(^|\.)model(\.code|\.id|_id)?$/i.test(e.key));
+      // The active model is whatever `model/list` reports as bound to the
+      // primary coding role (Core's `active_roles`); no config-key guessing.
+      let activeModel: string | null = null;
+      try {
+        const list = (await host.client.request("model/list", {})) as {
+          models?: { id: string; display_name?: string; active_roles?: string[] }[];
+        };
+        const primary =
+          (list.models ?? []).find((m) => (m.active_roles ?? []).includes("primary_coder")) ??
+          (list.models ?? []).find((m) => (m.active_roles ?? []).length > 0);
+        activeModel = primary ? (primary.display_name ?? primary.id) : null;
+      } catch {
+        /* leave activeModel null */
+      }
       const doc = (await host.client.request("doctor/run", {})) as {
         checks?: { name: string; status: string; detail: string }[];
       };
       const networkRuntime = (doc.checks ?? []).some(
         (c) => /network|online|remote.?model/i.test(c.name) && c.status === "pass" && /enabled|allowed|reachable/i.test(c.detail)
       );
-      const runtime = { activeModel: modelEntry?.value ?? null, networkRuntime };
+      const runtime = { activeModel, networkRuntime };
       statusBar.setRuntime(runtime);
       panels.setRuntime(runtime);
     } catch {
@@ -187,7 +197,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     [AgentCommandsViewProvider.viewId, new AgentCommandsViewProvider(uri, store, focus)],
     [VerificationViewProvider.viewId, new VerificationViewProvider(uri, store, focus, supervisor, host)],
     [SecurityViewProvider.viewId, new SecurityViewProvider(uri, store, supervisor, host)],
-    [ModelsViewProvider.viewId, new ModelsViewProvider(uri, supervisor, host)],
+    [ModelsViewProvider.viewId, new ModelsViewProvider(uri, store, supervisor, host)],
     [HardwareViewProvider.viewId, new HardwareViewProvider(uri, supervisor, host)],
     [SettingsViewProvider.viewId, new SettingsViewProvider(uri, supervisor, host)],
     [ContextViewProvider.viewId, new ContextViewProvider(uri, store, supervisor, focus)],

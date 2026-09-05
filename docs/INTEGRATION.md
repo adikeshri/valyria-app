@@ -171,43 +171,46 @@ That is the entirety of "setup".
 4. **Prove the stack** — the daemon runs a harmless read-only task (e.g.
    "summarize the README") against the fake model; the user watches events
    stream. "Your runtime works."
-5. **Model step — deferred** — "You're on the built-in offline model, good for
-   trying the flow. Add a real model from the Models tab." If Core has
-   `model_catalog` / `model_install`, this step becomes §6's flow instead.
+5. **Set up a model** — first-run calls `hardware_probe` + `model_recommend
+   { primary_coder }` and offers the recommended fitting model with its size,
+   license and fit. Install → license acceptance → `model_install_progress`
+   bar → `model_activate` for `primary_coder`. Skippable — "use the built-in
+   offline model" keeps the old ending. See §6.
 
-No step blocks on a download.
+No step blocks on a download; the model step is optional.
 
 ---
 
 ## 6. Models
 
-### Now (no Core change)
+Shipped (protocol 1.11.0). A user chooses and sets up a model without leaving
+the editor; see [MODEL-SETUP-PLAN.md](MODEL-SETUP-PLAN.md) for the build.
 
-- Model Manager is an inventory view over `model_list` — empty on a clean
-  machine.
-- First-run ends honestly on the fake model (D-INT-2).
-- Escape hatch: point `config.toml` `[model]` at an existing local GGUF via a
-  D13 config write — a setting, not a download.
-
-### Core requests (file against `adikeshri/valyria`, per CORE-INTERFACE G4/G5)
+### Wire surface (all under `model_manage` / `hardware`)
 
 | Method | Purpose |
 |---|---|
-| `model_catalog` | Installable models with id, family, quantization, size, license, min RAM/VRAM — from Core's registry, so the app hardcodes no model list. |
-| `model_install { id }` | Returns immediately; emits `model_install_progress { id, bytes, total, phase }` / `_completed` / `_failed` on the event stream. Backed by `valyria-model-store` (verified resumable download, checksum, license, GC). |
-| `model_remove { id }` / `model_activate { id, role }` / `model_inspect { id }` | Lifecycle + license text for the acceptance prompt. |
-| `hardware_probe` / `model_recommend { role }` | So the wizard can *explain* a recommendation using Core's `fit()` scoring rather than an app heuristic (§41). |
+| `model_list` | The **whole embedded catalog** (not installed-only) — `ModelSummaryWire` with `display_name`, `parameters_b`, `context_length`, `installed`, and `active_roles` (Core's role bindings). |
+| `hardware_probe` / `model_recommend { role }` | Structured probe + Core's `fit()`-scored shortlist (`recommended` + `candidates` with `fit_kind`), so the app explains a pick rather than inventing one (§41). |
+| `model_inspect { id }` | Full card + `license_text` (bundled offline for every catalog license) + `license_accepted_at_ms`. |
+| `model_install { id, accept_license }` | Refused with `model.license_not_accepted` until `accept_license` is `true`; then a background download emitting `model_install_progress { id, phase, downloaded_bytes, total_bytes }` / `_completed` / `_failed`. |
+| `model_install_cancel { id }` | Stops an in-flight download (`model_store.cancelled`, `.part` kept for resume). Idempotent. |
+| `model_remove { id }` / `model_activate { id, role }` | Lifecycle. |
 
-### End-state UX (once those land)
+### UX
 
-1. App works immediately (bundled runtime + fake model).
-2. A "Set up a real model" step calls `hardware_probe` + `model_recommend` and
-   shows a short list with size / license / "fits your machine".
-3. Install → `model_install` → progress bar fed by events → `model_activate` on
-   completion.
-4. License text rendered from `model_inspect`; acceptance recorded by Core.
-5. Weights land in `$VALYRIA_HOME/models/`, Core-owned. A release-gate test
-   asserts that directory is byte-identical across an app upgrade (§38).
+1. App works immediately (bundled runtime + built-in offline model).
+2. First-run's "Set up a model" step calls `hardware_probe` + `model_recommend
+   { primary_coder }` and offers the recommended fitting model with size /
+   license / fit. **Skippable.**
+3. Install → license text opens in an editor tab + a modal acceptance →
+   `model/install { acceptLicense: true }` → progress bar fed by
+   `model_install_*` events (folded into `@valyria/state`) → `model_activate`.
+4. The Model Manager view does the same per role, plus Cancel / Remove and a
+   role picker; the Hardware view links each fitting candidate into it.
+5. Weights land in `$VALYRIA_HOME/models/`, Core-owned; the extension has no
+   download path. A release-gate test asserts that directory is byte-identical
+   across an app upgrade (§38).
 
 ---
 

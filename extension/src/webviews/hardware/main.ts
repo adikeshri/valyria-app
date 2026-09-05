@@ -1,7 +1,7 @@
 /**
  * Hardware view (PLAN.md §21). Probe fields Core doesn't report render as
- * "not probed". The model *recommendation* is Core's `fit()` scoring (G4) —
- * until Core exposes it, the view lists candidates and asks, it doesn't rank.
+ * "not probed". The model *recommendation* is Core's `fit()` scoring (G4);
+ * each candidate links into the Model Manager to install it.
  */
 import { mountWebview } from "../shared/host";
 import { h, section, badge, empty } from "../shared/render";
@@ -55,20 +55,41 @@ function render(m: HardwareModel): void {
   // --- recommendation ---
   if (m.recommendation) {
     const r = m.recommendation;
+    const gbn = (b: number | null) => (b == null ? "" : `${(b / 1e9).toFixed(1)} GB`);
+    const chip = (k: string) =>
+      k === "comfortable"
+        ? badge("fits", "ok")
+        : k === "tight"
+          ? badge("tight fit", "warn")
+          : badge("won't fit", "bad");
     root.append(
       section(
-        `Model fit for “${r.role}”`,
-        r.recommendedId ? h("p", { class: "vy-empty" }, `Recommended: `, h("span", { class: "vy-mono", text: r.recommendedId })) : null,
-        h("ul", { class: "vy-list" }, ...r.candidates.map((c) =>
-          h("li", { class: "hw-cand" }, badge(c.fits ? "fits" : "too big", c.fits ? "ok" : "bad"), h("span", { class: "vy-mono", text: c.id }), c.reason ? h("span", { class: "vy-empty", text: c.reason }) : null)
-        ))
+        `Model fit for “${r.role.replace(/_/g, " ")}”`,
+        r.recommendedId
+          ? h("p", { class: "vy-empty" }, `Recommended: `, h("span", { class: "vy-mono", text: r.recommendedId }))
+          : h("p", { class: "vy-empty" }, "Nothing in the catalog fits this machine for that role."),
+        h("ul", { class: "vy-list" }, ...r.candidates.map((c) => {
+          const li = h(
+            "li",
+            { class: "hw-cand" },
+            chip(c.fitKind),
+            h("span", { class: "vy-mono", text: c.displayName }),
+            h("span", { class: "vy-empty", text: [gbn(c.sizeBytes), c.installed ? "installed" : null].filter(Boolean).join(" · ") })
+          );
+          if (!c.installed) {
+            const b = h("button", { class: "vy-btn", type: "button" }, "Set up…") as HTMLButtonElement;
+            b.addEventListener("click", () => ctrl?.command("installModel", { id: c.id }));
+            li.append(b);
+          }
+          return li;
+        }))
       )
     );
   } else if (!m.hardwareCapable) {
     root.append(
       section(
         "Model fit",
-        h("p", { class: "vy-empty" }, "Core does not score model fit yet (G4). Pick a model from the Model Manager based on the RAM figures above.")
+        h("p", { class: "vy-empty" }, "Core is not scoring model fit. Pick a model in the Model Manager using the RAM figures above."),
       )
     );
   }

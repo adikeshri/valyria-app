@@ -12,7 +12,7 @@ export class AboutViewProvider extends WebviewBase {
   protected readonly bundle = "about";
 
   private about: { bridgeHost?: string; expectedProtocol?: string; compatibility?: string } | null = null;
-  private models: { id: string; installed: boolean }[] = [];
+  private models: { id: string; installed: boolean; active_roles?: string[] }[] = [];
   private activeModelIds = new Set<string>();
 
   constructor(
@@ -67,18 +67,13 @@ export class AboutViewProvider extends WebviewBase {
     if (this.supervisor.state === "ready") {
       try {
         const r = (await this.host.client.request("model/list", {})) as {
-          models?: { id: string; installed: boolean }[];
+          models?: { id: string; installed: boolean; active_roles?: string[] }[];
         };
         this.models = r.models ?? [];
-      } catch {
-        /* keep last */
-      }
-      try {
-        const c = (await this.host.client.request("config/show", {})) as {
-          entries?: { key: string; value: string }[];
-        };
+        // "Active" now comes straight from Core's role bindings, not a
+        // heuristic over config keys.
         this.activeModelIds = new Set(
-          (c.entries ?? []).filter((e) => /(^|\.)model(\.|$)/i.test(e.key)).map((e) => e.value)
+          this.models.filter((m) => (m.active_roles ?? []).length > 0).map((m) => m.id)
         );
       } catch {
         /* keep last */

@@ -8,6 +8,7 @@ import {
   type ConnectionState,
   type EventRow,
   type FileChangeProjection,
+  type ModelInstallProjection,
   type StoreState,
   type TaskProjection,
   type TaskState,
@@ -78,6 +79,13 @@ function applyDecodedNoAppend(
     gapDetected,
   };
 
+  // Model installs are workspace-global (`task_id: null`), so they fold
+  // outside the per-task branch below.
+  if (ev.ok) {
+    const installs = foldModelInstall(state.modelInstalls, ev);
+    if (installs !== state.modelInstalls) next.modelInstalls = installs;
+  }
+
   if (ev.taskId) {
     next.tasks = {
       ...state.tasks,
@@ -109,6 +117,66 @@ function applyDecodedNoAppend(
     }
   }
   return { state: next, row };
+}
+
+/** `model_install_progress` / `_completed` / `_failed` folded per model id,
+ *  latest event wins. Returns the same reference when the event is not a
+ *  model-install event so the caller can skip the copy. */
+function foldModelInstall(
+  prev: Readonly<Record<string, ModelInstallProjection>>,
+  ev: DecodedEvent & { ok: true },
+): Record<string, ModelInstallProjection> {
+  if (
+    ev.kind !== "model_install_progress" &&
+    ev.kind !== "model_install_completed" &&
+    ev.kind !== "model_install_failed"
+  ) {
+    return prev as Record<string, ModelInstallProjection>;
+  }
+  const p = (ev.payload ?? {}) as Record<string, unknown>;
+  const id = typeof p.id === "string" ? p.id : "";
+  if (!id) return prev as Record<string, ModelInstallProjection>;
+
+  const cur = prev[id];
+  const num = (v: unknown, fallback: number): number =>
+    typeof v === "number" && Number.isFinite(v) ? v : fallback;
+
+  let entry: ModelInstallProjection;
+  if (ev.kind === "model_install_progress") {
+    entry = {
+      id,
+      phase: typeof p.phase === "string" ? p.phase : (cur?.phase ?? null),
+      downloadedBytes: num(p.downloaded_bytes, cur?.downloadedBytes ?? 0),
+      totalBytes: num(p.total_bytes, cur?.totalBytes ?? 0),
+      status: "running",
+      code: null,
+      message: null,
+      lastSeq: ev.seq,
+    };
+  } else if (ev.kind === "model_install_completed") {
+    entry = {
+      id,
+      phase: cur?.phase ?? null,
+      downloadedBytes: num(p.size_bytes, cur?.downloadedBytes ?? 0),
+      totalBytes: num(p.size_bytes, cur?.totalBytes ?? 0),
+      status: "completed",
+      code: null,
+      message: null,
+      lastSeq: ev.seq,
+    };
+  } else {
+    entry = {
+      id,
+      phase: cur?.phase ?? null,
+      downloadedBytes: cur?.downloadedBytes ?? 0,
+      totalBytes: cur?.totalBytes ?? 0,
+      status: "failed",
+      code: typeof p.code === "string" ? p.code : null,
+      message: typeof p.message === "string" ? p.message : null,
+      lastSeq: ev.seq,
+    };
+  }
+  return { ...prev, [id]: entry };
 }
 
 /** `file_changed`, plus write/edit `tool_started` (its `input.path`), folded

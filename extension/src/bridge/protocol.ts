@@ -104,9 +104,15 @@ export interface Requests {
   // --- models / hardware (G4/G5) ---
   "model/list": [Record<string, never>, unknown];
   "model/recommend": [{ role?: string }, unknown];
-  "model/install": [{ id: string }, unknown];
+  /** `acceptLicense` is the user's acknowledgement of the model's license —
+   *  Core refuses the install (`model.license_not_accepted`) without it. */
+  "model/install": [{ id: string; acceptLicense?: boolean }, unknown];
+  /** Cancel an in-flight `model/install`. Idempotent — acks even when nothing
+   *  is downloading; the task emits `model_install_failed` with code
+   *  `model_store.cancelled`. */
+  "model/cancelInstall": [{ id: string }, unknown];
   "model/remove": [{ id: string }, unknown];
-  "model/activate": [{ id: string }, unknown];
+  "model/activate": [{ id: string; role: string }, unknown];
   "model/inspect": [{ id: string }, unknown];
   "hardware/probe": [Record<string, never>, unknown];
 

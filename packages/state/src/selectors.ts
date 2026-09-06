@@ -5,6 +5,7 @@ import type {
   ApprovalProjection,
   EventRow,
   FileChangeProjection,
+  ModelInstallProjection,
   PlanProjection,
   StoreState,
   TaskProjection,
@@ -399,4 +400,26 @@ export function degradedEvents(state: StoreState): EventRow[] {
 
 export function needsResubscribe(state: StoreState): boolean {
   return state.gapDetected;
+}
+
+/** Every model install the event stream has seen, most-recently-touched first
+ *  (§20). Includes finished ones — the model manager shows a completed/failed
+ *  row until the next `model/list` refresh clears it. */
+export function modelInstalls(state: StoreState): ModelInstallProjection[] {
+  return Object.values(state.modelInstalls).sort((a, b) => b.lastSeq - a.lastSeq);
+}
+
+/** The install record for one model id, if the stream has seen it. */
+export function modelInstall(
+  state: StoreState,
+  id: string,
+): ModelInstallProjection | undefined {
+  return state.modelInstalls[id];
+}
+
+/** Ids with an install still in flight. */
+export function modelInstallsRunning(state: StoreState): string[] {
+  return modelInstalls(state)
+    .filter((m) => m.status === "running")
+    .map((m) => m.id);
 }

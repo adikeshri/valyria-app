@@ -27,8 +27,8 @@ use valyria_bridge::{
 
 use rpc::{read_frame, write_frame, Incoming, Notification, Outgoing, Response, RpcError};
 
-/// Protocol major this build negotiates against (core.lock.json → 1.10.0).
-const EXPECTED_PROTOCOL: &str = "1.10.0";
+/// Protocol major this build negotiates against (core.lock.json → 1.11.0).
+const EXPECTED_PROTOCOL: &str = "1.11.0";
 
 /// Bounded backoff for re-establishing a daemon that dropped its stream.
 const RESTART_BACKOFF_MS: [u64; 6] = [200, 500, 1000, 2000, 4000, 8000];
@@ -365,12 +365,22 @@ async fn dispatch(host: &Arc<Host>, out_tx: &OutTx, req: &Incoming) -> Result<Va
         // ---- models / hardware ------------------------------
         "model/list" => with_client(host, |c| async move { c.model_list().await }).await,
         "model/recommend" => {
-            let role = opt_str(req, "role").unwrap_or_else(|| "code".to_string());
+            let role = opt_str(req, "role").unwrap_or_else(|| "primary_coder".to_string());
             with_client(host, |c| async move { c.model_recommend(&role).await }).await
         }
         "model/install" => {
             let id = str_param(req, "id")?;
-            with_client(host, |c| async move { c.model_install(&id).await }).await
+            let accept_license = param(req, "acceptLicense")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            with_client(host, |c| async move {
+                c.model_install(&id, accept_license).await
+            })
+            .await
+        }
+        "model/cancelInstall" => {
+            let id = str_param(req, "id")?;
+            with_client(host, |c| async move { c.model_install_cancel(&id).await }).await
         }
         "model/remove" => {
             let id = str_param(req, "id")?;
@@ -378,7 +388,7 @@ async fn dispatch(host: &Arc<Host>, out_tx: &OutTx, req: &Incoming) -> Result<Va
         }
         "model/activate" => {
             let id = str_param(req, "id")?;
-            let role = opt_str(req, "role").unwrap_or_else(|| "code".to_string());
+            let role = str_param(req, "role")?;
             with_client(host, |c| async move { c.model_activate(&id, &role).await }).await
         }
         "model/inspect" => {

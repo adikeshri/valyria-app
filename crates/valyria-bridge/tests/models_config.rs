@@ -1,8 +1,15 @@
-//! docs/PLAN.md Phase 6 — the read-only model inventory and the D13
+//! docs/PLAN.md Phase 6 — the model-management surface and the D13
 //! write-then-verify config path, against a real `valyria serve`.
 //!
-//!  * `model_list` decodes `ModelListResponse` (empty on a clean machine — no
-//!    model is ever fetched by the app, D-INT-3);
+//!  * `model_list` decodes `ModelListResponse` — the whole embedded catalog
+//!    with `display_name` / `parameters_b` / `context_length` / `active_roles`
+//!    and per-machine `installed` state; no model is ever fetched by the app
+//!    (D-INT-3);
+//!  * `model_recommend` decodes a hardware-scored `ModelRecommendResponse`;
+//!  * `model_inspect` carries the bundled `license_text` for the acceptance
+//!    prompt, and `model_install` without acceptance is refused
+//!    (`model.license_not_accepted`);
+//!  * `model_install_cancel` acks even with nothing in flight;
 //!  * `write_key` edits `$VALYRIA_HOME/config.toml` and a following
 //!    `config_show` reports the value with `origin = "global"` (CORE-INTERFACE
 //!    G6 — Core has no `config_set`).
@@ -84,11 +91,55 @@ async fn model_list_and_config_write_then_verify() {
     let mut session = spawn_or_adopt(cfg).await.expect("spawn Core");
     let client = CoreClient::with_token(session.socket_path.clone(), session.auth_token.clone());
 
-    // Inventory decodes; a clean machine has none.
+    // The whole embedded catalog decodes — a clean machine still lists
+    // every model, none installed, none bound to a role.
     let models = client.model_list().await.expect("model_list");
+    assert!(models.models.len() >= 3, "embedded catalog is non-trivial");
     for m in &models.models {
         assert!(!m.id.is_empty());
+        assert!(!m.display_name.is_empty());
+        assert!(m.parameters_b > 0.0);
+        assert!(m.context_length > 0);
+        assert!(!m.installed);
+        assert!(m.active_roles.is_empty());
     }
+    let sample = models.models[0].id.clone();
+
+    // `model_recommend` scores candidates for a role against this machine.
+    let rec = client
+        .model_recommend("primary_coder")
+        .await
+        .expect("model_recommend");
+    assert_eq!(rec.role, "primary_coder");
+    assert!(!rec.candidates.is_empty());
+    for c in &rec.candidates {
+        assert!(["comfortable", "tight", "will_not_fit"].contains(&c.fit_kind.as_str()));
+    }
+
+    // `model_inspect` carries the bundled license body for the acceptance
+    // prompt, and nothing is accepted for an uninstalled model.
+    let ins = client.model_inspect(&sample).await.expect("model_inspect");
+    assert!(
+        ins.license_text.as_deref().map(str::len).unwrap_or(0) > 200,
+        "catalog models bundle their license text"
+    );
+    assert!(ins.license_accepted_at_ms.is_none());
+
+    // Install without acceptance is refused — no weights are ever fetched
+    // without an explicit acknowledgement.
+    let refused = client.model_install(&sample, false).await;
+    match refused {
+        Err(valyria_bridge::BridgeError::Protocol { code, .. }) => {
+            assert_eq!(code, "model.license_not_accepted");
+        }
+        other => panic!("expected model.license_not_accepted, got {other:?}"),
+    }
+
+    // Cancel is idempotent — an ack even when nothing is downloading.
+    client
+        .model_install_cancel(&sample)
+        .await
+        .expect("model_install_cancel acks");
 
     // Baseline: `log.format` is the compiled default (`pretty`).
     let before = client.config_show().await.expect("config_show");

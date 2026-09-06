@@ -96,6 +96,20 @@ export function registerCommands(deps: CommandDeps): void {
     await vscode.commands.executeCommand("valyria.about.focus");
   });
 
+  reg("valyria.setupModel", async () => {
+    if (!supervisor.session) {
+      await vscode.commands.executeCommand("valyria.openWorkspace");
+      if (!supervisor.session) return;
+    }
+    if (!supervisor.has("model_manage")) {
+      void vscode.window.showWarningMessage(
+        "Valyria: the running Core does not serve model management (needs the `model_manage` capability)."
+      );
+      return;
+    }
+    await vscode.commands.executeCommand("valyria.models.focus");
+  });
+
   // --- editor-area surfaces (docs/UX-DIFFERENTIATION.md, lever D) ---
   reg("valyria.openHome", () => panels.open("home"));
   reg("valyria.openWorkspacePanel", () => panels.open("workspace"));

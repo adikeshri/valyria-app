@@ -47,11 +47,25 @@ const MODELS: Record<string, unknown> = {
     checks: [{ name: "sandbox.enabled", status: "pass", detail: "ok", remediation: null }],
     doctorSummary: "pass", repoInstructions: [{ name: "VALYRIA.md", text: "be careful", authorized: true }], compatible: true,
   },
-  models: { manageCapable: true, hasList: true, models: [{ id: "m1", family: "F", quantization: "Q4", sizeBytes: 4e9, installed: false, license: "MIT", active: false }], bindings: [] },
+  models: {
+    manageCapable: true, hardwareCapable: true, hasList: true,
+    role: "primary_coder",
+    roles: ["primary_coder", "fast_coder", "planner", "reviewer", "embedder", "reranker", "autocomplete", "summarizer"],
+    recommendedId: "m1",
+    models: [{
+      id: "m1", displayName: "Model One", family: "F", quantization: "Q4",
+      parametersB: 7, contextLength: 32768, sizeBytes: 4e9, installed: false, license: "MIT",
+      activeRoles: [], fit: "comfortable", fitDetail: null, suitability: 90, recommended: true, install: null,
+    }],
+    bindings: [],
+  },
   hardware: { hasProbe: true, hardwareCapable: false, os: "macos 15", arch: "arm64", cpu: { brand: "M2", physicalCores: 8, logicalCores: 8 }, ramTotalBytes: 17e9, ramAvailableBytes: 8e9, diskAvailableBytes: 2e11, unifiedMemory: true, acceleratorPresent: null, gpus: [{ name: "M2", vendor: "Apple", vramBytes: null }], recommendation: null },
   settings: { hasConfig: true, sections: [{ title: "Agent", rows: [{ key: "permission.mode", value: "manual", origin: "default", editable: true }] }] },
   context: { available: true, taskId: "t1", items: [{ seq: 2, source: "index", path: "src/x.rs", trust: "trusted", tokens: 100, summary: "Context retrieved" }] },
-  firstrun: { connection: "ready", hasRepo: true, layoutMode: "editor", probeState: "idle", probeResult: null },
+  firstrun: {
+    connection: "ready", hasRepo: true, layoutMode: "editor", probeState: "idle", probeResult: null,
+    model: { capable: true, handled: false, installedCount: 0, recommendedId: "m1", recommendedName: "Model One", recommendedSizeGb: 4, recommendedFit: "comfortable", install: null },
+  },
   home: {
     connection: "ready", hasRepo: true, repoName: "acme", canSubmit: true,
     activeModel: "qwen3-coder-7b", networkRuntime: false, autonomy: "manual", layoutMode: "agent",

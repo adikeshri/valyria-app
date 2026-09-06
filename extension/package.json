@@ -215,6 +215,11 @@
         "command": "valyria.restartBridge",
         "title": "Restart Bridge Host",
         "category": "Valyria"
+      },
+      {
+        "command": "valyria.setupModel",
+        "title": "Set Up a Model",
+        "category": "Valyria"
       }
     ],
     "customEditors": [
@@ -268,7 +273,8 @@
         { "command": "valyria.resumeTask", "when": "valyria.hasSession" },
         { "command": "valyria.cancelTask", "when": "valyria.hasSession" },
         { "command": "valyria.layout.agentMode", "when": "valyria.layoutMode != agent" },
-        { "command": "valyria.layout.editorMode", "when": "valyria.layoutMode != editor" }
+        { "command": "valyria.layout.editorMode", "when": "valyria.layoutMode != editor" },
+        { "command": "valyria.setupModel", "when": "valyria.hasSession" }
       ],
       "view/title": [
         {

@@ -464,22 +464,24 @@ Per D8 there is no path to a generic "verified" badge.
 
 ### 4.13 Models, hardware, first run (§20, §21, §22, §37)
 
-Constrained hard by G4 and G5: `model_list` is read-only and there is no
-structured hardware surface.
+G4 and G5 are closed (protocol 1.3.0; license-gated install + cancel in
+1.11.0 — see [MODEL-SETUP-PLAN.md](MODEL-SETUP-PLAN.md)).
 
-What ships now: an inventory Model Manager (id, family, quantization, size,
-license, installed, active), a Hardware View built from `doctor_run` with
-unreported fields explicitly marked, and a first-run flow that explains local
-inference, shows what Core reports, lets the user open a repository, and runs a
-harmless read-only task to prove the stack works end to end.
+What ships: a Model Manager that scopes a hardware-scored shortlist to a role
+(`model_recommend`), installs from the embedded catalog with a license
+acceptance prompt and a live progress bar (`model_install` + `model_install_*`
+events, folded into `@valyria/state`), cancels an in-flight download, and
+activates a model per role; a Hardware View built from the structured
+`hardware_probe` that links each fitting candidate into the manager; and a
+first-run flow whose **Set up a model** step offers the recommended fitting
+model (skippable — the built-in offline model runs the flow either way).
 
-What is gated on Core: install/remove/activate, the hardware probe, and the
-model **recommendation** — including its explanation, which must come from Core's
-`fit()` scoring rather than a heuristic we invent (§41). Until then the wizard
-does not recommend; it lists and asks.
+The recommendation and its explanation come from Core's `fit()` scoring, never
+a heuristic the app invents (§41).
 
 Non-negotiable: **the app never downloads a model.** No fetch path exists in the
-app for weights (§20, §38).
+app for weights — every byte is `valyria-model-store`'s (§20, §38). The
+extension only forwards the user's explicit license acceptance.
 
 ### 4.14 Search and context inspector (§33, §34)
 

@@ -251,11 +251,30 @@ export interface MemoryEntryWire {
 export interface ModelListResponse {
   models: ModelSummaryWire[];
 }
+/**
+ * One row of `model_list` — a catalog card joined with local state. The catalog ships embedded, so `model_list` is the full "what can I run" surface (not just what is installed): the client's model manager and first-run "set up a model" step read it directly, and `installed` / `active_roles` say what is on this machine.
+ */
 export interface ModelSummaryWire {
+  /**
+   * `ModelRole` names this model is currently bound to (e.g. `["primary_coder", "planner"]`). Empty when it serves no role. The client reads this instead of guessing the active model from config keys.
+   */
+  active_roles?: string[];
+  /**
+   * Maximum context window the weights support.
+   */
+  context_length: number;
+  /**
+   * Human-facing name, e.g. `Qwen2.5-Coder 7B Instruct (Q4_K_M)`.
+   */
+  display_name: string;
   family: string;
   id: string;
   installed: boolean;
   license: string;
+  /**
+   * Parameter count in billions (`7.0`, `1.5`, `0.137`).
+   */
+  parameters_b: number;
   quantization: string;
   size_bytes: number;
 }
@@ -462,7 +481,7 @@ export interface ModelRemoveResponse {
   freed_bytes: number;
 }
 /**
- * Full detail for one model — mirrors the `ModelCard` plus, when installed, its `manifest.json` (§4.21). `license_text` is the license body when Core has it locally, for the acceptance prompt.
+ * Full detail for one model — mirrors the `ModelCard` plus, when installed, its `manifest.json` (§4.21).
  */
 export interface ModelInspectResponse {
   /**
@@ -478,7 +497,15 @@ export interface ModelInspectResponse {
    * Present only when installed.
    */
   installed_at_ms?: number | null;
+  /**
+   * Unix ms at which the user accepted this model's license, from its install manifest. `None` when not installed, or installed before the acceptance step existed.
+   */
+  license_accepted_at_ms?: number | null;
   license_name: string;
+  /**
+   * The full license body when Core bundles it locally (it does for every catalog model), for the install acceptance prompt. `None` falls back to `license_url`.
+   */
+  license_text?: string | null;
   license_url?: string | null;
   parameters_b: number;
   /**

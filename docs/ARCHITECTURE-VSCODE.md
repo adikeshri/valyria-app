@@ -109,6 +109,8 @@ needs should be reachable through the extension API.
 | `010-valyria-default-theme.patch` | `src/…/themes/common/workbenchThemeService.ts` — `ThemeSettingDefaults` | The default `workbench.colorTheme` (and the four `preferred*` keys, incl. the `APPLICATION`‑scoped HC path) is a hard‑coded constant. `product.json` has no key for it; an extension `configurationDefaults` is dropped when the agent extension is disabled in an untrusted workspace. |
 | `011-theme-default-hardening.patch` | `src/…/themes/browser/workbenchThemeService.ts` | Cold‑start pre‑paint colour map (stock is MS grey/blue); stop the `event.removed` fallback persisting `workbench.colorTheme` to `settings.json`; branded default‑theme notification copy. |
 | `020-debrand-electron-build.patch` | `build/lib/electron.ts` `config` | `companyName` / `copyright` / `darwinHelpBook*` are string literals baked into the packaged app's Info.plist / PE resources. |
+| `031-activitybar-top-bigger-centred.patch` | `src/…/parts/media/paneCompositePart.css` — appended rules | `workbench.activityBar.location: top`'s composite bar has a hard‑coded ~16px, left‑hugging icon row — no setting. Appended CSS grows and centres it. |
+| `032-valyria-letterpress-watermark.patch` | `src/…/parts/editor/media/letterpress-{dark,light,hcDark,hcLight}.svg` | The empty‑editor‑group watermark is a CSS `background-image`, unreachable from the extension or a theme. Stock's sidebar‑and‑lines glyph → a vector trace of the dragon head from `docs/assets/logo.png`, same fill/opacity structure as the originals. |
 
 On a `VSCODE_REF` bump, re‑check each: the theme‑service line numbers move often;
 `ThemeSettingDefaults` string values change most releases (`Dark 2026` was

@@ -84,7 +84,7 @@ fn about_info_returns_bridge_metadata_without_a_session() {
     let result = resp
         .get("result")
         .expect("about/info is a result, not an error");
-    assert_eq!(result["expectedProtocol"], "1.10.0");
+    assert_eq!(result["expectedProtocol"], "1.11.0");
     assert_eq!(result["compatibility"], "no session");
     assert!(result["bridgeHost"].is_string());
     assert!(result["session"].is_null());

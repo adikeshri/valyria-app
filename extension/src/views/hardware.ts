@@ -32,8 +32,21 @@ export class HardwareViewProvider extends WebviewBase {
     });
   }
 
-  protected onCommand(name: string): void {
-    if (name === "refreshHardware") void this.refresh();
+  protected onCommand(name: string, args: unknown): void {
+    if (name === "refreshHardware") {
+      void this.refresh();
+    } else if (name === "openModelManager") {
+      void vscode.commands.executeCommand("valyria.models.focus");
+    } else if (name === "installModel") {
+      // The Models view owns the license + install flow; hand off to it.
+      void vscode.commands.executeCommand("valyria.models.focus");
+      const id = (args as { id?: string } | undefined)?.id;
+      if (id) {
+        void vscode.window.showInformationMessage(
+          `Valyria: open the Models view to install ${id}.`
+        );
+      }
+    }
   }
 
   protected wire(refresh: () => void): vscode.Disposable[] {
@@ -50,7 +63,9 @@ export class HardwareViewProvider extends WebviewBase {
     }
     if (this.supervisor.has("hardware")) {
       try {
-        this.recommend = (await this.host.client.request("model/recommend", { role: "code" })) as {
+        this.recommend = (await this.host.client.request("model/recommend", {
+          role: "primary_coder",
+        })) as {
           role: string;
           recommended: Record<string, unknown> | null;
           candidates: Record<string, unknown>[];

@@ -120,6 +120,10 @@ export type Request =
     }
   | {
       method: "model_install";
+      params: ModelInstallRequest;
+    }
+  | {
+      method: "model_install_cancel";
       params: ModelIdRequest;
     }
   | {
@@ -257,6 +261,13 @@ export interface ModelRecommendRequest {
    * A `ModelRole` name: `primary_coder`, `fast_coder`, `planner`, `reviewer`, `embedder`, `reranker`, `autocomplete`, `summarizer`.
    */
   role: string;
+}
+/**
+ * `model_install` — begin a download. `accept_license` is the wire record of the user's acceptance of the model's license (its text is on `ModelInspectResponse::license_text`). Core **refuses** the install with `model.license_not_accepted` when it is `false`, so no weights are ever fetched without an explicit acknowledgement (§4.21).
+ */
+export interface ModelInstallRequest {
+  accept_license?: boolean;
+  id: string;
 }
 export interface ModelIdRequest {
   id: string;

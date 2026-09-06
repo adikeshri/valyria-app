@@ -164,33 +164,35 @@ already names the intended methods (`search.query`, `workspace.index_status`).
 ### G4 — No hardware surface (§22, §20, §37)  
 **CLOSED — protocol 1.3.0.**
 
-`valyria-hardware::probe()` returns a full `HardwareReport { cpu, gpu, disk }`
-and `fit()` scores a model against it. `doctor_run` exposes only prose strings
-(`disk_space`, `sandbox`, …). The Hardware View and the model recommendation the
-first-run wizard is built on have **no structured source**.
+`hardware_probe` → `HardwareProbeResponse` and `model_recommend { role }` →
+`ModelRecommendResponse` (Core's `fit()` scoring: `recommended` + sorted
+`candidates` with `fit_kind` = `comfortable` | `tight` | `will_not_fit`). The
+Hardware View renders the structured probe; its recommendation list links each
+fitting candidate into the Model Manager. First-run's "Set up a model" step is
+built on the same `model_recommend` call.
 
-*Requested:* `hardware_probe` → `HardwareReport`, and `model_recommend { role }`
-→ the existing `RoleAssignment` / `CardScore`, so the app can *explain* the
-recommendation (§22) without recomputing it (§41).
+### G5 — Model management (§20, §21)  
+**CLOSED — protocol 1.3.0; license-gated install + cancel added in 1.11.0.**
 
-*Until then:* the Hardware View renders what `doctor_run` gives and marks
-everything else "not reported by Core", and first-run cannot recommend — it
-lists what `model_list` returns and asks the user to choose.
+The full lifecycle is served and the desktop client drives it end to end
+(docs/MODEL-SETUP-PLAN.md):
 
-### G5 — Model management is read-only (§20, §21)  
-**CLOSED — protocol 1.3.0.**
+- `model_list` → the **whole embedded catalog** (not installed-only), each row
+  a `ModelSummaryWire` with `display_name` / `parameters_b` / `context_length`
+  and `active_roles` (Core's role bindings — the client no longer guesses the
+  active model from config keys).
+- `model_recommend { role }` — hardware-scored shortlist (G4).
+- `model_inspect { id }` → `ModelInspectResponse` with `license_text` (the full
+  body, bundled offline for every catalog license) and `license_accepted_at_ms`.
+- `model_install { id, accept_license }` — Core refuses with
+  `model.license_not_accepted` until `accept_license` is `true`, then downloads
+  in the background and reports `model_install_progress` / `_completed` /
+  `_failed` events. `model_install_cancel { id }` stops an in-flight download
+  (`model_store.cancelled`, `.part` kept for resume).
+- `model_remove { id }` / `model_activate { id, role }`.
 
-`model_list` exists. `valyria-model-store` implements verified resumable
-download, license surfacing, probe and GC — with no wire method. The PRD's
-Install / Remove / Activate / Inspect is therefore not reachable.
-
-*Requested:* `model_install { id }` (with progress as events), `model_remove
-{ id }`, `model_activate { id, role }`, `model_inspect { id }`. PLAN §4.27
-already lists these as `model.install/remove/inspect` "with progress streams".
-
-*Until then:* the Model Manager is an inventory view. Install is unavailable and
-says so; it does not shell out to a downloader. **No model is ever fetched by the
-app** (§20).
+**The app has no download path** — every weight byte is `valyria-model-store`'s
+(§20, §38). The extension only forwards the user's license acceptance.
 
 ### G6 — Config is read-only, and narrow (§24)  
 **CLOSED — protocol 1.1.0.**

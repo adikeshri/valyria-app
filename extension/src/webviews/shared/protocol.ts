@@ -317,6 +317,40 @@ export interface ModelsModel {
   engineInstall: ModelInstallRow | null;
 }
 
+/** One turn in a direct model-chat conversation. Unlike {@link ChatEntry}
+ *  (an agent task's transcript), this is raw model output — no task, no
+ *  tool events, sent straight to a locally-served model's own endpoint. */
+export interface ModelChatTurn {
+  id: string;
+  role: "user" | "assistant" | "error";
+  text: string;
+  /** true while an assistant turn is still streaming in. */
+  pending: boolean;
+}
+
+/** One role currently backed by a live, ready local model server — i.e. one
+ *  the chat window can actually talk to. */
+export interface ModelChatServerRow {
+  role: string;
+  modelId: string;
+  displayName: string;
+}
+
+/** A plain chat window talking directly to an installed, activated local
+ *  model over its own HTTP server (llama-server's OpenAI-compat API) — not
+ *  the agent task system. */
+export interface ModelChatModel {
+  /** `model_inference` — without it, activation never boots a real server. */
+  inferenceCapable: boolean;
+  /** Every role currently serving and reachable, chooseable from. */
+  servers: ModelChatServerRow[];
+  /** The role the transcript below belongs to; null when nothing is serving. */
+  role: string | null;
+  transcript: ModelChatTurn[];
+  sending: boolean;
+  canSend: boolean;
+}
+
 export interface HardwareModel {
   hasProbe: boolean;
   hardwareCapable: boolean;
@@ -446,4 +480,12 @@ export const CMD = {
   openDiff: "openDiff",
   /** { mode: "agent" | "editor" } */
   setLayoutMode: "setLayoutMode",
+  /** { role: string } — switch the model-chat window to a different serving role */
+  selectModelChatRole: "selectModelChatRole",
+  /** { text: string } — send a message to the model backing the selected role */
+  sendModelChatMessage: "sendModelChatMessage",
+  /** abort the in-flight model-chat generation, if any */
+  stopModelChatGeneration: "stopModelChatGeneration",
+  /** clear the transcript for the selected role's model chat */
+  clearModelChat: "clearModelChat",
 } as const;

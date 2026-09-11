@@ -32,6 +32,8 @@ import type {
   HardwareModel,
   HistoryModel,
   HomeModel,
+  ModelChatModel,
+  ModelChatTurn,
   ModelsModel,
   ReviewModel,
   SecurityModel,
@@ -381,7 +383,7 @@ export const MODEL_ROLES = [
 
 export const DEFAULT_MODEL_ROLE = "primary_coder";
 
-interface ModelSummary {
+export interface ModelSummary {
   id: string;
   family: string;
   display_name?: string;
@@ -543,6 +545,75 @@ export function modelsModel(input: {
     models: rows,
     bindings,
     engineInstall: input.engineInstall ? installRow(input.engineInstall) : null,
+  };
+}
+
+// --- Model chat (a plain chat window on top of an activated local model,
+// straight to its own HTTP server — not the agent task system) ---------
+
+/** Roles Core serves with something other than a causal-LM chat model —
+ *  `embedder` returns vectors, `reranker` returns scores. Neither has a
+ *  chat template; pointing `/v1/chat/completions` at one 500s in
+ *  llama-server rather than answering. This is the common case (a model
+ *  installed for a role Core's catalog actually scored it for) but not the
+ *  only one — the Model Manager lets you bind *any* installed model to
+ *  *any* role, so a role name alone isn't proof the bound model can chat. */
+const NON_CHAT_ROLES = new Set(["embedder", "reranker"]);
+
+/** `model/list` carries no capability flag (Core's `role_suitability` never
+ *  crosses the wire), so this is a naming heuristic over the catalog's own
+ *  `family`/`id` — every embedding/reranker entry in it names itself that
+ *  way (`nomic-embed`, `bge-reranker`, …), same as virtually every such
+ *  model on HuggingFace. Catches a model bound to a chat-sounding role
+ *  (e.g. `primary_coder`) it was never scored for, which {@link
+ *  NON_CHAT_ROLES} alone can't. */
+function looksLikeNonChatModel(m: ModelSummary | undefined): boolean {
+  if (!m) return false;
+  return /\b(embed|rerank)/i.test(m.family) || /\b(embed|rerank)/i.test(m.id);
+}
+
+/** Every chat-capable role with a live, `ready` server — the ones the chat
+ *  window can actually talk to — sorted for a stable dropdown. */
+function chattableServers(
+  servers: ModelServerLike[],
+  models: ModelSummary[] | null
+): import("../webviews/shared/protocol").ModelChatServerRow[] {
+  const byId = new Map((models ?? []).map((m) => [m.id, m]));
+  return servers
+    .filter(
+      (s) =>
+        s.state === "ready" &&
+        s.port !== null &&
+        !NON_CHAT_ROLES.has(s.role) &&
+        !looksLikeNonChatModel(byId.get(s.modelId))
+    )
+    .map((s) => ({ role: s.role, modelId: s.modelId, displayName: byId.get(s.modelId)?.display_name ?? s.modelId }))
+    .sort((a, b) => a.role.localeCompare(b.role));
+}
+
+export function modelChatModel(input: {
+  inferenceCapable: boolean;
+  servers: ModelServerLike[];
+  models: ModelSummary[] | null;
+  /** the explicitly selected role, or null to auto-pick */
+  role: string | null;
+  transcripts: Record<string, ModelChatTurn[]>;
+  sending: boolean;
+}): ModelChatModel {
+  const rows = chattableServers(input.servers, input.models);
+  const resolvedRole =
+    (input.role && rows.some((r) => r.role === input.role) ? input.role : null) ??
+    rows.find((r) => r.role === "primary_coder")?.role ??
+    rows[0]?.role ??
+    null;
+
+  return {
+    inferenceCapable: input.inferenceCapable,
+    servers: rows,
+    role: resolvedRole,
+    transcript: resolvedRole ? (input.transcripts[resolvedRole] ?? []) : [],
+    sending: input.sending,
+    canSend: input.inferenceCapable && resolvedRole !== null && !input.sending,
   };
 }
 

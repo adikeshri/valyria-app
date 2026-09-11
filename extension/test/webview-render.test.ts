@@ -132,6 +132,63 @@ test("history renders grouped tasks and posts focusTask on click", () => {
   );
 });
 
+test("modelChat renders the transcript, switches role, and posts a message", () => {
+  const { root, posted } = mount("modelChat", {
+    inferenceCapable: true,
+    servers: [
+      { role: "primary_coder", modelId: "m1", displayName: "Model One" },
+      { role: "fast_coder", modelId: "m2", displayName: "Model Two" },
+    ],
+    role: "primary_coder",
+    transcript: [
+      { id: "t1", role: "user", text: "hi", pending: false },
+      { id: "t2", role: "assistant", text: "hello there", pending: false },
+    ],
+    sending: false,
+    canSend: true,
+  });
+  assert.match(root.textContent ?? "", /hello there/);
+  assert.doesNotMatch(root.textContent ?? "", /\[object Object\]|undefined/);
+
+  const select = root.querySelector("select") as HTMLSelectElement;
+  assert.equal(select.querySelectorAll("option").length, 2);
+  select.value = "fast_coder";
+  const win = select.ownerDocument.defaultView as unknown as { Event: typeof Event };
+  select.dispatchEvent(new win.Event("change", { bubbles: true }));
+  assert.ok(
+    posted.some((m) => m.type === "command" && m["name"] === "selectModelChatRole" && (m["args"] as { role?: string })?.role === "fast_coder"),
+    "switching the role posts selectModelChatRole"
+  );
+
+  const textarea = root.querySelector("textarea") as HTMLTextAreaElement;
+  textarea.value = "what is 2+2?";
+  const sendBtn = [...root.querySelectorAll("button")].find((b) => b.textContent === "Send") as HTMLButtonElement;
+  sendBtn.click();
+  assert.ok(
+    posted.some((m) => m.type === "command" && m["name"] === "sendModelChatMessage" && (m["args"] as { text?: string })?.text === "what is 2+2?"),
+    "clicking Send posts sendModelChatMessage with the composer text"
+  );
+});
+
+test("modelChat with no ready servers shows an empty state and an Open Models affordance", () => {
+  const { root, posted } = mount("modelChat", {
+    inferenceCapable: true,
+    servers: [],
+    role: null,
+    transcript: [],
+    sending: false,
+    canSend: false,
+  });
+  assert.match(root.textContent ?? "", /No model is serving yet/);
+  const openBtn = [...root.querySelectorAll("button")].find((b) => b.textContent === "Open Models") as HTMLButtonElement;
+  assert.ok(openBtn, "has an Open Models button");
+  openBtn.click();
+  assert.ok(
+    posted.some((m) => m.type === "command" && m["name"] === "openModelManager"),
+    "clicking Open Models posts openModelManager"
+  );
+});
+
 test("activity renders narrative lines + degraded notice", () => {
   const { root } = mount("activity", {
     connection: "ready",

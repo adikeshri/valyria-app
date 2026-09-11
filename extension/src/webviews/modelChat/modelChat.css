@@ -1,0 +1,39 @@
+.mc-rolebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mc-role-select {
+  flex: 1;
+  background: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+  border: 1px solid var(--vscode-dropdown-border, transparent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font: inherit;
+}
+.mc-clear { flex: 0 0 auto; }
+
+.mc-log {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  max-height: calc(100vh - 230px);
+  overflow-y: auto;
+}
+.mc-turn { display: flex; gap: 8px; padding: 6px 0; align-items: baseline; }
+.mc-role {
+  flex: 0 0 48px;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+.mc-turn--user .mc-role { color: var(--accent); }
+.mc-turn--error .mc-role,
+.mc-turn--error .mc-text { color: var(--danger); }
+.mc-text { font-size: var(--text-sm); white-space: pre-wrap; }
+
+.chat-composer { margin-bottom: 10px; }
+.chat-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }

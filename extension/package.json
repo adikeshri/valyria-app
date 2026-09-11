@@ -38,9 +38,23 @@
           "title": "Valyria",
           "icon": "media/valyria-activity.svg"
         }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "valyriaModelChat",
+          "title": "Model Chat",
+          "icon": "$(comment-discussion)"
+        }
       ]
     },
     "views": {
+      "valyriaModelChat": [
+        {
+          "id": "valyria.modelChat",
+          "name": "Model Chat",
+          "type": "webview"
+        }
+      ],
       "valyria": [
         {
           "id": "valyria.firstrun",

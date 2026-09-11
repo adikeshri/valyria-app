@@ -59,6 +59,17 @@ const MODELS: Record<string, unknown> = {
     }],
     bindings: [],
   },
+  modelChat: {
+    inferenceCapable: true,
+    servers: [{ role: "primary_coder", modelId: "m1", displayName: "Model One" }],
+    role: "primary_coder",
+    transcript: [
+      { id: "t1", role: "user", text: "hi there", pending: false },
+      { id: "t2", role: "assistant", text: "hello!", pending: false },
+    ],
+    sending: false,
+    canSend: true,
+  },
   hardware: { hasProbe: true, hardwareCapable: false, os: "macos 15", arch: "arm64", cpu: { brand: "M2", physicalCores: 8, logicalCores: 8 }, ramTotalBytes: 17e9, ramAvailableBytes: 8e9, diskAvailableBytes: 2e11, unifiedMemory: true, acceleratorPresent: null, gpus: [{ name: "M2", vendor: "Apple", vramBytes: null }], recommendation: null },
   settings: { hasConfig: true, sections: [{ title: "Agent", rows: [{ key: "permission.mode", value: "manual", origin: "default", editable: true }] }] },
   context: { available: true, taskId: "t1", items: [{ seq: 2, source: "index", path: "src/x.rs", trust: "trusted", tokens: 100, summary: "Context retrieved" }] },

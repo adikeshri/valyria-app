@@ -29,6 +29,7 @@ import { VerificationViewProvider } from "./views/verification";
 import { AgentCommandsViewProvider } from "./views/agentCommands";
 import { FileOwnershipDecorations } from "./views/ownership";
 import { ModelsViewProvider } from "./views/models";
+import { ModelChatViewProvider } from "./views/modelChat";
 import { HardwareViewProvider } from "./views/hardware";
 import { SettingsViewProvider } from "./views/settings";
 import { ContextViewProvider } from "./views/context";
@@ -226,6 +227,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     [VerificationViewProvider.viewId, new VerificationViewProvider(uri, store, focus, supervisor, host)],
     [SecurityViewProvider.viewId, new SecurityViewProvider(uri, store, supervisor, host)],
     [ModelsViewProvider.viewId, new ModelsViewProvider(uri, store, supervisor, host)],
+    [ModelChatViewProvider.viewId, new ModelChatViewProvider(uri, store, supervisor, host, log)],
     [HardwareViewProvider.viewId, new HardwareViewProvider(uri, supervisor, host)],
     [SettingsViewProvider.viewId, new SettingsViewProvider(uri, supervisor, host)],
     [ContextViewProvider.viewId, new ContextViewProvider(uri, store, supervisor, focus)],
@@ -274,6 +276,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const hasRestoredEditors = vscode.window.tabGroups.all.some((g) => g.tabs.length > 0);
   if (!hasRestoredEditors && (layout.mode === "agent" || !root)) {
     void panels.open("home");
+  }
+
+  // Model Chat lives in its own Secondary Side Bar container (right-hand
+  // side, like Cursor's chat) rather than tucked into the Valyria
+  // activity-bar container. Reveal it once so it's immediately visible —
+  // after that the user's own layout (moved, closed, whatever) wins, same
+  // as any other view.
+  const modelChatRevealedKey = "valyria.modelChatRevealed";
+  if (!context.globalState.get(modelChatRevealedKey)) {
+    await context.globalState.update(modelChatRevealedKey, true);
+    void vscode.commands.executeCommand(`${ModelChatViewProvider.viewId}.focus`);
   }
 
   log.info("Valyria extension activated");

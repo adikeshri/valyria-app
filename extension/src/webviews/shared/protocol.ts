@@ -249,6 +249,19 @@ export interface ModelInstallRow {
   fraction: number | null;
 }
 
+/** A managed `llama-server` backing one role, live off the event stream
+ *  (`model_inference` — `model_server_starting` / `_ready` / `_failed` /
+ *  `_stopped`). */
+export interface ModelServerRow {
+  role: string;
+  state: "starting" | "ready" | "failed" | "stopped";
+  /** Loopback port once `ready`. */
+  port: number | null;
+  /** `llamacpp.*` / `engine_store.*` code on a failure. */
+  code: string | null;
+  message: string | null;
+}
+
 /** One row of the model manager — a catalog model joined with local state,
  *  hardware fit for the focused role, and any live install. */
 export interface ModelRow {
@@ -273,6 +286,10 @@ export interface ModelRow {
   recommended: boolean;
   /** The live install for this model, if the stream has seen one. */
   install: ModelInstallRow | null;
+  /** Every role this model is currently serving (or trying to), live off
+   *  the event stream — empty when `model_inference` is absent or nothing
+   *  has been activated yet. */
+  servers: ModelServerRow[];
 }
 
 export interface ModelsModel {
@@ -280,6 +297,10 @@ export interface ModelsModel {
   manageCapable: boolean;
   /** `hardware` — the shortlist can be fit-scored. */
   hardwareCapable: boolean;
+  /** `model_inference` — an activated role boots a real server and reports
+   *  `servers` above; without it, activation still works but is silent
+   *  about whether the model is actually serving. */
+  inferenceCapable: boolean;
   hasList: boolean;
   /** The role the shortlist + recommendation are scoped to. */
   role: string;
@@ -291,6 +312,9 @@ export interface ModelsModel {
   models: ModelRow[];
   /** Role→model bindings from `model/list` (`active_roles`), for the summary. */
   bindings: { role: string; modelId: string }[];
+  /** Inference-engine (llama.cpp) download, if the event stream has seen
+   *  one — Core fetching its own `llama-server` before the first activate. */
+  engineInstall: ModelInstallRow | null;
 }
 
 export interface HardwareModel {
@@ -400,6 +424,9 @@ export const CMD = {
   cancelModelInstall: "cancelModelInstall",
   /** { id: string, role: string } */
   activateModel: "activateModel",
+  /** { id: string, role: string } — re-point a role at the model already
+   *  bound to it, e.g. after `model_server_failed` */
+  restartServer: "restartServer",
   /** { id: string } */
   removeModel: "removeModel",
   /** { role: string } — re-scope the shortlist + recommendation */

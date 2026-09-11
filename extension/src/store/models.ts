@@ -422,6 +422,15 @@ interface ModelInstallLike {
   message: string | null;
 }
 
+interface ModelServerLike {
+  role: string;
+  modelId: string;
+  state: "starting" | "ready" | "failed" | "stopped";
+  port: number | null;
+  code: string | null;
+  message: string | null;
+}
+
 function installRow(m: ModelInstallLike): import("../webviews/shared/protocol").ModelInstallRow {
   const fraction =
     m.totalBytes > 0 ? Math.max(0, Math.min(1, m.downloadedBytes / m.totalBytes)) : null;
@@ -441,12 +450,21 @@ export function modelsModel(input: {
   models: ModelSummary[] | null;
   recommend: RecommendResult | null;
   installs: ModelInstallLike[];
+  servers: ModelServerLike[];
+  engineInstall: ModelInstallLike | null;
   role: string;
   manageCapable: boolean;
   hardwareCapable: boolean;
+  inferenceCapable: boolean;
 }): ModelsModel {
   const role = input.role || DEFAULT_MODEL_ROLE;
   const installById = new Map(input.installs.map((i) => [i.id, i]));
+  const serversByModel = new Map<string, ModelServerLike[]>();
+  for (const s of input.servers) {
+    const list = serversByModel.get(s.modelId) ?? [];
+    list.push(s);
+    serversByModel.set(s.modelId, list);
+  }
 
   const rec = input.recommend && input.recommend.role === role ? input.recommend : null;
   const recById = new Map<string, RecommendCandidate>();
@@ -481,6 +499,13 @@ export function modelsModel(input: {
       suitability: typeof c?.suitability === "number" ? c.suitability : null,
       recommended: m.id === recommendedId,
       install: install ? installRow(install) : null,
+      servers: (serversByModel.get(m.id) ?? []).map((s) => ({
+        role: s.role,
+        state: s.state,
+        port: s.port,
+        code: s.code,
+        message: s.message,
+      })),
     };
   });
 
@@ -510,12 +535,14 @@ export function modelsModel(input: {
   return {
     manageCapable: input.manageCapable,
     hardwareCapable: input.hardwareCapable,
+    inferenceCapable: input.inferenceCapable,
     hasList: input.models !== null,
     role,
     roles: [...MODEL_ROLES],
     recommendedId,
     models: rows,
     bindings,
+    engineInstall: input.engineInstall ? installRow(input.engineInstall) : null,
   };
 }
 

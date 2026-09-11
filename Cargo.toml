@@ -21,12 +21,14 @@ repository = "https://github.com/adikeshri/valyria-app"
 [workspace.dependencies]
 # Core wire contract. The ONLY Core crates the app may depend on (D2).
 # Pinned to core.lock.json's git_rev; a bump moves this rev in the same PR.
-# Bumped for protocol 1.11.0 — license-gated + cancellable model install
-# (model_install_cancel, ModelInstallRequest.accept_license, license_text /
-# license_accepted_at_ms on model_inspect, display_name / parameters_b /
-# context_length / active_roles on model_list).
-valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "50a6bb8cbfddea985e90f233d44cba3dd955ccdd" }
-valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "50a6bb8cbfddea985e90f233d44cba3dd955ccdd" }
+# Protocol 1.12.0 — real local inference (model_server_* / engine_install_*
+# events, model_inference capability). Pinned to a commit on Core's
+# `feat/local-inference` branch (not yet merged to Core's main) rather than
+# a local path patch, so CI — which has no sibling ../valyria checkout —
+# can actually resolve the dependency. Move this rev to the merged main SHA
+# once that Core PR lands.
+valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "c01633a6aee543abc7276fed2e4ba4f7adf36001" }
+valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "c01633a6aee543abc7276fed2e4ba4f7adf36001" }
 
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "net"] }
 futures = "0.3"

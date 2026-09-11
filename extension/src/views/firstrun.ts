@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { modelInstall } from "@valyria/state";
+import { engineInstalls, modelInstall, modelServerForRole } from "@valyria/state";
 import { WebviewBase } from "./webviewBase";
 import { promptAndInstallModel } from "./modelInstall";
 import { DEFAULT_MODEL_ROLE } from "../store/models";
@@ -32,6 +32,10 @@ export class FirstRunViewProvider extends WebviewBase {
   private installedCount = 0;
   private recommendedId: string | undefined;
   private modelLoaded = false;
+  /** `model/activate` now blocks until the real server answers `/health`
+   *  or fails (`model_inference`) — this covers that wait so the step
+   *  shows "Starting the model server…" instead of looking stuck. */
+  private activating = false;
 
   constructor(
     extensionUri: vscode.Uri,
@@ -108,12 +112,25 @@ export class FirstRunViewProvider extends WebviewBase {
       message: string | null;
       code: string | null;
     } | null;
+    engineInstall: {
+      status: "running" | "completed" | "failed";
+      phase: string | null;
+      fraction: number | null;
+    } | null;
+    activating: boolean;
+    server: {
+      state: "starting" | "ready" | "failed" | "stopped";
+      port: number | null;
+      message: string | null;
+      code: string | null;
+    } | null;
   } {
+    const state = this.store.getState();
     const handled =
       this.context.globalState.get<boolean>(MODEL_STEP_KEY) === true || this.installedCount > 0;
-    const inst = this.recommendedId
-      ? modelInstall(this.store.getState(), this.recommendedId)
-      : undefined;
+    const inst = this.recommendedId ? modelInstall(state, this.recommendedId) : undefined;
+    const engineInst = engineInstalls(state)[0];
+    const server = modelServerForRole(state, DEFAULT_MODEL_ROLE);
     return {
       capable: this.supervisor.has("model_manage"),
       handled,
@@ -137,6 +154,19 @@ export class FirstRunViewProvider extends WebviewBase {
             code: inst.code,
           }
         : null,
+      engineInstall:
+        engineInst && engineInst.status !== "completed"
+          ? {
+              status: engineInst.status,
+              phase: engineInst.phase,
+              fraction:
+                engineInst.totalBytes > 0
+                  ? Math.max(0, Math.min(1, engineInst.downloadedBytes / engineInst.totalBytes))
+                  : null,
+            }
+          : null,
+      activating: this.activating,
+      server: server ? { state: server.state, port: server.port, message: server.message, code: server.code } : null,
     };
   }
 
@@ -180,14 +210,22 @@ export class FirstRunViewProvider extends WebviewBase {
     } else if (name === "firstRunActivateModel") {
       const id = (args as { id?: string } | undefined)?.id ?? this.recommendedId;
       if (!id) return;
+      this.activating = true;
+      this.push();
       try {
+        // Blocks until the real server answers `/health` or fails
+        // (`model_inference`) — the `model_server_starting`/`_ready`/
+        // `_failed` events driving `server` above arrive first and
+        // narrate the wait; this call's outcome is the final word.
         await this.host.client.request("model/activate", { id, role: DEFAULT_MODEL_ROLE });
         await this.context.globalState.update(MODEL_STEP_KEY, true);
         void vscode.window.showInformationMessage(`Valyria: ${id} is now your coding model.`);
         this.modelLoaded = false;
-        this.push();
       } catch (e) {
         void vscode.window.showErrorMessage(`Valyria: activate failed — ${String(e)}`);
+      } finally {
+        this.activating = false;
+        this.push();
       }
     } else if (name === "firstRunSkipModel") {
       await this.context.globalState.update(MODEL_STEP_KEY, true);

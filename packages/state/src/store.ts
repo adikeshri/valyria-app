@@ -141,6 +141,24 @@ export interface ModelInstallProjection {
   lastSeq: number;
 }
 
+/** A per-role managed model server folded from `model_server_starting` /
+ *  `_ready` / `_failed` / `_stopped` (workspace-global, `task_id: null`;
+ *  `model_inference` capability). One entry per role — Core serves at most
+ *  one model per role — the latest event wins. Replaces guessing "is the
+ *  activated model actually up" from a `setTimeout` refresh. */
+export interface ModelServerProjection {
+  /** `ModelRole` wire string, e.g. `primary_coder`. */
+  role: string;
+  modelId: string;
+  state: "starting" | "ready" | "failed" | "stopped";
+  /** Loopback port once `ready`; `null` otherwise. */
+  port: number | null;
+  /** `llamacpp.*` code on a failure. */
+  code: string | null;
+  message: string | null;
+  lastSeq: number;
+}
+
 export interface StoreState {
   connection: ConnectionState;
   /** contiguity cursor: the highest seq applied. `0` before the first event
@@ -157,6 +175,12 @@ export interface StoreState {
   tests: Record<string, TestProjection>;
   /** in-flight and recently-finished model installs, keyed by model id (§20) */
   modelInstalls: Record<string, ModelInstallProjection>;
+  /** in-flight and recently-finished inference-engine downloads (Core
+   *  fetching its own `llama-server`), keyed by component name
+   *  (`"llama.cpp"`) — same shape as a model install's progress trio. */
+  engineInstalls: Record<string, ModelInstallProjection>;
+  /** live per-role managed model servers, keyed by `ModelRole` wire string */
+  modelServers: Record<string, ModelServerProjection>;
   /** append-only; corrections arrive as later events, earlier rows never mutate (PLAN §3) */
   events: EventRow[];
 }
@@ -172,6 +196,8 @@ export function emptyStore(): StoreState {
     files: {},
     tests: {},
     modelInstalls: {},
+    engineInstalls: {},
+    modelServers: {},
     events: [],
   };
 }

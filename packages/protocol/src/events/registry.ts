@@ -19,11 +19,14 @@
 
 import { z } from "zod";
 
-/** The event kinds `valyria_events::EventKind` emits (protocol 1.9.0). Keep
+/** The event kinds `valyria_events::EventKind` emits (protocol 1.12.0). Keep
  *  sorted and in sync with `schemas/event-kinds.txt`. */
 export const KNOWN_EVENT_KINDS = [
   "approval_requested",
   "context_retrieved",
+  "engine_install_completed",
+  "engine_install_failed",
+  "engine_install_progress",
   "external_change_detected",
   "file_changed",
   "memory_written",
@@ -31,6 +34,10 @@ export const KNOWN_EVENT_KINDS = [
   "model_install_completed",
   "model_install_failed",
   "model_install_progress",
+  "model_server_failed",
+  "model_server_ready",
+  "model_server_starting",
+  "model_server_stopped",
   "model_started",
   "plan_checkpoint",
   "plan_created",
@@ -115,6 +122,46 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
     .passthrough(),
   model_install_failed: z
     .object({ id: s.optional(), code: s.optional(), message: s.optional() })
+    .passthrough(),
+  // Core downloads its own inference engine (llama.cpp) the first time a
+  // model is activated — same shape as a model install's progress trio.
+  engine_install_progress: z
+    .object({
+      component: s.optional(),
+      version: s.optional(),
+      phase: s.optional(),
+      downloaded_bytes: z.number().optional(),
+      total_bytes: z.number().optional(),
+    })
+    .passthrough(),
+  engine_install_completed: z
+    .object({ component: s.optional(), version: s.optional() })
+    .passthrough(),
+  engine_install_failed: z
+    .object({
+      component: s.optional(),
+      version: s.optional(),
+      code: s.optional(),
+      message: s.optional(),
+    })
+    .passthrough(),
+  // A per-role managed `llama-server`'s lifecycle (`model_inference`).
+  model_server_starting: z
+    .object({ role: s.optional(), id: s.optional() })
+    .passthrough(),
+  model_server_ready: z
+    .object({ role: s.optional(), id: s.optional(), port: z.number().optional() })
+    .passthrough(),
+  model_server_failed: z
+    .object({
+      role: s.optional(),
+      id: s.optional(),
+      code: s.optional(),
+      message: s.optional(),
+    })
+    .passthrough(),
+  model_server_stopped: z
+    .object({ role: s.optional(), id: s.optional(), reason: s.optional() })
     .passthrough(),
   external_change_detected: z
     .object({ paths: z.array(s).optional() })

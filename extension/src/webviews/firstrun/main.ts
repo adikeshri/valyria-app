@@ -25,6 +25,18 @@ interface ModelStep {
     message: string | null;
     code: string | null;
   } | null;
+  /** Core downloading its own inference engine (llama.cpp) — usually
+   *  finishes during install's own probe step, but can still be in
+   *  flight here if that was skipped. */
+  engineInstall: { status: "running" | "completed" | "failed"; phase: string | null; fraction: number | null } | null;
+  /** True while the (now-blocking) `model/activate` call is in flight. */
+  activating: boolean;
+  server: {
+    state: "starting" | "ready" | "failed" | "stopped";
+    port: number | null;
+    message: string | null;
+    code: string | null;
+  } | null;
 }
 
 interface FirstRunModel {
@@ -86,10 +98,30 @@ function modelStepEl(m: FirstRunModel): HTMLElement {
               ? "Checking it runs…"
               : "Preparing…" }));
     } else if (s.install.status === "completed") {
-      body.push(h("p", { class: "vy-empty", text: "Downloaded. Activate it as your coding model to finish." }));
-      const act = h("button", { class: "vy-btn vy-btn--primary", type: "button" }, "Use this model") as HTMLButtonElement;
-      act.addEventListener("click", () => ctrl?.command("firstRunActivateModel", { id: s.recommendedId }));
-      body.push(act);
+      if (s.engineInstall && s.engineInstall.status === "running") {
+        const pct = s.engineInstall.fraction != null ? Math.round(s.engineInstall.fraction * 100) : null;
+        const bar = h("div", { class: "fr-bar", role: "progressbar" });
+        const fill = h("div", { class: "fr-bar-fill" });
+        if (pct != null) fill.style.width = `${pct}%`;
+        bar.append(fill);
+        body.push(bar);
+        body.push(h("p", { class: "vy-empty", text: `Fetching the inference engine${pct != null ? ` — ${pct}%` : "…"}` }));
+      }
+      if (s.activating) {
+        body.push(h("p", { class: "vy-empty", text: "Starting the model server…" }));
+        const act = h("button", { class: "vy-btn vy-btn--primary", type: "button", disabled: true }, "Starting…") as HTMLButtonElement;
+        body.push(act);
+      } else if (s.server?.state === "failed") {
+        body.push(h("p", { class: "vy-empty", text: `Could not start the model server: ${s.server.message ?? s.server.code ?? "Core did not report a reason"}` }));
+        const retry = h("button", { class: "vy-btn vy-btn--primary", type: "button" }, "Try again") as HTMLButtonElement;
+        retry.addEventListener("click", () => ctrl?.command("firstRunActivateModel", { id: s.recommendedId }));
+        body.push(retry);
+      } else {
+        body.push(h("p", { class: "vy-empty", text: "Downloaded. Activate it as your coding model to finish." }));
+        const act = h("button", { class: "vy-btn vy-btn--primary", type: "button" }, "Use this model") as HTMLButtonElement;
+        act.addEventListener("click", () => ctrl?.command("firstRunActivateModel", { id: s.recommendedId }));
+        body.push(act);
+      }
     } else {
       const cancelled = s.install.code === "model_store.cancelled";
       body.push(h("p", { class: "vy-empty", text:

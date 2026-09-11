@@ -27,8 +27,8 @@ use valyria_bridge::{
 
 use rpc::{read_frame, write_frame, Incoming, Notification, Outgoing, Response, RpcError};
 
-/// Protocol major this build negotiates against (core.lock.json → 1.11.0).
-const EXPECTED_PROTOCOL: &str = "1.11.0";
+/// Protocol major this build negotiates against (core.lock.json → 1.12.0).
+const EXPECTED_PROTOCOL: &str = "1.12.0";
 
 /// Bounded backoff for re-establishing a daemon that dropped its stream.
 const RESTART_BACKOFF_MS: [u64; 6] = [200, 500, 1000, 2000, 4000, 8000];
@@ -387,6 +387,15 @@ async fn dispatch(host: &Arc<Host>, out_tx: &OutTx, req: &Incoming) -> Result<Va
             with_client(host, |c| async move { c.model_remove(&id).await }).await
         }
         "model/activate" => {
+            let id = str_param(req, "id")?;
+            let role = str_param(req, "role")?;
+            with_client(host, |c| async move { c.model_activate(&id, &role).await }).await
+        }
+        // Re-point a role at the model already bound to it (`model_inference`):
+        // Core's `model_activate` is idempotent-safe to call again, so a
+        // "Restart server" action is just that same call with the id read
+        // back from the client rather than a distinct wire method.
+        "model/restartServer" => {
             let id = str_param(req, "id")?;
             let role = str_param(req, "role")?;
             with_client(host, |c| async move { c.model_activate(&id, &role).await }).await

@@ -3,28 +3,40 @@
 `scripts/build.sh [gulp-target]` on each target OS. It:
 
 1. builds `valyria-bridge-host` (release) for the host triple → `extension/bin/`;
-2. copies a Core binary from `$VALYRIA_CORE_BIN` → `extension/bin/valyria`
-   (built elsewhere from the `core.lock.json` rev, per triple);
+2. bundles a Core binary at `extension/bin/valyria[.exe]` — either already
+   staged there (`.github/workflows/release.yml` downloads and
+   checksum-verifies it from Core's GitHub Release before calling this
+   script, per `core.lock.json`'s `release` block — see
+   [RELEASING.md](RELEASING.md)) or supplied locally via `$VALYRIA_CORE_BIN`;
 3. compiles the extension;
-4. runs the Code-OSS gulp bundler for the host platform;
+4. runs the Code-OSS gulp bundler for the host platform (an unpacked
+   `VSCode-<platform>-<arch>/` app directory — `build.sh` itself stops here;
+   `release.yml` does the final installer packaging below);
 5. runs the signing hooks **if** the relevant credentials are in the env.
 
 ## Sidecars
 
-Both `valyria-bridge-host` and `valyria` ship inside the app as `externalBin`
+Both `valyria-bridge-host` and `valyria` ship inside the app's `bin/`
 resources. The extension resolves them via `context.extensionPath/bin/` (dev)
 and the packaged resources `bin/` dir (release) — see
 `extension/src/bridge/host.ts`. Model **weights are never bundled** and never
 touched by an app update (§38); a release-gate test asserts the model store is
 byte-identical across an upgrade.
 
-## Per-OS gulp targets
+## Per-OS gulp targets and installer packaging
 
-| OS | target(s) |
-|---|---|
-| macOS | `vscode-darwin-arm64-min`, `vscode-darwin-x64-min`, then a universal merge |
-| Windows | `vscode-win32-x64`, `vscode-win32-arm64` (+ inno-setup for the installer) |
-| Linux | `vscode-linux-x64-min` + `-build-deb` / `-build-rpm`; AppImage / snap separately |
+`build.sh`'s gulp step produces an unpacked app directory per platform/arch;
+`release.yml` wraps that into the actual distributable artifact using tooling
+already vendored in the `vscode/` submodule:
+
+| OS | gulp target(s) | installer artifact(s) |
+|---|---|---|
+| macOS (arm64, x64 — separately, no universal merge for v1) | `vscode-darwin-arm64-min`, `vscode-darwin-x64-min` | `.dmg` via the vendored `vscode/build/darwin/create-dmg.ts`; `.zip` via `ditto` (not plain `zip`, which corrupts `.app` bundles) as a fallback |
+| Windows (x64) | `vscode-win32-x64-min` (build), then `vscode-win32-x64-user-setup` (already defined in `vscode/build/gulpfile.vscode.win32.ts`) | real Inno Setup `.exe` installer |
+| Linux (x64) | `vscode-linux-x64-min` + `-build-deb` + `-build-rpm` | `.deb`, `.rpm`, plus a plain `.tar.gz` of the unpacked tree |
+
+Every packaged artifact is checksummed (`sha256`) and checked against
+`scripts/check-installer-size.sh`'s budget before upload.
 
 ## Signing (needs credentials — not in the repo)
 

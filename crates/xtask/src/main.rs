@@ -1,16 +1,25 @@
 //! `cargo run -p xtask -- <check>`
 //!
-//!   check-layering   valyria-bridge depends on no Core crate outside the
-//!                    D2 allowlist ({valyria-protocol, valyria-types})
-//!   check-protocol   the vendored protocol schemas match the pinned Core
-//!                    checkout, when one is present next to this repo
-//!   verify-core      core.lock.json is internally consistent and matches
-//!                    the vendored version.txt
-//!   check-extension  the Code-OSS-fork extension declares only the
-//!                    `@valyria/*` + `zod` runtime deps, references no
-//!                    xterm/PTY package (D7), `valyria-bridge-host` exposes no
-//!                    PTY methods, and no source file carries a banned generic
-//!                    error string (§36)
+//!   check-layering      valyria-bridge depends on no Core crate outside the
+//!                       D2 allowlist ({valyria-protocol, valyria-types})
+//!   check-protocol      the vendored protocol schemas match the pinned Core
+//!                       checkout, when one is present next to this repo
+//!   verify-core         core.lock.json is internally consistent (git_rev,
+//!                       protocol_version) and its `release` block (the
+//!                       prebuilt Core binary pin, docs/RELEASING.md) is
+//!                       well-formed — offline, safe for every CI job
+//!   verify-core-release core.lock.json's `release.tag` actually exists on
+//!                       Core's GitHub repo and resolves to the same commit
+//!                       as `git_rev` — needs network, release pipeline only,
+//!                       deliberately NOT part of `all`/ci.yml
+//!   check-versions      every package.json/Cargo.toml version field in this
+//!                       repo agrees (scripts/sync-version.mjs is the only
+//!                       thing that should ever change them)
+//!   check-extension     the Code-OSS-fork extension declares only the
+//!                       `@valyria/*` + `zod` runtime deps, references no
+//!                       xterm/PTY package (D7), `valyria-bridge-host` exposes
+//!                       no PTY methods, and no source file carries a banned
+//!                       generic error string (§36)
 //!
 //! Exit code is non-zero on the first failure so CI fails loudly.
 
@@ -24,15 +33,18 @@ fn main() -> ExitCode {
         Some("check-layering") => check_layering(&repo),
         Some("check-protocol") => check_protocol(&repo),
         Some("verify-core") => verify_core(&repo),
+        Some("verify-core-release") => verify_core_release(&repo),
+        Some("check-versions") => check_versions(&repo),
         Some("check-extension") => check_extension(&repo),
         Some("all") => check_layering(&repo)
             .and_then(|_| verify_core(&repo))
+            .and_then(|_| check_versions(&repo))
             .and_then(|_| check_protocol(&repo))
             .and_then(|_| check_extension(&repo)),
         other => {
             eprintln!("unknown task: {other:?}");
             eprintln!(
-                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|check-extension|all>"
+                "usage: cargo run -p xtask -- <check-layering|check-protocol|verify-core|verify-core-release|check-versions|check-extension|all>"
             );
             return ExitCode::from(2);
         }
@@ -154,8 +166,205 @@ fn verify_core(repo: &Path) -> Result<(), String> {
         ));
     }
 
+    verify_release_block(&lock)?;
+
     println!("verify-core: ok — pinned to {rev}, protocol {lock_proto}");
     Ok(())
+}
+
+/// The `release` block names the prebuilt Core GitHub Release binary the
+/// app's release pipeline downloads and checksums for each platform
+/// (docs/RELEASING.md §Core binary). Offline shape check only — whether the
+/// tag/checksums are actually correct is `verify-core-release`'s job.
+const RELEASE_TARGETS: &[&str] = &[
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+];
+
+fn verify_release_block(lock: &serde_json::Value) -> Result<(), String> {
+    let release = lock
+        .get("release")
+        .ok_or("core.lock.json: missing `release` block (the prebuilt Core binary pin)")?;
+
+    let tag = release
+        .get("tag")
+        .and_then(|v| v.as_str())
+        .ok_or("core.lock.json: release.tag missing or not a string")?;
+    if !tag.starts_with('v') || tag.len() < 2 {
+        return Err(format!(
+            "core.lock.json: release.tag {tag:?} must look like a version tag (e.g. \"v0.2.0\")"
+        ));
+    }
+    // Strip the leading `v` and any `-rc.N`/`-alpha.N` prerelease suffix to get
+    // the bare version the asset-naming convention embeds.
+    let version = tag[1..].split('-').next().unwrap_or(&tag[1..]);
+
+    let artifacts = release
+        .get("artifacts")
+        .and_then(|v| v.as_object())
+        .ok_or("core.lock.json: release.artifacts missing or not an object")?;
+
+    for target in RELEASE_TARGETS {
+        let entry = artifacts
+            .get(*target)
+            .ok_or_else(|| format!("core.lock.json: release.artifacts is missing {target}"))?;
+
+        let asset = entry
+            .get("asset")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| format!("core.lock.json: release.artifacts.{target}.asset missing"))?;
+        let expected_ext = if *target == "x86_64-pc-windows-msvc" {
+            ".exe"
+        } else {
+            ""
+        };
+        let expected = format!("valyria-{version}-{target}{expected_ext}");
+        if asset != expected {
+            return Err(format!(
+                "core.lock.json: release.artifacts.{target}.asset is {asset:?}, expected {expected:?} \
+                 (naming convention: valyria-<version>-<triple>[.exe])"
+            ));
+        }
+
+        let sha256 = entry
+            .get("sha256")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| format!("core.lock.json: release.artifacts.{target}.sha256 missing"))?;
+        if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(format!(
+                "core.lock.json: release.artifacts.{target}.sha256 is not a 64-char hex digest"
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+// --- verify-core-release (network — release pipeline only, not ci.yml) --
+
+/// Confirms `core.lock.json`'s `release.tag` really exists on Core's GitHub
+/// repo and resolves to the same commit as `git_rev` — i.e. the binary the
+/// app is about to download and the protocol crates it was compiled against
+/// come from the same Core commit. Needs network (`git ls-remote`), so this
+/// is never part of `all`/ci.yml; it's an explicit step in release.yml.
+fn verify_core_release(repo: &Path) -> Result<(), String> {
+    let lock_path = repo.join("core.lock.json");
+    let lock_text = std::fs::read_to_string(&lock_path)
+        .map_err(|e| format!("reading {}: {e}", lock_path.display()))?;
+    let lock: serde_json::Value =
+        serde_json::from_str(&lock_text).map_err(|e| format!("parsing core.lock.json: {e}"))?;
+
+    let git_rev = lock
+        .get("git_rev")
+        .and_then(|v| v.as_str())
+        .ok_or("core.lock.json: missing git_rev")?;
+    let repository = lock
+        .get("release")
+        .and_then(|r| r.get("repository"))
+        .and_then(|v| v.as_str())
+        .or_else(|| lock.get("repository").and_then(|v| v.as_str()))
+        .ok_or("core.lock.json: missing release.repository / repository")?;
+    let tag = lock
+        .get("release")
+        .and_then(|r| r.get("tag"))
+        .and_then(|v| v.as_str())
+        .ok_or("core.lock.json: missing release.tag")?;
+
+    let output = std::process::Command::new("git")
+        .args(["ls-remote", repository, &format!("refs/tags/{tag}")])
+        .output()
+        .map_err(|e| format!("running `git ls-remote {repository} refs/tags/{tag}`: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "git ls-remote {repository} refs/tags/{tag} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let resolved = stdout
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| format!("release.tag {tag:?} does not exist on {repository}"))?;
+
+    if resolved != git_rev {
+        return Err(format!(
+            "release.tag {tag:?} resolves to {resolved}, but core.lock.json's git_rev is {git_rev} — \
+             the shipped Core binary and the compiled-in protocol crates would come from different commits"
+        ));
+    }
+
+    println!("verify-core-release: ok — {tag} on {repository} resolves to {git_rev}");
+    Ok(())
+}
+
+// --- check-versions -------------------------------------------------------
+
+/// Every version field in the repo that a release depends on. Kept in sync
+/// only by `scripts/sync-version.mjs` — never hand-edited (that's how they
+/// drifted to 0.0.0 / 0.1.0 / 0.1.0 before this check existed).
+const VERSIONED_PACKAGE_JSONS: &[&str] = &[
+    "package.json",
+    "extension/package.json",
+    "chrome/package.json",
+    "theme/package.json",
+    "packages/protocol/package.json",
+    "packages/state/package.json",
+];
+
+fn check_versions(repo: &Path) -> Result<(), String> {
+    let mut versions: Vec<(String, String)> = Vec::new();
+
+    for rel in VERSIONED_PACKAGE_JSONS {
+        let path = repo.join(rel);
+        let text = std::fs::read_to_string(&path).map_err(|e| format!("reading {rel}: {e}"))?;
+        let json: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("parsing {rel}: {e}"))?;
+        let version = json
+            .get("version")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| format!("{rel}: missing \"version\""))?;
+        versions.push((rel.to_string(), version.to_string()));
+    }
+
+    let cargo_path = repo.join("Cargo.toml");
+    let cargo_text = std::fs::read_to_string(&cargo_path)
+        .map_err(|e| format!("reading {}: {e}", cargo_path.display()))?;
+    let cargo_toml: toml::Value =
+        toml::from_str(&cargo_text).map_err(|e| format!("parsing Cargo.toml: {e}"))?;
+    let cargo_version = cargo_toml
+        .get("workspace")
+        .and_then(|w| w.get("package"))
+        .and_then(|p| p.get("version"))
+        .and_then(|v| v.as_str())
+        .ok_or("Cargo.toml: missing [workspace.package] version")?;
+    versions.push((
+        "Cargo.toml [workspace.package]".to_string(),
+        cargo_version.to_string(),
+    ));
+
+    let expected = &versions[0].1;
+    let offenders: Vec<String> = versions
+        .iter()
+        .filter(|(_, v)| v != expected)
+        .map(|(rel, v)| format!("{rel} is {v}"))
+        .collect();
+
+    if offenders.is_empty() {
+        println!(
+            "check-versions: ok — all {} version fields are {expected}",
+            versions.len()
+        );
+        Ok(())
+    } else {
+        Err(format!(
+            "version fields disagree (expected {expected} from {}): {}\n\
+             Run `node scripts/sync-version.mjs <version>` to fix — never hand-edit these.",
+            versions[0].0,
+            offenders.join(", ")
+        ))
+    }
 }
 
 // --- check-protocol ----------------------------------------------------

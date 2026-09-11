@@ -1,0 +1,381 @@
+name: Release
+
+# Builds branded Valyria installers for macOS/Linux/Windows and publishes a
+# draft GitHub Release. See docs/RELEASING.md for the full pipeline
+# description, docs/PACKAGING.md for the packaging tooling, and
+# core.lock.json's `release` block for how the bundled Core binary is pinned
+# and verified.
+#
+# Never creates or pushes a tag itself: `push: tags` builds/publishes a tag
+# that already exists, and `workflow_dispatch`'s `tag` input must also name
+# an existing tag.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing valyria-app tag to (re)build and publish"
+        required: true
+      core_tag_override:
+        description: >-
+          Override core.lock.json's pinned Core release tag (testing only —
+          see docs/RELEASING.md's bootstrap order; normally you'd edit
+          core.lock.json on a branch instead, since the pinned checksums
+          need to match whatever tag is used)
+        required: false
+        default: ""
+
+permissions:
+  contents: write # gh release create
+
+env:
+  RUST_TOOLCHAIN: "1.97.1"
+  NODE_VERSION: "24.20"
+  # Fetch git dependencies (the ../valyria Core crates) with the system `git`
+  # rather than cargo's built-in fetcher — matches ci.yml's workaround for
+  # stalls seen against that repo on hosted runners.
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+
+jobs:
+  check:
+    name: Version/tag + Core release consistency
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          TAG="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          case "$TAG" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          submodules: false # these checks never touch vscode/
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Version fields internally consistent (xtask check-versions)
+        run: cargo run -q -p xtask -- check-versions
+
+      - name: Version fields match the tag
+        run: |
+          set -euo pipefail
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PKG_VERSION" != "${{ steps.tag.outputs.version }}" ]; then
+            echo "package.json version ($PKG_VERSION) does not match tag ${{ steps.tag.outputs.tag }}" >&2
+            echo "run: node scripts/sync-version.mjs ${{ steps.tag.outputs.version }}" >&2
+            exit 1
+          fi
+          echo "OK — version $PKG_VERSION matches tag ${{ steps.tag.outputs.tag }}"
+
+      - name: Core release pin resolves (xtask verify-core-release)
+        if: inputs.core_tag_override == '' || inputs.core_tag_override == null
+        run: cargo run -q -p xtask -- verify-core-release
+
+      - name: Core release pin overridden — skipping committed-pin check
+        if: inputs.core_tag_override != ''
+        run: |
+          echo "core_tag_override=${{ inputs.core_tag_override }} — skipping the committed" \
+               "core.lock.json network check. Testing only; see docs/RELEASING.md."
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+            vscode_platform: darwin
+            vscode_arch: arm64
+          # Cross-compiled from the same arm64 runner — see docs/RELEASING.md
+          # and Core's own release.yml for why this is safe today.
+          - target: x86_64-apple-darwin
+            os: macos-14
+            vscode_platform: darwin
+            vscode_arch: x64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+            vscode_platform: linux
+            vscode_arch: x64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            vscode_platform: win32
+            vscode_arch: x64
+    runs-on: ${{ matrix.os }}
+    env:
+      # vscode/build/npm/postinstall.ts reads this to pick which arch's
+      # native Electron/node modules to fetch — required for the x64-darwin
+      # leg to cross-build correctly from an arm64 runner.
+      npm_config_arch: ${{ matrix.vscode_arch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.tag }}
+          submodules: recursive
+          fetch-depth: 1
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.target }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Icon tooling (Pillow for scripts/gen-icons.py, fontTools for chrome/)
+        run: python3 -m pip install --user Pillow "fonttools==4.60.0"
+
+      - name: Bootstrap (submodule overlay + patches + icons)
+        shell: bash
+        run: scripts/bootstrap.sh
+
+      - name: Download + verify pinned Core binary
+        shell: bash
+        env:
+          CORE_TAG_OVERRIDE: ${{ inputs.core_tag_override }}
+        run: |
+          set -euo pipefail
+          TARGET="${{ matrix.target }}"
+          REPO=$(node -p "require('./core.lock.json').release.repository")
+          TAG="${CORE_TAG_OVERRIDE:-$(node -p "require('./core.lock.json').release.tag")}"
+          ASSET=$(node -p "require('./core.lock.json').release.artifacts['$TARGET'].asset")
+          EXPECTED_SHA=$(node -p "require('./core.lock.json').release.artifacts['$TARGET'].sha256")
+          URL="${REPO%.git}/releases/download/$TAG/$ASSET"
+
+          echo "downloading $URL"
+          curl -fsSL "$URL" -o /tmp/valyria-core
+
+          if command -v shasum >/dev/null 2>&1; then
+            ACTUAL_SHA=$(shasum -a 256 /tmp/valyria-core | cut -d' ' -f1)
+          else
+            ACTUAL_SHA=$(sha256sum /tmp/valyria-core | cut -d' ' -f1)
+          fi
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "checksum mismatch for $ASSET: expected $EXPECTED_SHA, got $ACTUAL_SHA" >&2
+            exit 1
+          fi
+          echo "checksum OK — $ASSET matches pinned sha256"
+
+          mkdir -p extension/bin
+          if [ "$TARGET" = "x86_64-pc-windows-msvc" ]; then
+            cp /tmp/valyria-core extension/bin/valyria.exe
+          else
+            cp /tmp/valyria-core extension/bin/valyria
+            chmod +x extension/bin/valyria
+          fi
+
+      - name: Write core-provenance.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("fs");
+            const lock = JSON.parse(fs.readFileSync("core.lock.json", "utf8"));
+            const provenance = {
+              core_repo: lock.release.repository,
+              core_release_tag: lock.release.tag,
+              core_git_rev: lock.git_rev,
+              protocol_version: lock.protocol_version,
+              built_at: new Date().toISOString(),
+            };
+            fs.writeFileSync("extension/core-provenance.json", JSON.stringify(provenance, null, 2) + "\n");
+            console.log("wrote extension/core-provenance.json:", JSON.stringify(provenance));
+          '
+        # NOTE: the extension does not yet read this file for an in-app
+        # About-page display — that's a follow-up. This step only makes sure
+        # the file ships (any file under extension/ rides along with the
+        # built-in extension automatically) and is available for the
+        # publish job's release notes.
+
+      - name: Build valyria-bridge-host (${{ matrix.target }})
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --release --locked -p valyria-bridge-host --target ${{ matrix.target }}
+          mkdir -p extension/bin
+          if [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ]; then
+            cp "target/${{ matrix.target }}/release/valyria-bridge-host.exe" extension/bin/valyria-bridge-host.exe
+          else
+            cp "target/${{ matrix.target }}/release/valyria-bridge-host" extension/bin/valyria-bridge-host
+          fi
+
+      - name: Code-OSS branded build (gulp min)
+        shell: bash
+        run: scripts/build.sh "vscode-${{ matrix.vscode_platform }}-${{ matrix.vscode_arch }}-min"
+
+      # --- Packaging: build.sh stops at the unpacked gulp output; wrap it
+      # into the real distributable artifact per OS using tooling already
+      # vendored in vscode/ (see docs/PACKAGING.md). ---
+
+      - name: Package (macOS)
+        if: matrix.vscode_platform == 'darwin'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          VERSION="${{ needs.check.outputs.version }}"
+          ARCH="${{ matrix.vscode_arch }}"
+          APP_DIR="VSCode-darwin-${ARCH}"
+
+          # .zip fallback — `ditto` (not plain `zip`, which corrupts .app
+          # bundles) preserves resource forks/xattrs.
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$APP_DIR/Valyria.app" "dist/Valyria-${VERSION}-darwin-${ARCH}.zip"
+
+          # .dmg via Code-OSS's own vendored dmgbuild-based tool.
+          # NOTE: create-dmg.ts's disk title text is hardcoded per
+          # $VSCODE_QUALITY (VS Code's own branding strings) — it does not
+          # read product.json's Valyria branding for the DMG volume title.
+          # VSCODE_QUALITY=stable matches product.json's own "quality"
+          # field, but the resulting DMG title cosmetically says "VS Code",
+          # not "Valyria". Known follow-up: patch
+          # vscode/build/darwin/create-dmg.ts (via build/patches/, the same
+          # mechanism scripts/bootstrap.sh already uses) to read
+          # product.nameLong instead.
+          VSCODE_ARCH="$ARCH" VSCODE_QUALITY=stable \
+            node --experimental-strip-types vscode/build/darwin/create-dmg.ts "$PWD" "$PWD/dist"
+
+      - name: Package (Linux)
+        if: matrix.vscode_platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.check.outputs.version }}"
+          ARCH="${{ matrix.vscode_arch }}"
+          ( cd vscode && npx gulp "vscode-linux-${ARCH}-build-deb" && npx gulp "vscode-linux-${ARCH}-build-rpm" )
+          mkdir -p dist
+
+          # Output subdir under vscode/.build/linux/{deb,rpm}/ is named by
+          # the deb/rpm-flavored arch string, not the plain gulp arch — glob
+          # for the built package rather than hardcode that mapping.
+          DEB=$(find vscode/.build/linux/deb -name '*.deb' -print -quit)
+          RPM=$(find vscode/.build/linux/rpm -name '*.rpm' -print -quit)
+          [ -n "$DEB" ] && cp "$DEB" "dist/Valyria-${VERSION}-linux-${ARCH}.deb"
+          [ -n "$RPM" ] && cp "$RPM" "dist/Valyria-${VERSION}-linux-${ARCH}.rpm"
+
+          tar czf "dist/Valyria-${VERSION}-linux-${ARCH}.tar.gz" -C "VSCode-linux-${ARCH}" .
+
+      - name: Package (Windows)
+        if: matrix.vscode_platform == 'win32'
+        shell: bash
+        run: |
+          cd vscode
+          npx gulp "vscode-win32-${{ matrix.vscode_arch }}-user-setup"
+
+      - name: Collect Windows artifacts
+        if: matrix.vscode_platform == 'win32'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $version = "${{ needs.check.outputs.version }}"
+          $arch = "${{ matrix.vscode_arch }}"
+
+          $exe = Get-ChildItem "vscode\.build\win32-$arch\user-setup\*.exe" | Select-Object -First 1
+          Copy-Item $exe.FullName "dist\Valyria-$version-win32-$arch-setup.exe"
+
+          # Portable no-install .zip of the unpacked min build.
+          Compress-Archive -Path "VSCode-win32-$arch\*" -DestinationPath "dist\Valyria-$version-win32-$arch.zip"
+
+      - name: Checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          for f in *; do
+            if command -v shasum >/dev/null 2>&1; then
+              shasum -a 256 "$f" > "$f.sha256"
+            else
+              sha256sum "$f" > "$f.sha256"
+            fi
+          done
+          ls -la
+
+      - name: Installer size budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=()
+          for f in dist/*; do
+            [[ "$f" == *.sha256 ]] && continue
+            files+=("$f")
+          done
+          bash scripts/check-installer-size.sh "${files[@]}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release (draft)
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.tag }}
+          submodules: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: app-*
+          path: collected
+          merge-multiple: true
+
+      - name: Assemble SHA256SUMS
+        working-directory: collected
+        run: cat -- *.sha256 > SHA256SUMS
+
+      - name: Release notes
+        id: notes
+        run: |
+          set -euo pipefail
+          CORE_TAG=$(node -p "require('./core.lock.json').release.tag")
+          CORE_REV=$(node -p "require('./core.lock.json').git_rev")
+          PROTOCOL=$(node -p "require('./core.lock.json').protocol_version")
+          {
+            echo "notes<<EOF"
+            echo "Valyria ${{ needs.check.outputs.tag }}"
+            echo ""
+            echo "Bundled Core: $CORE_TAG ($CORE_REV), protocol $PROTOCOL."
+            echo ""
+            echo "Signing: unsigned (no MACOS_SIGN_IDENTITY / WINDOWS_SIGN_PFX secrets"
+            echo "configured yet — see docs/RELEASING.md)."
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.check.outputs.tag }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          FLAGS=(--draft)
+          [ "$PRERELEASE" = "true" ] && FLAGS+=(--prerelease)
+          gh release create "$TAG" collected/* \
+            --title "Valyria $TAG" \
+            --notes "${{ steps.notes.outputs.notes }}" \
+            "${FLAGS[@]}"

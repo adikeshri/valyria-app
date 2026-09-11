@@ -9,6 +9,7 @@
  * is upstream Code-OSS and this extension does not touch it.
  */
 import * as vscode from "vscode";
+import { modelInstalls, modelServers } from "@valyria/state";
 import { BridgeHost } from "./bridge/host";
 import type { JsonRpcClient } from "./bridge/client";
 import { registerCommands } from "./commands";
@@ -153,6 +154,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (resumePrompted || supervisor.state !== "ready") return;
       resumePrompted = true;
       void maybePromptResume(store, focus, dispatch, log);
+    }),
+  });
+
+  // `refreshRuntimeMarker` otherwise only runs once, right after
+  // `supervisor.open()` — so the status bar's "Model: …" text went stale
+  // the moment a user activated, restarted, or removed a model from the
+  // Model Manager for the rest of the session. Re-run it whenever a
+  // *terminal* model-install or model-server event lands (not on every
+  // progress tick, which doesn't change `active_roles`).
+  let lastModelTerminalSeq = 0;
+  context.subscriptions.push({
+    dispose: store.onDidChange(() => {
+      if (supervisor.state !== "ready") return;
+      const state = store.getState();
+      const latest = Math.max(
+        0,
+        ...modelInstalls(state)
+          .filter((m) => m.status !== "running")
+          .map((m) => m.lastSeq),
+        ...modelServers(state)
+          .filter((s) => s.state === "ready" || s.state === "failed" || s.state === "stopped")
+          .map((s) => s.lastSeq)
+      );
+      if (latest > lastModelTerminalSeq) {
+        lastModelTerminalSeq = latest;
+        void refreshRuntimeMarker();
+      }
     }),
   });
 

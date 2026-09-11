@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { modelInstalls } from "@valyria/state";
+import { engineInstalls, modelInstalls, modelServers } from "@valyria/state";
 import { WebviewBase } from "./webviewBase";
 import { modelsModel, DEFAULT_MODEL_ROLE, MODEL_ROLES } from "../store/models";
 import { promptAndInstallModel } from "./modelInstall";
@@ -49,13 +49,17 @@ export class ModelsViewProvider extends WebviewBase {
   }
 
   protected buildModel(): unknown {
+    const state = this.store.getState();
     return modelsModel({
       models: this.models,
       recommend: this.recommend,
-      installs: modelInstalls(this.store.getState()),
+      installs: modelInstalls(state),
+      servers: modelServers(state),
+      engineInstall: engineInstalls(state)[0] ?? null,
       role: this.role,
       manageCapable: this.supervisor.has("model_manage"),
       hardwareCapable: this.supervisor.has("hardware"),
+      inferenceCapable: this.supervisor.has("model_inference"),
     });
   }
 
@@ -82,6 +86,9 @@ export class ModelsViewProvider extends WebviewBase {
       case "activateModel":
         if (a.id && a.role) void this.activate(a.id, a.role);
         break;
+      case "restartServer":
+        if (a.id && a.role) void this.restartServer(a.id, a.role);
+        break;
       case "removeModel":
         if (a.id) void this.remove(a.id);
         break;
@@ -92,9 +99,39 @@ export class ModelsViewProvider extends WebviewBase {
     void this.refresh();
     return [
       this.supervisor.onDidChange(refresh),
-      // Install progress arrives on the event stream — re-render on every batch.
-      { dispose: this.store.onDidChange(refresh) },
+      // Every batch re-renders cheaply (install/server progress lives in
+      // the store already); a batch that actually finished an install or
+      // changed a server's state also re-fetches `model/list` so
+      // `installed` / `active_roles` — which only that RPC carries —
+      // catch up without a guessed `setTimeout`.
+      { dispose: this.store.onDidChange(() => this.onStoreChange(refresh)) },
     ];
+  }
+
+  private lastTerminalSeq = 0;
+
+  /** Only a *terminal* install/server event changes what `model/list`
+   *  reports (`installed`, `active_roles`) — an in-flight
+   *  `model_install_progress` tick doesn't, so re-fetching on every one of
+   *  those would just be chatty. Everything else still re-renders cheaply
+   *  off the store's already-current progress bars. */
+  private onStoreChange(cheapRerender: () => void): void {
+    const state = this.store.getState();
+    const latestTerminal = Math.max(
+      0,
+      ...modelInstalls(state)
+        .filter((m) => m.status !== "running")
+        .map((m) => m.lastSeq),
+      ...modelServers(state)
+        .filter((s) => s.state === "ready" || s.state === "failed" || s.state === "stopped")
+        .map((s) => s.lastSeq)
+    );
+    if (latestTerminal > this.lastTerminalSeq) {
+      this.lastTerminalSeq = latestTerminal;
+      void this.refresh();
+    } else {
+      cheapRerender();
+    }
   }
 
   private async refresh(): Promise<void> {
@@ -124,8 +161,10 @@ export class ModelsViewProvider extends WebviewBase {
   }
 
   private async install(id: string): Promise<void> {
-    const started = await promptAndInstallModel(this.host, id);
-    if (started) setTimeout(() => void this.refresh(), 1000);
+    // No `setTimeout` follow-up needed: `onStoreChange` re-fetches
+    // `model/list` itself the moment `model_install_completed` /
+    // `_failed` lands on the event stream.
+    await promptAndInstallModel(this.host, id);
   }
 
   private async cancelInstall(id: string): Promise<void> {
@@ -139,13 +178,24 @@ export class ModelsViewProvider extends WebviewBase {
 
   private async activate(id: string, role: string): Promise<void> {
     try {
+      // Blocks until the server (when `model_inference` is served) answers
+      // `/health` or fails — the `model_server_starting`/`_ready`/`_failed`
+      // events arrive first and drive the chip; this call's own
+      // success/failure drives the toast.
       await this.host.client.request("model/activate", { id, role });
       void vscode.window.showInformationMessage(
         `Valyria: ${this.modelName(id)} now serves “${role}”.`
       );
-      setTimeout(() => void this.refresh(), 300);
     } catch (e) {
       void vscode.window.showErrorMessage(`Valyria: activate failed — ${String(e)}`);
+    }
+  }
+
+  private async restartServer(id: string, role: string): Promise<void> {
+    try {
+      await this.host.client.request("model/restartServer", { id, role });
+    } catch (e) {
+      void vscode.window.showErrorMessage(`Valyria: restart failed — ${String(e)}`);
     }
   }
 
@@ -161,7 +211,10 @@ export class ModelsViewProvider extends WebviewBase {
       const r = (await this.host.client.request("model/remove", { id })) as { freed_bytes?: number };
       const freed = typeof r.freed_bytes === "number" ? ` — ${(r.freed_bytes / 1e9).toFixed(1)} GB reclaimed` : "";
       void vscode.window.showInformationMessage(`Valyria: removed ${this.modelName(id)}${freed}.`);
-      setTimeout(() => void this.refresh(), 300);
+      // A removed model that was never activated emits no `model_server_*`
+      // event for `onStoreChange` to catch — but we know for certain
+      // `model/list` just changed, so fetch it directly rather than wait.
+      void this.refresh();
     } catch (e) {
       void vscode.window.showErrorMessage(`Valyria: remove failed — ${String(e)}`);
     }

@@ -9,7 +9,13 @@
  */
 import { mountWebview } from "../shared/host";
 import { h, section, badge, empty } from "../shared/render";
-import { CMD, type ModelsModel, type ModelRow, type ModelInstallRow } from "../shared/protocol";
+import {
+  CMD,
+  type ModelsModel,
+  type ModelRow,
+  type ModelInstallRow,
+  type ModelServerRow,
+} from "../shared/protocol";
 import "./models.css";
 
 const root = document.getElementById("root")!;
@@ -24,6 +30,16 @@ function fitChip(m: ModelRow): HTMLElement | null {
   const label =
     m.fit === "comfortable" ? "fits" : m.fit === "tight" ? "tight fit" : "won't fit";
   return badge(m.fitDetail && m.fit === "will_not_fit" ? `${label} · ${m.fitDetail}` : label, kind);
+}
+
+/** A per-role managed server's live state — `Starting…` / `Ready · :port`
+ *  / `Failed — reason` / `Stopped`, next to the role it's serving. */
+function serverChip(s: ModelServerRow): HTMLElement {
+  const role = roleLabel(s.role);
+  if (s.state === "starting") return badge(`${role}: starting…`, "muted");
+  if (s.state === "ready") return badge(`${role}: ready · :${s.port ?? "?"}`, "ok");
+  if (s.state === "stopped") return badge(`${role}: stopped`, "muted");
+  return badge(`${role}: failed — ${s.message ?? s.code ?? "no detail reported"}`, "bad");
 }
 
 function progress(inst: ModelInstallRow): HTMLElement {
@@ -68,7 +84,17 @@ function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
   if (m.installed && !m.install) head.append(badge("installed", "muted"));
   const fc = fitChip(m);
   if (fc) head.append(fc);
-  for (const r of m.activeRoles) head.append(badge(`serving ${roleLabel(r)}`, "ok"));
+  if (model.inferenceCapable) {
+    // The live server chip supersedes the plain "serving X" badge once
+    // the stream has actually seen a lifecycle event for the role.
+    const chippedRoles = new Set(m.servers.map((s) => s.role));
+    for (const r of m.activeRoles) {
+      if (!chippedRoles.has(r)) head.append(badge(`serving ${roleLabel(r)}`, "ok"));
+    }
+    for (const s of m.servers) head.append(serverChip(s));
+  } else {
+    for (const r of m.activeRoles) head.append(badge(`serving ${roleLabel(r)}`, "ok"));
+  }
   card.append(head);
 
   const meta = [
@@ -102,9 +128,26 @@ function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
       }
       const act = h("button", { class: "vy-btn vy-btn--sm", type: "button" }, "Activate") as HTMLButtonElement;
       act.addEventListener("click", () => ctrl?.command(CMD.activateModel, { id: m.id, role: sel.value }));
+      actions.append(sel, act);
+
+      const failedForSelectedRole = m.servers.find(
+        (s) => s.role === model.role && s.state === "failed"
+      );
+      if (failedForSelectedRole) {
+        const restart = h(
+          "button",
+          { class: "vy-btn vy-btn--sm", type: "button" },
+          "Restart server"
+        ) as HTMLButtonElement;
+        restart.addEventListener("click", () =>
+          ctrl?.command(CMD.restartServer, { id: m.id, role: model.role })
+        );
+        actions.append(restart);
+      }
+
       const rm = h("button", { class: "vy-btn vy-btn--sm", type: "button" }, "Remove") as HTMLButtonElement;
       rm.addEventListener("click", () => ctrl?.command(CMD.removeModel, { id: m.id }));
-      actions.append(sel, act, rm);
+      actions.append(rm);
     }
 
     if (actions.childElementCount) card.append(actions);
@@ -136,6 +179,11 @@ function render(model: ModelsModel): void {
 
   if (!model.manageCapable) {
     root.append(empty("The running Core does not serve model management (needs the `model_manage` capability)."));
+  }
+  if (model.engineInstall && model.engineInstall.status !== "completed") {
+    root.append(
+      section("Inference engine (llama.cpp)", progress(model.engineInstall))
+    );
   }
   if (!model.hardwareCapable) {
     root.append(empty("Core is not scoring hardware fit — the shortlist is unranked. Sizes below are the guide."));

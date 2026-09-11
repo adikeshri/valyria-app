@@ -34,3 +34,13 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tracing = "0.1"
+
+# TEMPORARY (docs/MODEL-SETUP-PLAN.md's precedent): developing against the
+# local Core checkout at ../valyria while its model-inference work (protocol
+# 1.12.0 — model_server_* / engine_install_* events) is still uncommitted
+# there. Remove this patch and move the two `rev`s above to the merged SHA
+# in the same PR once that Core branch lands. core.lock.json's `git_rev`
+# deliberately still names the last real landed commit until then.
+[patch."https://github.com/adikeshri/valyria.git"]
+valyria-protocol = { path = "../valyria/crates/valyria-protocol" }
+valyria-types = { path = "../valyria/crates/valyria-types" }

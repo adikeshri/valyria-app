@@ -9,6 +9,7 @@ import {
   type EventRow,
   type FileChangeProjection,
   type ModelInstallProjection,
+  type ModelServerProjection,
   type StoreState,
   type TaskProjection,
   type TaskState,
@@ -79,11 +80,18 @@ function applyDecodedNoAppend(
     gapDetected,
   };
 
-  // Model installs are workspace-global (`task_id: null`), so they fold
-  // outside the per-task branch below.
+  // Model installs, engine installs, and model servers are all
+  // workspace-global (`task_id: null`), so they fold outside the per-task
+  // branch below.
   if (ev.ok) {
     const installs = foldModelInstall(state.modelInstalls, ev);
     if (installs !== state.modelInstalls) next.modelInstalls = installs;
+
+    const engineInstalls = foldEngineInstall(state.engineInstalls, ev);
+    if (engineInstalls !== state.engineInstalls) next.engineInstalls = engineInstalls;
+
+    const modelServers = foldModelServer(state.modelServers, ev);
+    if (modelServers !== state.modelServers) next.modelServers = modelServers;
   }
 
   if (ev.taskId) {
@@ -177,6 +185,127 @@ function foldModelInstall(
     };
   }
   return { ...prev, [id]: entry };
+}
+
+/** `engine_install_progress` / `_completed` / `_failed` folded per
+ *  component name (`"llama.cpp"`), latest event wins. Identical shape and
+ *  logic to {@link foldModelInstall} — Core downloads its own inference
+ *  engine the same resumable, verified way it downloads model weights. */
+function foldEngineInstall(
+  prev: Readonly<Record<string, ModelInstallProjection>>,
+  ev: DecodedEvent & { ok: true },
+): Record<string, ModelInstallProjection> {
+  if (
+    ev.kind !== "engine_install_progress" &&
+    ev.kind !== "engine_install_completed" &&
+    ev.kind !== "engine_install_failed"
+  ) {
+    return prev as Record<string, ModelInstallProjection>;
+  }
+  const p = (ev.payload ?? {}) as Record<string, unknown>;
+  const id = typeof p.component === "string" ? p.component : "";
+  if (!id) return prev as Record<string, ModelInstallProjection>;
+
+  const cur = prev[id];
+  const num = (v: unknown, fallback: number): number =>
+    typeof v === "number" && Number.isFinite(v) ? v : fallback;
+
+  let entry: ModelInstallProjection;
+  if (ev.kind === "engine_install_progress") {
+    entry = {
+      id,
+      phase: typeof p.phase === "string" ? p.phase : (cur?.phase ?? null),
+      downloadedBytes: num(p.downloaded_bytes, cur?.downloadedBytes ?? 0),
+      totalBytes: num(p.total_bytes, cur?.totalBytes ?? 0),
+      status: "running",
+      code: null,
+      message: null,
+      lastSeq: ev.seq,
+    };
+  } else if (ev.kind === "engine_install_completed") {
+    entry = {
+      id,
+      phase: cur?.phase ?? null,
+      downloadedBytes: cur?.downloadedBytes ?? 0,
+      totalBytes: cur?.totalBytes ?? 0,
+      status: "completed",
+      code: null,
+      message: null,
+      lastSeq: ev.seq,
+    };
+  } else {
+    entry = {
+      id,
+      phase: cur?.phase ?? null,
+      downloadedBytes: cur?.downloadedBytes ?? 0,
+      totalBytes: cur?.totalBytes ?? 0,
+      status: "failed",
+      code: typeof p.code === "string" ? p.code : null,
+      message: typeof p.message === "string" ? p.message : null,
+      lastSeq: ev.seq,
+    };
+  }
+  return { ...prev, [id]: entry };
+}
+
+/** `model_server_starting` / `_ready` / `_failed` / `_stopped` folded per
+ *  role, latest event wins — Core serves at most one model per role, so
+ *  the role is the natural key (unlike model installs, which are keyed by
+ *  model id because several can run at once). */
+function foldModelServer(
+  prev: Readonly<Record<string, ModelServerProjection>>,
+  ev: DecodedEvent & { ok: true },
+): Record<string, ModelServerProjection> {
+  if (
+    ev.kind !== "model_server_starting" &&
+    ev.kind !== "model_server_ready" &&
+    ev.kind !== "model_server_failed" &&
+    ev.kind !== "model_server_stopped"
+  ) {
+    return prev as Record<string, ModelServerProjection>;
+  }
+  const p = (ev.payload ?? {}) as Record<string, unknown>;
+  const role = typeof p.role === "string" ? p.role : "";
+  if (!role) return prev as Record<string, ModelServerProjection>;
+
+  const cur = prev[role];
+  const modelId = typeof p.id === "string" ? p.id : (cur?.modelId ?? "");
+
+  let entry: ModelServerProjection;
+  if (ev.kind === "model_server_starting") {
+    entry = { role, modelId, state: "starting", port: null, code: null, message: null, lastSeq: ev.seq };
+  } else if (ev.kind === "model_server_ready") {
+    entry = {
+      role,
+      modelId,
+      state: "ready",
+      port: typeof p.port === "number" ? p.port : null,
+      code: null,
+      message: null,
+      lastSeq: ev.seq,
+    };
+  } else if (ev.kind === "model_server_failed") {
+    entry = {
+      role,
+      modelId,
+      state: "failed",
+      port: null,
+      code: typeof p.code === "string" ? p.code : null,
+      message: typeof p.message === "string" ? p.message : null,
+      lastSeq: ev.seq,
+    };
+  } else {
+    entry = {
+      role,
+      modelId,
+      state: "stopped",
+      port: null,
+      code: null,
+      message: typeof p.reason === "string" ? p.reason : null,
+      lastSeq: ev.seq,
+    };
+  }
+  return { ...prev, [role]: entry };
 }
 
 /** `file_changed`, plus write/edit `tool_started` (its `input.path`), folded

@@ -64,7 +64,13 @@ const MODELS: Record<string, unknown> = {
   context: { available: true, taskId: "t1", items: [{ seq: 2, source: "index", path: "src/x.rs", trust: "trusted", tokens: 100, summary: "Context retrieved" }] },
   firstrun: {
     connection: "ready", hasRepo: true, layoutMode: "editor", probeState: "idle", probeResult: null,
-    model: { capable: true, handled: false, installedCount: 0, recommendedId: "m1", recommendedName: "Model One", recommendedSizeGb: 4, recommendedFit: "comfortable", install: null },
+    model: {
+      capable: true, handled: false, installedCount: 1, recommendedId: "m1", recommendedName: "Model One",
+      recommendedSizeGb: 4, recommendedFit: "comfortable",
+      install: { status: "completed", phase: null, fraction: 1, message: null, code: null },
+      engineInstall: null, activating: false,
+      server: { state: "failed", port: null, message: "did not become ready in time", code: "llamacpp.not_ready" },
+    },
   },
   home: {
     connection: "ready", hasRepo: true, repoName: "acme", canSubmit: true,

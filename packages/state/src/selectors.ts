@@ -6,6 +6,7 @@ import type {
   EventRow,
   FileChangeProjection,
   ModelInstallProjection,
+  ModelServerProjection,
   PlanProjection,
   StoreState,
   TaskProjection,
@@ -422,4 +423,35 @@ export function modelInstallsRunning(state: StoreState): string[] {
   return modelInstalls(state)
     .filter((m) => m.status === "running")
     .map((m) => m.id);
+}
+
+/** Inference-engine downloads (Core fetching its own `llama-server`), same
+ *  shape and freshness rule as {@link modelInstalls}. */
+export function engineInstalls(state: StoreState): ModelInstallProjection[] {
+  return Object.values(state.engineInstalls).sort((a, b) => b.lastSeq - a.lastSeq);
+}
+
+/** Every live per-role model server the stream has seen, most-recently
+ *  touched first (`model_inference`). */
+export function modelServers(state: StoreState): ModelServerProjection[] {
+  return Object.values(state.modelServers).sort((a, b) => b.lastSeq - a.lastSeq);
+}
+
+/** The server record for one role (the wire string, e.g. `primary_coder`),
+ *  if the stream has seen it. */
+export function modelServerForRole(
+  state: StoreState,
+  role: string,
+): ModelServerProjection | undefined {
+  return state.modelServers[role];
+}
+
+/** The server currently serving `modelId`, in whichever role, if any —
+ *  what a Model Manager row showing one catalog model (which may be bound
+ *  to more than one role) needs. */
+export function modelServersForModel(
+  state: StoreState,
+  modelId: string,
+): ModelServerProjection[] {
+  return modelServers(state).filter((s) => s.modelId === modelId);
 }

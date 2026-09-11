@@ -2,7 +2,7 @@
   "$comment": "The single pinned Core revision this app is built and tested against. See docs/INTEGRATION.md §3. A bump is a deliberate PR that re-vendors schemas, re-runs TS codegen, re-captures trace fixtures, and moves the valyria-bridge git dep rev.",
   "repository": "https://github.com/adikeshri/valyria.git",
   "git_rev": "50a6bb8cbfddea985e90f233d44cba3dd955ccdd",
-  "protocol_version": "1.11.0",
+  "protocol_version": "1.12.0",
   "runtime_version": null,
   "capabilities": [
     "plan",
@@ -23,9 +23,11 @@
     "client_auth",
     "stream_filter",
     "approval_scope",
-    "daemon"
+    "daemon",
+    "model_inference"
   ],
   "$runtime_version_note": "null until the first `hello` handshake against the pinned build records it; xtask verify-core fills it in.",
   "$gap_closure_note": "Bumped from 9203d23 / protocol 1.0.0 for CORE-INTERFACE gap closure G1-G15, now landed on Core main (PRs #15-#25). git_rev is the main merge commit.",
-  "$protocol_1_11_note": "Protocol 1.11.0 adds license-gated + cancellable model install (ModelInstallRequest.accept_license, model_install_cancel), ModelInspectResponse.license_text / license_accepted_at_ms, and display_name / parameters_b / context_length / active_roles on ModelSummaryWire. Schemas re-vendored + codegen re-run; git_rev is Core's main commit that landed it."
+  "$protocol_1_11_note": "Protocol 1.11.0 adds license-gated + cancellable model install (ModelInstallRequest.accept_license, model_install_cancel), ModelInspectResponse.license_text / license_accepted_at_ms, and display_name / parameters_b / context_length / active_roles on ModelSummaryWire. Schemas re-vendored + codegen re-run; git_rev is Core's main commit that landed it.",
+  "$protocol_1_12_note": "Protocol 1.12.0 adds real local inference: a new `model_inference` capability, and seven new event kinds — engine_install_{progress,completed,failed} (Core downloads its own llama-server, no `brew install`) and model_server_{starting,ready,failed,stopped} (a per-role managed server's lifecycle). No new Request/Response variants. `git_rev` deliberately still names 50a6bb8c — this Core work is developed against a local `[patch]` in Cargo.toml (see its comment) and is NOT YET landed on Core main; move `git_rev` and drop the patch in the same PR that bumps it, per docs/MODEL-SETUP-PLAN.md's precedent."
 }

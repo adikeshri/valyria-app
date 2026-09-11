@@ -9,8 +9,9 @@
 // logic: the renderer reads it, it does not branch on version strings.
 
 /** Capabilities the pinned Core (core.lock.json) advertises today.
- *  Protocol 1.11.0 — the CORE-INTERFACE gap-closure set (G1–G15) plus the
- *  license-gated / cancellable model-install surface under `model_manage`. */
+ *  Protocol 1.12.0 — the CORE-INTERFACE gap-closure set (G1–G15), the
+ *  license-gated / cancellable model-install surface under `model_manage`,
+ *  and real local inference under `model_inference`. */
 export const KNOWN_CAPABILITIES = [
   "plan",
   "doctor",
@@ -32,6 +33,8 @@ export const KNOWN_CAPABILITIES = [
   "stream_filter", // G11 — task_id filter on subscribe
   "approval_scope", // G2  — request_id + decision (once|task|deny)
   "daemon", // the IPC transport (Unix socket / Windows named pipe, G9)
+  "model_inference", // a role activation boots a real managed llama-server;
+  // engine_install_* / model_server_* events replace the scripted fake
 ] as const;
 
 export type Capability = (typeof KNOWN_CAPABILITIES)[number];
@@ -115,6 +118,18 @@ export const SURFACE_REQUIREMENTS: readonly SurfaceRequirement[] = [
     requires: "model_manage",
     gap: "G5",
     fallback: { kind: "none" },
+  },
+  {
+    // A role activation boots a real `llama-server` — `engine_install_*` /
+    // `model_server_*` events carry its lifecycle. Without this the Model
+    // Manager still lists/installs/activates (via `model_manage` above),
+    // it just can't show whether the activated model is actually serving.
+    surface: "model-inference-status",
+    requires: "model_inference",
+    fallback: {
+      kind: "local-read",
+      label: "Active model shown; live server status unavailable",
+    },
   },
   {
     // Structured `hardware_probe` + `model_recommend` (G4).

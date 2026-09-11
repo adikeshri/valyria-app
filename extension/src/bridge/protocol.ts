@@ -113,6 +113,10 @@ export interface Requests {
   "model/cancelInstall": [{ id: string }, unknown];
   "model/remove": [{ id: string }, unknown];
   "model/activate": [{ id: string; role: string }, unknown];
+  /** Re-point a role at the model already bound to it — `model_activate`
+   *  again, named for what the Model Manager's "Restart server" button
+   *  means (`model_inference`). */
+  "model/restartServer": [{ id: string; role: string }, unknown];
   "model/inspect": [{ id: string }, unknown];
   "hardware/probe": [Record<string, never>, unknown];
 

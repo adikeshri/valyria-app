@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
+  activeTasks,
   applyBatch,
   changedFilesForTask,
   checkpointIdsForTask,
@@ -35,6 +36,27 @@ test("the whole trace folds into one completed task, gapless", () => {
   assert.equal(s.gapDetected, false);
   assert.equal(s.lastSeq, 29);
   assert.equal(currentTask(s)?.state, "completed");
+});
+
+test("a task cancelled via a plain state_changed event is projected as terminal", () => {
+  // Regression test for a real bug: Core has no dedicated `task_cancelled`
+  // event kind — a cancellation only ever arrives as an ordinary
+  // `state_changed { to: "CANCELLED" }`, same shape as any other
+  // transition. `completed`/`failed` each also get their own dedicated
+  // event kind (which is what previously set `terminal`), so a cancelled
+  // task was silently left with `terminal: false` forever — it kept
+  // showing as "working" and kept re-triggering the resume-on-launch
+  // prompt on every subsequent session, even though Core itself considers
+  // the task permanently done.
+  const s = replay([
+    { seq: 1, task_id: "t1", ts_ms: 1, kind: "task_started", payload: { objective: "do a thing" } },
+    { seq: 2, task_id: "t1", ts_ms: 2, kind: "state_changed", payload: { from: "IDLE", to: "IMPLEMENTING" } },
+    { seq: 3, task_id: "t1", ts_ms: 3, kind: "state_changed", payload: { from: "IMPLEMENTING", to: "CANCELLED" } },
+  ]);
+  const t = currentTask(s);
+  assert.equal(t?.state, "cancelled");
+  assert.equal(t?.terminal, true, "a cancelled task must be terminal");
+  assert.deepEqual(activeTasks(s), [], "a cancelled task must not linger as 'active'");
 });
 
 test("changed-file rail: one row for the twice-edited file, ordered by first touch", () => {

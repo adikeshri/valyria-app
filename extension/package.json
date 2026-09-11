@@ -38,95 +38,28 @@
           "title": "Valyria",
           "icon": "media/valyria-activity.svg"
         }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "valyriaModelChat",
+          "title": "Model Chat",
+          "icon": "$(comment-discussion)"
+        }
       ]
     },
     "views": {
+      "valyriaModelChat": [
+        {
+          "id": "valyria.modelChat",
+          "name": "Model Chat",
+          "type": "webview"
+        }
+      ],
       "valyria": [
-        {
-          "id": "valyria.firstrun",
-          "name": "Get started",
-          "type": "webview",
-          "when": "valyria.showFirstRun"
-        },
-        {
-          "id": "valyria.chat",
-          "name": "Agent",
-          "type": "webview"
-        },
-        {
-          "id": "valyria.task",
-          "name": "Task",
-          "type": "webview"
-        },
-        {
-          "id": "valyria.activity",
-          "name": "Activity",
-          "type": "webview"
-        },
-        {
-          "id": "valyria.approvals",
-          "name": "Approvals",
-          "type": "webview"
-        },
-        {
-          "id": "valyria.timeline",
-          "name": "Timeline",
-          "type": "webview",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "valyria.history",
-          "name": "History",
-          "type": "webview",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "valyria.commands",
-          "name": "Agent Commands",
-          "type": "webview",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "valyria.verification",
-          "name": "Verification",
-          "type": "webview",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "valyria.security",
-          "name": "Security & autonomy",
-          "type": "webview",
-          "visibility": "collapsed"
-        },
         {
           "id": "valyria.models",
           "name": "Models",
-          "type": "webview",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "valyria.hardware",
-          "name": "Hardware",
-          "type": "webview",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "valyria.settings",
-          "name": "Settings",
-          "type": "webview",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "valyria.context",
-          "name": "Context",
-          "type": "webview",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "valyria.about",
-          "name": "About & Compatibility",
-          "type": "webview",
-          "visibility": "collapsed"
+          "type": "webview"
         }
       ]
     },
@@ -227,8 +160,12 @@
         "viewType": "valyria.document",
         "displayName": "Valyria Document",
         "selector": [
-          { "filenamePattern": "**/.valyria/**/*.md" },
-          { "filenamePattern": "**/.valyria/**/*.json" }
+          {
+            "filenamePattern": "**/.valyria/**/*.md"
+          },
+          {
+            "filenamePattern": "**/.valyria/**/*.json"
+          }
         ],
         "priority": "default"
       }
@@ -266,30 +203,57 @@
     ],
     "menus": {
       "commandPalette": [
-        { "command": "valyria.openWorkspacePanel", "when": "valyria.hasSession" },
-        { "command": "valyria.reviewChanges", "when": "valyria.hasSession" },
-        { "command": "valyria.explainFailure", "when": "valyria.hasSession" },
-        { "command": "valyria.pauseTask", "when": "valyria.hasSession" },
-        { "command": "valyria.resumeTask", "when": "valyria.hasSession" },
-        { "command": "valyria.cancelTask", "when": "valyria.hasSession" },
-        { "command": "valyria.layout.agentMode", "when": "valyria.layoutMode != agent" },
-        { "command": "valyria.layout.editorMode", "when": "valyria.layoutMode != editor" },
-        { "command": "valyria.setupModel", "when": "valyria.hasSession" }
+        {
+          "command": "valyria.openWorkspacePanel",
+          "when": "valyria.hasSession"
+        },
+        {
+          "command": "valyria.reviewChanges",
+          "when": "valyria.hasSession"
+        },
+        {
+          "command": "valyria.explainFailure",
+          "when": "valyria.hasSession"
+        },
+        {
+          "command": "valyria.pauseTask",
+          "when": "valyria.hasSession"
+        },
+        {
+          "command": "valyria.resumeTask",
+          "when": "valyria.hasSession"
+        },
+        {
+          "command": "valyria.cancelTask",
+          "when": "valyria.hasSession"
+        },
+        {
+          "command": "valyria.layout.agentMode",
+          "when": "valyria.layoutMode != agent"
+        },
+        {
+          "command": "valyria.layout.editorMode",
+          "when": "valyria.layoutMode != editor"
+        },
+        {
+          "command": "valyria.setupModel",
+          "when": "valyria.hasSession"
+        }
       ],
       "view/title": [
         {
           "command": "valyria.openHome",
-          "when": "view == valyria.chat",
+          "when": "view == valyria.modelChat",
           "group": "navigation@1"
         },
         {
           "command": "valyria.reviewChanges",
-          "when": "view == valyria.chat",
+          "when": "view == valyria.modelChat",
           "group": "navigation@2"
         },
         {
           "command": "valyria.layout.toggleMode",
-          "when": "view == valyria.chat",
+          "when": "view == valyria.modelChat",
           "group": "navigation@3"
         }
       ]

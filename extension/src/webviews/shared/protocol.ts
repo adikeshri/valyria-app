@@ -317,6 +317,41 @@ export interface ModelsModel {
   engineInstall: ModelInstallRow | null;
 }
 
+/** The primary product surface (right-hand Secondary Side Bar, like
+ *  Cursor's chat): a message here becomes a real Core task —
+ *  `task/create`, the full agent loop (system prompt, tools, plan,
+ *  verification), not a raw model probe. `transcript`/`canSubmit` are
+ *  exactly {@link ChatModel}'s; this adds the read-only "what model is
+ *  actually doing the work" line and an inline approval prompt, since the
+ *  sidebar no longer has separate Approvals/Task/Activity panels to show
+ *  one in. */
+export interface ModelChatModel {
+  connection: Connection;
+  /** `model_inference` — without it, activating a role never boots a real
+   *  server, so there's nothing behind `activeModel` even when set. */
+  inferenceCapable: boolean;
+  /** Whatever model Core currently has bound to `primary_coder`, if any —
+   *  read-only status, not a picker; Core's Model Manager owns the binding. */
+  activeModel: { role: string; displayName: string } | null;
+  taskId: string | null;
+  objective: string | null;
+  state: string | null;
+  terminal: boolean;
+  working: boolean;
+  blocked: boolean;
+  canSubmit: boolean;
+  transcript: ChatEntry[];
+  approval: {
+    seq: number;
+    prompt: string;
+    tool: string | null;
+    category: string | null;
+    target: string | null;
+    risk: string | null;
+    allowForTaskSupported: boolean;
+  } | null;
+}
+
 export interface HardwareModel {
   hasProbe: boolean;
   hardwareCapable: boolean;

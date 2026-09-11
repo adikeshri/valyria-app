@@ -49,7 +49,7 @@ export function watchNotifications(
           void show.then((pick) => {
             if (pick === "Allow once") dispatch(CMD.resolveApproval, { allow: true, seq: ap.seq, scope: "once", taskId });
             else if (pick === "Deny") dispatch(CMD.resolveApproval, { allow: false, seq: ap.seq, taskId });
-            else if (pick === "Review") void vscode.commands.executeCommand("valyria.approvals.focus");
+            else if (pick === "Review") void vscode.commands.executeCommand("valyria.modelChat.focus");
           });
         }
       }

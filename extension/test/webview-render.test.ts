@@ -132,6 +132,95 @@ test("history renders grouped tasks and posts focusTask on click", () => {
   );
 });
 
+test("modelChat renders the transcript and posts createTask on send", () => {
+  const { root, posted } = mount("modelChat", {
+    connection: "ready",
+    inferenceCapable: true,
+    activeModel: { role: "primary_coder", displayName: "Qwen2.5 Coder 7B" },
+    taskId: "t1",
+    objective: "Add a --json flag",
+    state: "completed",
+    terminal: true,
+    working: false,
+    blocked: false,
+    canSubmit: true,
+    transcript: [
+      { seq: 1, role: "you", text: "Add a --json flag" },
+      { seq: 2, role: "agent", text: "hello there" },
+    ],
+    approval: null,
+  });
+  assert.match(root.textContent ?? "", /hello there/);
+  assert.match(root.textContent ?? "", /Qwen2\.5 Coder 7B/);
+  assert.doesNotMatch(root.textContent ?? "", /\[object Object\]|undefined/);
+
+  const textarea = root.querySelector("textarea") as HTMLTextAreaElement;
+  textarea.value = "what is 2+2?";
+  const sendBtn = [...root.querySelectorAll("button")].find((b) => b.textContent === "Send") as HTMLButtonElement;
+  sendBtn.click();
+  assert.ok(
+    posted.some((m) => m.type === "command" && m["name"] === "createTask" && (m["args"] as { objective?: string })?.objective === "what is 2+2?"),
+    "clicking Send posts createTask with the composer text"
+  );
+});
+
+test("modelChat with no model bound to primary_coder shows an empty state and an Open Models affordance", () => {
+  const { root, posted } = mount("modelChat", {
+    connection: "ready",
+    inferenceCapable: true,
+    activeModel: null,
+    taskId: null,
+    objective: null,
+    state: null,
+    terminal: false,
+    working: false,
+    blocked: false,
+    canSubmit: true,
+    transcript: [],
+    approval: null,
+  });
+  assert.match(root.textContent ?? "", /No model set up for coding yet/);
+  const openBtn = [...root.querySelectorAll("button")].find((b) => b.textContent === "Open Models") as HTMLButtonElement;
+  assert.ok(openBtn, "has an Open Models button");
+  openBtn.click();
+  assert.ok(
+    posted.some((m) => m.type === "command" && m["name"] === "openModelManager"),
+    "clicking Open Models posts openModelManager"
+  );
+});
+
+test("modelChat surfaces a pending approval inline and posts resolveApproval", () => {
+  const { root, posted } = mount("modelChat", {
+    connection: "ready",
+    inferenceCapable: true,
+    activeModel: { role: "primary_coder", displayName: "Qwen2.5 Coder 7B" },
+    taskId: "t1",
+    objective: "Add a --json flag",
+    state: "waiting_for_permission",
+    terminal: false,
+    working: false,
+    blocked: true,
+    canSubmit: false,
+    transcript: [{ seq: 1, role: "you", text: "Add a --json flag" }],
+    approval: {
+      seq: 3,
+      prompt: "Run rm -rf build?",
+      tool: "run_command",
+      category: "filesystem",
+      target: "build/",
+      risk: "destructive",
+      allowForTaskSupported: true,
+    },
+  });
+  assert.match(root.textContent ?? "", /Run rm -rf build\?/);
+  const deny = [...root.querySelectorAll("button")].find((b) => b.textContent === "Deny") as HTMLButtonElement;
+  deny.click();
+  assert.ok(
+    posted.some((m) => m.type === "command" && m["name"] === "resolveApproval" && (m["args"] as { allow?: boolean; seq?: number })?.allow === false && (m["args"] as { seq?: number })?.seq === 3),
+    "clicking Deny posts resolveApproval with allow: false"
+  );
+});
+
 test("activity renders narrative lines + degraded notice", () => {
   const { root } = mount("activity", {
     connection: "ready",

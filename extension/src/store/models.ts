@@ -32,6 +32,7 @@ import type {
   HardwareModel,
   HistoryModel,
   HomeModel,
+  ModelChatModel,
   ModelsModel,
   ReviewModel,
   SecurityModel,
@@ -381,7 +382,7 @@ export const MODEL_ROLES = [
 
 export const DEFAULT_MODEL_ROLE = "primary_coder";
 
-interface ModelSummary {
+export interface ModelSummary {
   id: string;
   family: string;
   display_name?: string;
@@ -543,6 +544,61 @@ export function modelsModel(input: {
     models: rows,
     bindings,
     engineInstall: input.engineInstall ? installRow(input.engineInstall) : null,
+  };
+}
+
+// --- Model Chat (the product surface, §Cursor-style right sidebar): a
+// message here is a real Core task — task/create, the full agent loop
+// (system prompt, tools, plan, verification) — not a raw model probe. ---
+
+/** Whatever model Core currently has bound to `primary_coder`, for the
+ *  read-only status line — not a picker; the Models panel owns the
+ *  binding. `null` when nothing is bound yet. */
+function activeCoderModel(
+  models: ModelSummary[] | null
+): { role: string; displayName: string } | null {
+  const m = (models ?? []).find((m) => (m.active_roles ?? []).includes("primary_coder"));
+  return m ? { role: "primary_coder", displayName: m.display_name ?? m.id } : null;
+}
+
+export function modelChatModel(
+  state: StoreState,
+  focusId: string | undefined,
+  connection: Connection,
+  input: {
+    inferenceCapable: boolean;
+    models: ModelSummary[] | null;
+    allowForTaskSupported: boolean;
+  }
+): ModelChatModel {
+  const chat = chatModel(state, focusId, connection);
+  const ap = chat.taskId ? pendingApprovalFor(state, chat.taskId) : undefined;
+  const p = asRecord(ap?.payload);
+  const str = (k: string): string | null => (typeof p[k] === "string" ? (p[k] as string) : null);
+
+  return {
+    connection,
+    inferenceCapable: input.inferenceCapable,
+    activeModel: activeCoderModel(input.models),
+    taskId: chat.taskId,
+    objective: chat.objective,
+    state: chat.state,
+    terminal: chat.terminal,
+    working: chat.working,
+    blocked: chat.blocked,
+    canSubmit: chat.canSubmit,
+    transcript: chat.transcript,
+    approval: ap
+      ? {
+          seq: ap.seq,
+          prompt: str("prompt") ?? "Approval requested",
+          tool: str("tool"),
+          category: str("category"),
+          target: str("target"),
+          risk: str("risk"),
+          allowForTaskSupported: input.allowForTaskSupported,
+        }
+      : null,
   };
 }
 

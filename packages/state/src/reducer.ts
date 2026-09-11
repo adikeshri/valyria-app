@@ -419,6 +419,16 @@ function parseFailures(raw: unknown): FailureProjection[] {
   return out;
 }
 
+/** Wire state names (already lowercased by `normalizeState`) a task never
+ *  leaves once reached. `completed`/`failed` also arrive via their own
+ *  dedicated event kind (handled below), but `cancelled` has no such kind
+ *  — it only ever arrives as a plain `state_changed` — so `terminal` must
+ *  be derived from the state name itself, not just from which event kind
+ *  carried it, or a cancelled task is misprojected as still running
+ *  forever (its own `state_changed` sets `state` correctly but leaves
+ *  `terminal` at whatever it was). */
+const TERMINAL_STATES = new Set<TaskState | "unknown">(["completed", "failed", "cancelled"]);
+
 function advanceTask(
   prev: TaskProjection | undefined,
   ev: DecodedEvent,
@@ -445,6 +455,7 @@ function advanceTask(
     }
     if (ev.kind === "state_changed" && typeof payload.to === "string") {
       taskState = normalizeState(payload.to);
+      if (TERMINAL_STATES.has(taskState)) terminal = true;
     }
     if (ev.kind === "task_completed") {
       taskState = "completed";
@@ -501,8 +512,6 @@ export interface TaskSummaryLike {
   created_at_ms?: number;
   updated_at_ms?: number;
 }
-
-const TERMINAL_STATES = new Set<TaskState | "unknown">(["completed", "failed", "cancelled"]);
 
 /** Merge task summaries into the projection. The event stream stays
  *  authoritative for `state` / `terminal` on any task it has actually touched

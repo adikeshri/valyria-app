@@ -1,7 +1,7 @@
 {
   "$comment": "The single pinned Core revision this app is built and tested against. See docs/INTEGRATION.md §3. A bump is a deliberate PR that re-vendors schemas, re-runs TS codegen, re-captures trace fixtures, and moves the valyria-bridge git dep rev.",
   "repository": "https://github.com/adikeshri/valyria.git",
-  "git_rev": "c01633a6aee543abc7276fed2e4ba4f7adf36001",
+  "git_rev": "df4590bdb2899628bf758be52a8c71f828b2f812",
   "protocol_version": "1.12.0",
   "runtime_version": null,
   "capabilities": [

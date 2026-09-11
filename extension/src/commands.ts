@@ -93,7 +93,7 @@ export function registerCommands(deps: CommandDeps): void {
   });
 
   reg("valyria.showAbout", async () => {
-    await vscode.commands.executeCommand("valyria.about.focus");
+    await vscode.commands.executeCommand("valyria.modelChat.focus");
   });
 
   reg("valyria.setupModel", async () => {

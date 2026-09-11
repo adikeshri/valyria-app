@@ -1,156 +1,121 @@
 /**
- * Model Chat's view-model — which servers are reachable, which role is
- * selected (explicit or auto-picked), and gating (`model_inference`,
- * `sending`). Pure projection, no network.
+ * Model Chat — the product's primary surface. A message here is a real
+ * Core task (`task/create`), so its view-model is `chatModel` plus a
+ * read-only "which model is doing the work" line and an inline approval
+ * (the sidebar has no separate Approvals panel to show one in anymore).
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { replay } from "@valyria/state";
 import { modelChatModel } from "../src/store/models.ts";
+import type { CoreEvent } from "../src/bridge/protocol.ts";
 
-test("modelChatModel: only ready, ported servers are chattable", () => {
-  const m = modelChatModel({
-    inferenceCapable: true,
-    servers: [
-      { role: "primary_coder", modelId: "qwen", state: "ready", port: 5111, code: null, message: null },
-      { role: "planner", modelId: "qwen", state: "starting", port: null, code: null, message: null },
-      { role: "reviewer", modelId: "llama", state: "failed", port: null, code: "x", message: "boom" },
-    ],
-    models: [{ id: "qwen", display_name: "Qwen3 Coder" }],
-    role: null,
-    transcripts: {},
-    sending: false,
-  });
-  assert.deepEqual(
-    m.servers.map((s) => s.role),
-    ["primary_coder"]
-  );
-  assert.equal(m.servers[0]!.displayName, "Qwen3 Coder");
+const here = dirname(fileURLToPath(import.meta.url));
+const tracesDir = join(here, "../../fixtures/traces");
+const files = readdirSync(tracesDir).filter((f) => f.endsWith(".jsonl"));
+
+function load(name: string): CoreEvent[] {
+  return readFileSync(join(tracesDir, name), "utf8")
+    .split("\n")
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l) as CoreEvent);
+}
+
+const model = (id: string, activeRoles: string[]) => ({
+  id,
+  family: "qwen2.5-coder",
+  display_name: `Model ${id}`,
+  quantization: "q4_k_m",
+  size_bytes: 4e9,
+  installed: true,
+  license: "Apache-2.0",
+  active_roles: activeRoles,
 });
 
-test("modelChatModel: embedder and reranker are ready but not chattable — no chat template, 500s on completions", () => {
-  const m = modelChatModel({
-    inferenceCapable: true,
-    servers: [
-      { role: "embedder", modelId: "nomic-embed-text-v1.5", state: "ready", port: 64028, code: null, message: null },
-      { role: "reranker", modelId: "bge-reranker", state: "ready", port: 64029, code: null, message: null },
-    ],
-    models: null,
-    role: null,
-    transcripts: {},
-    sending: false,
+for (const name of files) {
+  const state = replay(load(name));
+
+  test(`${name}: modelChatModel mirrors chatModel's task/transcript/canSubmit`, () => {
+    const m = modelChatModel(state, undefined, "ready", {
+      inferenceCapable: true,
+      models: null,
+      allowForTaskSupported: true,
+    });
+    assert.ok(m.taskId);
+    assert.equal(m.terminal, true);
+    assert.ok(m.transcript.length > 0);
+    assert.equal(m.canSubmit, true);
+    assert.equal(m.approval, null);
   });
-  assert.deepEqual(m.servers, []);
-  assert.equal(m.role, null);
-  assert.equal(m.canSend, false);
+}
+
+test("modelChatModel: activeModel reports whichever model is bound to primary_coder", () => {
+  const state = replay(load(files[0]!));
+  const m = modelChatModel(state, undefined, "ready", {
+    inferenceCapable: true,
+    models: [model("qwen", ["fast_coder"]), model("llama", ["primary_coder", "planner"])],
+    allowForTaskSupported: true,
+  });
+  assert.deepEqual(m.activeModel, { role: "primary_coder", displayName: "Model llama" });
 });
 
-test("modelChatModel: an embedding model bound to a chat role (e.g. primary_coder) is still excluded", () => {
-  // Reproduces a real Model Manager state: the Model Manager lets you bind
-  // any installed model to any role, so `role_suitability: { embedder: 90 }`
-  // in Core's catalog doesn't stop someone from binding nomic-embed onto
-  // primary_coder. The role name alone (`NON_CHAT_ROLES`) can't catch this —
-  // it has to be caught from the model's own family/id.
-  const m = modelChatModel({
+test("modelChatModel: no model bound to primary_coder means activeModel is null", () => {
+  const state = replay(load(files[0]!));
+  const m = modelChatModel(state, undefined, "ready", {
     inferenceCapable: true,
-    servers: [
-      { role: "primary_coder", modelId: "nomic-embed-text-v1.5", state: "ready", port: 65499, code: null, message: null },
-    ],
-    models: [
-      {
-        id: "nomic-embed-text-v1.5",
-        family: "nomic-embed",
-        display_name: "Nomic Embed Text v1.5",
-        quantization: "f16",
-        size_bytes: 274290560,
-        installed: true,
-        license: "Apache-2.0",
-      },
-    ],
-    role: null,
-    transcripts: {},
-    sending: false,
+    models: [model("qwen", ["fast_coder"])],
+    allowForTaskSupported: true,
   });
-  assert.deepEqual(m.servers, []);
-  assert.equal(m.canSend, false);
+  assert.equal(m.activeModel, null);
 });
 
-test("modelChatModel: auto-picks primary_coder over other ready roles", () => {
-  const m = modelChatModel({
-    inferenceCapable: true,
-    servers: [
-      { role: "fast_coder", modelId: "a", state: "ready", port: 1, code: null, message: null },
-      { role: "primary_coder", modelId: "b", state: "ready", port: 2, code: null, message: null },
-    ],
-    models: null,
-    role: null,
-    transcripts: {},
-    sending: false,
-  });
-  assert.equal(m.role, "primary_coder");
-});
-
-test("modelChatModel: falls back off a stale explicit role that's no longer serving", () => {
-  const m = modelChatModel({
-    inferenceCapable: true,
-    servers: [{ role: "fast_coder", modelId: "a", state: "ready", port: 1, code: null, message: null }],
-    models: null,
-    role: "primary_coder", // was serving, no longer is
-    transcripts: {},
-    sending: false,
-  });
-  assert.equal(m.role, "fast_coder");
-});
-
-test("modelChatModel: transcript follows the resolved role; canSend gates on capability + sending", () => {
-  const m = modelChatModel({
-    inferenceCapable: true,
-    servers: [{ role: "fast_coder", modelId: "a", state: "ready", port: 1, code: null, message: null }],
-    models: null,
-    role: "fast_coder",
-    transcripts: {
-      fast_coder: [{ id: "t1", role: "user", text: "hi", pending: false }],
-      primary_coder: [{ id: "t2", role: "user", text: "wrong role", pending: false }],
-    },
-    sending: false,
-  });
-  assert.deepEqual(m.transcript.map((t) => t.id), ["t1"]);
-  assert.equal(m.canSend, true);
-});
-
-test("modelChatModel: no chattable servers means null role, empty transcript, cannot send", () => {
-  const m = modelChatModel({
-    inferenceCapable: true,
-    servers: [],
-    models: null,
-    role: null,
-    transcripts: {},
-    sending: false,
-  });
-  assert.equal(m.role, null);
-  assert.deepEqual(m.transcript, []);
-  assert.equal(m.canSend, false);
-});
-
-test("modelChatModel: missing model_inference blocks sending even with a ready server", () => {
-  const m = modelChatModel({
+test("modelChatModel: missing model_inference is reported even with a model bound", () => {
+  const state = replay(load(files[0]!));
+  const m = modelChatModel(state, undefined, "ready", {
     inferenceCapable: false,
-    servers: [{ role: "primary_coder", modelId: "a", state: "ready", port: 1, code: null, message: null }],
-    models: null,
-    role: null,
-    transcripts: {},
-    sending: false,
+    models: [model("qwen", ["primary_coder"])],
+    allowForTaskSupported: true,
   });
-  assert.equal(m.canSend, false);
+  assert.equal(m.inferenceCapable, false);
+  assert.deepEqual(m.activeModel, { role: "primary_coder", displayName: "Model qwen" });
 });
 
-test("modelChatModel: a message mid-flight blocks sending another", () => {
-  const m = modelChatModel({
+const blockedTrace: CoreEvent[] = [
+  { seq: 1, task_id: "t1", ts_ms: 1, kind: "task_started", payload: { objective: "add a flag" } },
+  { seq: 2, task_id: "t1", ts_ms: 2, kind: "state_changed", payload: { from: "IMPLEMENTING", to: "WAITING_FOR_PERMISSION" } },
+  {
+    seq: 3,
+    task_id: "t1",
+    ts_ms: 3,
+    kind: "approval_requested",
+    payload: { prompt: "Run rm -rf build?", tool: "run_command", risk: "destructive", category: "filesystem", target: "build/" },
+  },
+];
+
+test("modelChatModel: a pending approval surfaces inline and blocks canSubmit", () => {
+  const m = modelChatModel(replay(blockedTrace), undefined, "ready", {
     inferenceCapable: true,
-    servers: [{ role: "primary_coder", modelId: "a", state: "ready", port: 1, code: null, message: null }],
     models: null,
-    role: null,
-    transcripts: {},
-    sending: true,
+    allowForTaskSupported: true,
   });
-  assert.equal(m.canSend, false);
+  assert.equal(m.blocked, true);
+  assert.equal(m.canSubmit, false);
+  assert.ok(m.approval);
+  assert.equal(m.approval!.seq, 3);
+  assert.equal(m.approval!.risk, "destructive");
+  assert.equal(m.approval!.tool, "run_command");
+  assert.equal(m.approval!.target, "build/");
+  assert.equal(m.approval!.allowForTaskSupported, true);
+});
+
+test("modelChatModel: allowForTaskSupported is passed through, not invented", () => {
+  const m = modelChatModel(replay(blockedTrace), undefined, "ready", {
+    inferenceCapable: true,
+    models: null,
+    allowForTaskSupported: false,
+  });
+  assert.equal(m.approval!.allowForTaskSupported, false);
 });

@@ -18,23 +18,9 @@ import { TaskFocus } from "./session/focus";
 import { LayoutController } from "./session/layout";
 import { StatusBar } from "./status";
 import { Store } from "./store/store";
-import { ActivityViewProvider } from "./views/activity";
-import { ChatViewProvider } from "./views/chat";
-import { TaskViewProvider } from "./views/task";
-import { TimelineViewProvider } from "./views/timeline";
-import { HistoryViewProvider } from "./views/history";
-import { ApprovalsViewProvider } from "./views/approvals";
-import { SecurityViewProvider } from "./views/security";
-import { VerificationViewProvider } from "./views/verification";
-import { AgentCommandsViewProvider } from "./views/agentCommands";
 import { FileOwnershipDecorations } from "./views/ownership";
 import { ModelsViewProvider } from "./views/models";
 import { ModelChatViewProvider } from "./views/modelChat";
-import { HardwareViewProvider } from "./views/hardware";
-import { SettingsViewProvider } from "./views/settings";
-import { ContextViewProvider } from "./views/context";
-import { FirstRunViewProvider } from "./views/firstrun";
-import { AboutViewProvider } from "./views/about";
 import { EditorPanelManager } from "./views/editorPanels";
 import { ValyriaDocEditorProvider, VALYRIA_DOC_VIEW } from "./views/customEditors";
 import { makeWebviewDispatch } from "./views/dispatch";
@@ -154,7 +140,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     dispose: store.onDidChange(() => {
       if (resumePrompted || supervisor.state !== "ready") return;
       resumePrompted = true;
-      void maybePromptResume(store, focus, dispatch, log);
+      void maybePromptResume(store, focus, dispatch, host, log);
     }),
   });
 
@@ -215,26 +201,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     new FileOwnershipDecorations(store, focus, supervisor, host, log)
   );
 
-  void FirstRunViewProvider.syncVisibility(context);
-
   const uri = context.extensionUri;
+  // The sidebar (left) is Models only — everything else the app does now
+  // happens through Model Chat, on the right.
   const views: Array<[string, vscode.WebviewViewProvider]> = [
-    [ChatViewProvider.viewId, new ChatViewProvider(uri, store, supervisor, focus, dispatch)],
-    [TaskViewProvider.viewId, new TaskViewProvider(uri, store, supervisor, focus, dispatch)],
-    [ActivityViewProvider.viewId, new ActivityViewProvider(uri, store, supervisor)],
-    [ApprovalsViewProvider.viewId, new ApprovalsViewProvider(uri, store, supervisor, focus, dispatch)],
-    [AgentCommandsViewProvider.viewId, new AgentCommandsViewProvider(uri, store, focus)],
-    [VerificationViewProvider.viewId, new VerificationViewProvider(uri, store, focus, supervisor, host)],
-    [SecurityViewProvider.viewId, new SecurityViewProvider(uri, store, supervisor, host)],
     [ModelsViewProvider.viewId, new ModelsViewProvider(uri, store, supervisor, host)],
-    [ModelChatViewProvider.viewId, new ModelChatViewProvider(uri, store, supervisor, host, log)],
-    [HardwareViewProvider.viewId, new HardwareViewProvider(uri, supervisor, host)],
-    [SettingsViewProvider.viewId, new SettingsViewProvider(uri, supervisor, host)],
-    [ContextViewProvider.viewId, new ContextViewProvider(uri, store, supervisor, focus)],
-    [AboutViewProvider.viewId, new AboutViewProvider(uri, supervisor, host)],
-    [FirstRunViewProvider.viewId, new FirstRunViewProvider(uri, context, store, supervisor, host, layout, panels, reopen)],
-    [TimelineViewProvider.viewId, new TimelineViewProvider(uri, store)],
-    [HistoryViewProvider.viewId, new HistoryViewProvider(uri, store, focus, dispatch)],
+    [ModelChatViewProvider.viewId, new ModelChatViewProvider(uri, store, supervisor, focus, host, dispatch)],
   ];
   for (const [id, provider] of views) {
     context.subscriptions.push(

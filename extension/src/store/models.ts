@@ -33,7 +33,6 @@ import type {
   HistoryModel,
   HomeModel,
   ModelChatModel,
-  ModelChatTurn,
   ModelsModel,
   ReviewModel,
   SecurityModel,
@@ -548,72 +547,58 @@ export function modelsModel(input: {
   };
 }
 
-// --- Model chat (a plain chat window on top of an activated local model,
-// straight to its own HTTP server — not the agent task system) ---------
+// --- Model Chat (the product surface, §Cursor-style right sidebar): a
+// message here is a real Core task — task/create, the full agent loop
+// (system prompt, tools, plan, verification) — not a raw model probe. ---
 
-/** Roles Core serves with something other than a causal-LM chat model —
- *  `embedder` returns vectors, `reranker` returns scores. Neither has a
- *  chat template; pointing `/v1/chat/completions` at one 500s in
- *  llama-server rather than answering. This is the common case (a model
- *  installed for a role Core's catalog actually scored it for) but not the
- *  only one — the Model Manager lets you bind *any* installed model to
- *  *any* role, so a role name alone isn't proof the bound model can chat. */
-const NON_CHAT_ROLES = new Set(["embedder", "reranker"]);
-
-/** `model/list` carries no capability flag (Core's `role_suitability` never
- *  crosses the wire), so this is a naming heuristic over the catalog's own
- *  `family`/`id` — every embedding/reranker entry in it names itself that
- *  way (`nomic-embed`, `bge-reranker`, …), same as virtually every such
- *  model on HuggingFace. Catches a model bound to a chat-sounding role
- *  (e.g. `primary_coder`) it was never scored for, which {@link
- *  NON_CHAT_ROLES} alone can't. */
-function looksLikeNonChatModel(m: ModelSummary | undefined): boolean {
-  if (!m) return false;
-  return /\b(embed|rerank)/i.test(m.family) || /\b(embed|rerank)/i.test(m.id);
-}
-
-/** Every chat-capable role with a live, `ready` server — the ones the chat
- *  window can actually talk to — sorted for a stable dropdown. */
-function chattableServers(
-  servers: ModelServerLike[],
+/** Whatever model Core currently has bound to `primary_coder`, for the
+ *  read-only status line — not a picker; the Models panel owns the
+ *  binding. `null` when nothing is bound yet. */
+function activeCoderModel(
   models: ModelSummary[] | null
-): import("../webviews/shared/protocol").ModelChatServerRow[] {
-  const byId = new Map((models ?? []).map((m) => [m.id, m]));
-  return servers
-    .filter(
-      (s) =>
-        s.state === "ready" &&
-        s.port !== null &&
-        !NON_CHAT_ROLES.has(s.role) &&
-        !looksLikeNonChatModel(byId.get(s.modelId))
-    )
-    .map((s) => ({ role: s.role, modelId: s.modelId, displayName: byId.get(s.modelId)?.display_name ?? s.modelId }))
-    .sort((a, b) => a.role.localeCompare(b.role));
+): { role: string; displayName: string } | null {
+  const m = (models ?? []).find((m) => (m.active_roles ?? []).includes("primary_coder"));
+  return m ? { role: "primary_coder", displayName: m.display_name ?? m.id } : null;
 }
 
-export function modelChatModel(input: {
-  inferenceCapable: boolean;
-  servers: ModelServerLike[];
-  models: ModelSummary[] | null;
-  /** the explicitly selected role, or null to auto-pick */
-  role: string | null;
-  transcripts: Record<string, ModelChatTurn[]>;
-  sending: boolean;
-}): ModelChatModel {
-  const rows = chattableServers(input.servers, input.models);
-  const resolvedRole =
-    (input.role && rows.some((r) => r.role === input.role) ? input.role : null) ??
-    rows.find((r) => r.role === "primary_coder")?.role ??
-    rows[0]?.role ??
-    null;
+export function modelChatModel(
+  state: StoreState,
+  focusId: string | undefined,
+  connection: Connection,
+  input: {
+    inferenceCapable: boolean;
+    models: ModelSummary[] | null;
+    allowForTaskSupported: boolean;
+  }
+): ModelChatModel {
+  const chat = chatModel(state, focusId, connection);
+  const ap = chat.taskId ? pendingApprovalFor(state, chat.taskId) : undefined;
+  const p = asRecord(ap?.payload);
+  const str = (k: string): string | null => (typeof p[k] === "string" ? (p[k] as string) : null);
 
   return {
+    connection,
     inferenceCapable: input.inferenceCapable,
-    servers: rows,
-    role: resolvedRole,
-    transcript: resolvedRole ? (input.transcripts[resolvedRole] ?? []) : [],
-    sending: input.sending,
-    canSend: input.inferenceCapable && resolvedRole !== null && !input.sending,
+    activeModel: activeCoderModel(input.models),
+    taskId: chat.taskId,
+    objective: chat.objective,
+    state: chat.state,
+    terminal: chat.terminal,
+    working: chat.working,
+    blocked: chat.blocked,
+    canSubmit: chat.canSubmit,
+    transcript: chat.transcript,
+    approval: ap
+      ? {
+          seq: ap.seq,
+          prompt: str("prompt") ?? "Approval requested",
+          tool: str("tool"),
+          category: str("category"),
+          target: str("target"),
+          risk: str("risk"),
+          allowForTaskSupported: input.allowForTaskSupported,
+        }
+      : null,
   };
 }
 

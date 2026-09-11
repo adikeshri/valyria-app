@@ -317,38 +317,39 @@ export interface ModelsModel {
   engineInstall: ModelInstallRow | null;
 }
 
-/** One turn in a direct model-chat conversation. Unlike {@link ChatEntry}
- *  (an agent task's transcript), this is raw model output — no task, no
- *  tool events, sent straight to a locally-served model's own endpoint. */
-export interface ModelChatTurn {
-  id: string;
-  role: "user" | "assistant" | "error";
-  text: string;
-  /** true while an assistant turn is still streaming in. */
-  pending: boolean;
-}
-
-/** One role currently backed by a live, ready local model server — i.e. one
- *  the chat window can actually talk to. */
-export interface ModelChatServerRow {
-  role: string;
-  modelId: string;
-  displayName: string;
-}
-
-/** A plain chat window talking directly to an installed, activated local
- *  model over its own HTTP server (llama-server's OpenAI-compat API) — not
- *  the agent task system. */
+/** The primary product surface (right-hand Secondary Side Bar, like
+ *  Cursor's chat): a message here becomes a real Core task —
+ *  `task/create`, the full agent loop (system prompt, tools, plan,
+ *  verification), not a raw model probe. `transcript`/`canSubmit` are
+ *  exactly {@link ChatModel}'s; this adds the read-only "what model is
+ *  actually doing the work" line and an inline approval prompt, since the
+ *  sidebar no longer has separate Approvals/Task/Activity panels to show
+ *  one in. */
 export interface ModelChatModel {
-  /** `model_inference` — without it, activation never boots a real server. */
+  connection: Connection;
+  /** `model_inference` — without it, activating a role never boots a real
+   *  server, so there's nothing behind `activeModel` even when set. */
   inferenceCapable: boolean;
-  /** Every role currently serving and reachable, chooseable from. */
-  servers: ModelChatServerRow[];
-  /** The role the transcript below belongs to; null when nothing is serving. */
-  role: string | null;
-  transcript: ModelChatTurn[];
-  sending: boolean;
-  canSend: boolean;
+  /** Whatever model Core currently has bound to `primary_coder`, if any —
+   *  read-only status, not a picker; Core's Model Manager owns the binding. */
+  activeModel: { role: string; displayName: string } | null;
+  taskId: string | null;
+  objective: string | null;
+  state: string | null;
+  terminal: boolean;
+  working: boolean;
+  blocked: boolean;
+  canSubmit: boolean;
+  transcript: ChatEntry[];
+  approval: {
+    seq: number;
+    prompt: string;
+    tool: string | null;
+    category: string | null;
+    target: string | null;
+    risk: string | null;
+    allowForTaskSupported: boolean;
+  } | null;
 }
 
 export interface HardwareModel {
@@ -480,12 +481,4 @@ export const CMD = {
   openDiff: "openDiff",
   /** { mode: "agent" | "editor" } */
   setLayoutMode: "setLayoutMode",
-  /** { role: string } — switch the model-chat window to a different serving role */
-  selectModelChatRole: "selectModelChatRole",
-  /** { text: string } — send a message to the model backing the selected role */
-  sendModelChatMessage: "sendModelChatMessage",
-  /** abort the in-flight model-chat generation, if any */
-  stopModelChatGeneration: "stopModelChatGeneration",
-  /** clear the transcript for the selected role's model chat */
-  clearModelChat: "clearModelChat",
 } as const;

@@ -21,21 +21,33 @@ HOST_OS="$(uname -s)"
 HOST_ARCH="$(uname -m | sed 's/x86_64/x64/')"
 
 # 1. Sidecars for this host triple.
-echo "==> cargo build --release -p valyria-bridge-host"
-cargo build --release -p valyria-bridge-host
+#    A cross-compiled leg (e.g. x86_64-apple-darwin built on an arm64 runner —
+#    release.yml) builds valyria-bridge-host itself with an explicit --target
+#    and pre-stages it here; this script's own host-native `cargo build`
+#    would target the wrong arch, so skip it when the binary already exists.
 mkdir -p extension/bin
-cp "target/release/valyria-bridge-host"* extension/bin/ 2>/dev/null || \
-  cp "target/release/valyria-bridge-host" extension/bin/
-
-#   The Core binary is built from the core.lock.json rev for this triple, or
-#   supplied by the packager. It ships next to the app as an externalBin.
-CORE_BIN="${VALYRIA_CORE_BIN:-}"
-if [ -n "$CORE_BIN" ] && [ -x "$CORE_BIN" ]; then
-  echo "==> bundling Core binary: $CORE_BIN"
-  cp "$CORE_BIN" extension/bin/valyria
+if [ -x extension/bin/valyria-bridge-host ] || [ -x extension/bin/valyria-bridge-host.exe ]; then
+  echo "==> using already-staged valyria-bridge-host in extension/bin/"
 else
-  echo "==> WARNING: no Core binary (set VALYRIA_CORE_BIN). The build will ship" \
-       "without a bundled Core; users must supply one via valyria.core.binaryPath."
+  echo "==> cargo build --release -p valyria-bridge-host"
+  cargo build --release -p valyria-bridge-host
+  cp "target/release/valyria-bridge-host"* extension/bin/ 2>/dev/null || \
+    cp "target/release/valyria-bridge-host" extension/bin/
+fi
+
+#   The Core binary is either already staged at extension/bin/valyria[.exe]
+#   (release.yml downloads + checksum-verifies it from Core's GitHub Release
+#   before calling this script — docs/RELEASING.md §Core binary), or supplied
+#   locally via VALYRIA_CORE_BIN. It ships next to the app as an externalBin.
+if [ -x extension/bin/valyria ] || [ -x extension/bin/valyria.exe ]; then
+  echo "==> using already-staged Core binary in extension/bin/"
+elif [ -n "${VALYRIA_CORE_BIN:-}" ] && [ -x "${VALYRIA_CORE_BIN:-}" ]; then
+  echo "==> bundling Core binary: $VALYRIA_CORE_BIN"
+  cp "$VALYRIA_CORE_BIN" extension/bin/valyria
+else
+  echo "==> WARNING: no Core binary (set VALYRIA_CORE_BIN, or pre-stage" \
+       "extension/bin/valyria). The build will ship without a bundled Core;" \
+       "users must supply one via valyria.core.binaryPath."
 fi
 
 # 2. Extension.

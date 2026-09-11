@@ -1,7 +1,7 @@
 {
   "name": "valyria-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Valyria — a branded Code-OSS distribution with the Valyria autonomous agent as a built-in extension. The editor is the `vscode/` submodule; the agent lives in `extension/`. This root hosts the shared `packages/*` (generated protocol types + the pure event reducer) and the Cargo workspace (`crates/*`). See docs/ARCHITECTURE-VSCODE.md.",
   "workspaces": [
     "packages/*"

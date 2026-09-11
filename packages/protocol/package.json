@@ -1,7 +1,7 @@
 {
   "name": "@valyria/protocol",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "The typed Core boundary: generated request/response types from the pinned schemas, the event-payload decoder registry (PLAN D5), and the capability registry (PLAN D6).",
   "main": "src/index.ts",

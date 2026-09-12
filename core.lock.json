@@ -1,7 +1,7 @@
 {
   "$comment": "The single pinned Core revision this app is built and tested against. See docs/INTEGRATION.md §3. A bump is a deliberate PR that re-vendors schemas, re-runs TS codegen, re-captures trace fixtures, and moves the valyria-bridge git dep rev.",
   "repository": "https://github.com/adikeshri/valyria.git",
-  "git_rev": "df4590bdb2899628bf758be52a8c71f828b2f812",
+  "git_rev": "4a6d0d78d2870c5393687ec6771999ac775c17f3",
   "protocol_version": "1.12.0",
   "runtime_version": null,
   "capabilities": [
@@ -29,27 +29,27 @@
   "$runtime_version_note": "null until the first `hello` handshake against the pinned build records it; xtask verify-core fills it in.",
   "$gap_closure_note": "Bumped from 9203d23 / protocol 1.0.0 for CORE-INTERFACE gap closure G1-G15, now landed on Core main (PRs #15-#25). git_rev is the main merge commit.",
   "$protocol_1_11_note": "Protocol 1.11.0 adds license-gated + cancellable model install (ModelInstallRequest.accept_license, model_install_cancel), ModelInspectResponse.license_text / license_accepted_at_ms, and display_name / parameters_b / context_length / active_roles on ModelSummaryWire. Schemas re-vendored + codegen re-run; git_rev is Core's main commit that landed it.",
-  "$protocol_1_12_note": "Protocol 1.12.0 adds real local inference: a new `model_inference` capability, and seven new event kinds — engine_install_{progress,completed,failed} (Core downloads its own llama-server, no `brew install`) and model_server_{starting,ready,failed,stopped} (a per-role managed server's lifecycle). No new Request/Response variants. `git_rev` points at a commit on Core's `feat/local-inference` branch — pushed, but not yet merged to Core's main; CI resolves it fine as an ordinary git-dependency rev. Move `git_rev` to the merged main SHA once that Core PR lands.",
-  "$release_note": "The prebuilt Core binary the app's release pipeline downloads and checksums for each platform (docs/RELEASING.md §Core binary, xtask verify-core / verify-core-release). `release.tag` MUST resolve (via `git ls-remote`) to the same commit as `git_rev` above. PLACEHOLDER: no Core release has been cut yet — these are scaffold values (sha256 all-zero) so xtask's offline shape check passes; `verify-core-release` will correctly fail until this is bumped to a real Core release per docs/RELEASING.md's rollout order.",
+  "$protocol_1_12_note": "Protocol 1.12.0 adds real local inference: a new `model_inference` capability, and seven new event kinds — engine_install_{progress,completed,failed} (Core downloads its own llama-server, no `brew install`) and model_server_{starting,ready,failed,stopped} (a per-role managed server's lifecycle). No new Request/Response variants. `git_rev` originally pointed at a commit on Core's `feat/local-inference` branch, pushed but not yet merged; that PR (#30) has since landed on Core's main as 4a6d0d7, so `git_rev` now points there instead — no protocol-relevant files changed in between (checked via `git diff --stat` across crates/valyria-protocol, docs/protocol, crates/valyria-events), so no re-vendor was needed.",
+  "$release_note": "The prebuilt Core binary the app's release pipeline downloads and checksums for each platform (docs/RELEASING.md §Core binary, xtask verify-core / verify-core-release). `release.tag` MUST resolve (via `git ls-remote`) to the same commit as `git_rev` above. Filled in from Core's real v0.1.0 release (github.com/adikeshri/valyria/releases/tag/v0.1.0) — sha256 values below are the actual SHA256SUMS from that release, not placeholders.",
   "release": {
     "repository": "https://github.com/adikeshri/valyria.git",
     "tag": "v0.1.0",
     "artifacts": {
       "aarch64-apple-darwin": {
         "asset": "valyria-0.1.0-aarch64-apple-darwin",
-        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        "sha256": "a7a0e941401aebe6f17408eaba925f814181512adc77100e262f0ebecb500c07"
       },
       "x86_64-apple-darwin": {
         "asset": "valyria-0.1.0-x86_64-apple-darwin",
-        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        "sha256": "dd09565b4ca5e2a736a6b25a489eacfe510b0c8b309940407a75bd7138a9a825"
       },
       "x86_64-unknown-linux-gnu": {
         "asset": "valyria-0.1.0-x86_64-unknown-linux-gnu",
-        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        "sha256": "a9398c9cd886718c5158fb6b64b79baec6fa89bc3d608b03255af932a314c39d"
       },
       "x86_64-pc-windows-msvc": {
         "asset": "valyria-0.1.0-x86_64-pc-windows-msvc.exe",
-        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        "sha256": "d59a30aebc4822cc7ff60d0dc16bdbe2a4d13a813fc207f6bea7018c023bce9a"
       }
     }
   }

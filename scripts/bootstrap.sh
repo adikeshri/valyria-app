@@ -16,6 +16,12 @@ if [ ! -e vscode/package.json ]; then
   git submodule update --init --depth 1 vscode
 fi
 
+# build/patches/*.patch are LF. Windows git's default core.autocrlf=true would
+# otherwise rewrite vscode/'s checked-out text files to CRLF on checkout below,
+# breaking every patch's context matching ("patch does not apply"). Force LF
+# regardless of host platform before the checkout/reset that follows.
+git -C vscode config core.autocrlf false
+
 echo "==> Checking out $REF in vscode/"
 git -C vscode fetch --depth 1 origin "tag" "$REF" 2>/dev/null || git -C vscode fetch --depth 1 origin "$REF"
 git -C vscode checkout --force --detach "$REF"

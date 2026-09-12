@@ -27,8 +27,8 @@ repository = "https://github.com/adikeshri/valyria-app"
 # a local path patch, so CI — which has no sibling ../valyria checkout —
 # can actually resolve the dependency. Move this rev to the merged main SHA
 # once that Core PR lands.
-valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "df4590bdb2899628bf758be52a8c71f828b2f812" }
-valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "df4590bdb2899628bf758be52a8c71f828b2f812" }
+valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "4a6d0d78d2870c5393687ec6771999ac775c17f3" }
+valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "4a6d0d78d2870c5393687ec6771999ac775c17f3" }
 
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "net"] }
 futures = "0.3"

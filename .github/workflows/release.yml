@@ -142,8 +142,23 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      # The extension's esbuild compile follows imports into the @valyria/*
+      # source packages (they ship TS, no build step of their own), so their
+      # deps — zod, and @valyria/protocol for @valyria/state — must resolve
+      # from the repo-root workspace install. ci.yml's `extension` job does
+      # this same root `npm ci` for the same reason; scripts/build.sh only
+      # does `(cd extension && npm ci)`, which isn't enough on a clean
+      # checkout.
+      - name: Root workspace install (packages/*)
+        shell: bash
+        run: npm ci
+
       - name: Icon tooling (Pillow for scripts/gen-icons.py, fontTools for chrome/)
-        run: python3 -m pip install --user Pillow "fonttools==4.60.0"
+        # --break-system-packages: the macos-14 runner's system Python enforces
+        # PEP 668 ("externally-managed-environment"); this is an ephemeral CI
+        # runner, so overriding the guard is safe (matches pip's own suggested
+        # fix). Harmless on Linux/Windows runners that don't enforce it.
+        run: python3 -m pip install --user --break-system-packages Pillow "fonttools==4.60.0"
 
       - name: Bootstrap (submodule overlay + patches + icons)
         shell: bash

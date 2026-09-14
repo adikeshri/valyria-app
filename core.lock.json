@@ -1,7 +1,7 @@
 {
   "$comment": "The single pinned Core revision this app is built and tested against. See docs/INTEGRATION.md §3. A bump is a deliberate PR that re-vendors schemas, re-runs TS codegen, re-captures trace fixtures, and moves the valyria-bridge git dep rev.",
   "repository": "https://github.com/adikeshri/valyria.git",
-  "git_rev": "4a6d0d78d2870c5393687ec6771999ac775c17f3",
+  "git_rev": "8ba16cb4337c5be2e1f2e98a8fd9e45c0fc301cc",
   "protocol_version": "1.12.0",
   "runtime_version": null,
   "capabilities": [
@@ -30,6 +30,7 @@
   "$gap_closure_note": "Bumped from 9203d23 / protocol 1.0.0 for CORE-INTERFACE gap closure G1-G15, now landed on Core main (PRs #15-#25). git_rev is the main merge commit.",
   "$protocol_1_11_note": "Protocol 1.11.0 adds license-gated + cancellable model install (ModelInstallRequest.accept_license, model_install_cancel), ModelInspectResponse.license_text / license_accepted_at_ms, and display_name / parameters_b / context_length / active_roles on ModelSummaryWire. Schemas re-vendored + codegen re-run; git_rev is Core's main commit that landed it.",
   "$protocol_1_12_note": "Protocol 1.12.0 adds real local inference: a new `model_inference` capability, and seven new event kinds — engine_install_{progress,completed,failed} (Core downloads its own llama-server, no `brew install`) and model_server_{starting,ready,failed,stopped} (a per-role managed server's lifecycle). No new Request/Response variants. `git_rev` originally pointed at a commit on Core's `feat/local-inference` branch, pushed but not yet merged; that PR (#30) has since landed on Core's main as 4a6d0d7, so `git_rev` now points there instead — no protocol-relevant files changed in between (checked via `git diff --stat` across crates/valyria-protocol, docs/protocol, crates/valyria-events), so no re-vendor was needed.",
+  "$resume_pause_fix_note": "Bumped from 4a6d0d7 to 8ba16cb — a further commit on Core's `feat/local-inference` branch (not yet merged to main), fixing a task-manager bug: `resume_task` re-armed a stale/racing `PauseRequested` across a resume, so the driver's first pending-signal check re-paused the task before its resumed step did any work (observed as a task cycling Paused<->Repairing at the same turn_index with no progress). No protocol/schema files changed (crates/valyria-protocol, crates/valyria-events, docs/protocol untouched) — protocol_version stays 1.12.0, no re-vendor needed.",
   "$release_note": "The prebuilt Core binary the app's release pipeline downloads and checksums for each platform (docs/RELEASING.md §Core binary, xtask verify-core / verify-core-release). `release.tag` MUST resolve (via `git ls-remote`) to the same commit as `git_rev` above. Filled in from Core's real v0.1.0 release (github.com/adikeshri/valyria/releases/tag/v0.1.0) — sha256 values below are the actual SHA256SUMS from that release, not placeholders.",
   "release": {
     "repository": "https://github.com/adikeshri/valyria.git",

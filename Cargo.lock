@@ -1174,7 +1174,7 @@ dependencies = [
 [[package]]
 name = "valyria-protocol"
 version = "0.1.0"
-source = "git+https://github.com/adikeshri/valyria.git?rev=4a6d0d78d2870c5393687ec6771999ac775c17f3#4a6d0d78d2870c5393687ec6771999ac775c17f3"
+source = "git+https://github.com/adikeshri/valyria.git?rev=8ba16cb4337c5be2e1f2e98a8fd9e45c0fc301cc#8ba16cb4337c5be2e1f2e98a8fd9e45c0fc301cc"
 dependencies = [
  "async-trait",
  "futures",
@@ -1191,7 +1191,7 @@ dependencies = [
 [[package]]
 name = "valyria-types"
 version = "0.1.0"
-source = "git+https://github.com/adikeshri/valyria.git?rev=4a6d0d78d2870c5393687ec6771999ac775c17f3#4a6d0d78d2870c5393687ec6771999ac775c17f3"
+source = "git+https://github.com/adikeshri/valyria.git?rev=8ba16cb4337c5be2e1f2e98a8fd9e45c0fc301cc#8ba16cb4337c5be2e1f2e98a8fd9e45c0fc301cc"
 dependencies = [
  "serde",
  "serde_json",
@@ -1202,7 +1202,7 @@ dependencies = [
 [[package]]
 name = "valyria-util"
 version = "0.1.0"
-source = "git+https://github.com/adikeshri/valyria.git?rev=4a6d0d78d2870c5393687ec6771999ac775c17f3#4a6d0d78d2870c5393687ec6771999ac775c17f3"
+source = "git+https://github.com/adikeshri/valyria.git?rev=8ba16cb4337c5be2e1f2e98a8fd9e45c0fc301cc#8ba16cb4337c5be2e1f2e98a8fd9e45c0fc301cc"
 dependencies = [
  "blake3",
  "parking_lot",

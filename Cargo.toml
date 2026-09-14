@@ -21,14 +21,17 @@ repository = "https://github.com/adikeshri/valyria-app"
 [workspace.dependencies]
 # Core wire contract. The ONLY Core crates the app may depend on (D2).
 # Pinned to core.lock.json's git_rev; a bump moves this rev in the same PR.
-# Protocol 1.12.0 — real local inference (model_server_* / engine_install_*
-# events, model_inference capability). Pinned to a commit on Core's
-# `feat/local-inference` branch (not yet merged to Core's main) rather than
-# a local path patch, so CI — which has no sibling ../valyria checkout —
-# can actually resolve the dependency. Move this rev to the merged main SHA
-# once that Core PR lands.
-valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "4a6d0d78d2870c5393687ec6771999ac775c17f3" }
-valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "4a6d0d78d2870c5393687ec6771999ac775c17f3" }
+# Protocol 1.12.0 (unchanged by this bump) — real local inference
+# (model_server_* / engine_install_* events, model_inference capability).
+# Pinned to a commit on Core's `feat/local-inference` branch (not yet
+# merged to Core's main) rather than a local path patch, so CI — which has
+# no sibling ../valyria checkout — can actually resolve the dependency.
+# 8ba16cb fixes a task-manager bug (resume_task re-arming a stale pause
+# signal, cycling a task Paused<->Repairing with no progress); no
+# protocol-relevant files changed, so no re-vendor was needed. Move this
+# rev to the merged main SHA once that Core PR lands.
+valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "8ba16cb4337c5be2e1f2e98a8fd9e45c0fc301cc" }
+valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "8ba16cb4337c5be2e1f2e98a8fd9e45c0fc301cc" }
 
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "net"] }
 futures = "0.3"

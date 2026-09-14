@@ -471,3 +471,19 @@ textarea.vy-input:focus, input.vy-input:focus {
   outline: none;
   border-color: var(--accent);
 }
+select.vy-select {
+  font: inherit;
+  font-size: var(--text-sm);
+  background: var(--control-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+select.vy-select:hover:not(:disabled) { background: var(--control-bg-hover); }
+select.vy-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+select.vy-select:disabled { opacity: 0.5; cursor: default; }

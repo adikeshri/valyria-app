@@ -52,24 +52,30 @@ for (const name of files) {
   });
 }
 
-test("modelChatModel: activeModel reports whichever model is bound to primary_coder", () => {
+test("modelChatModel: activeModelId reports whichever installed model is bound to primary_coder", () => {
   const state = replay(load(files[0]!));
   const m = modelChatModel(state, undefined, "ready", {
     inferenceCapable: true,
     models: [model("qwen", ["fast_coder"]), model("llama", ["primary_coder", "planner"])],
     allowForTaskSupported: true,
   });
-  assert.deepEqual(m.activeModel, { role: "primary_coder", displayName: "Model llama" });
+  assert.equal(m.activeModelId, "llama");
+  // Every installed, chat-capable model is a picker candidate — not just
+  // the active one.
+  assert.deepEqual(
+    m.models.map((x) => x.id).sort(),
+    ["llama", "qwen"]
+  );
 });
 
-test("modelChatModel: no model bound to primary_coder means activeModel is null", () => {
+test("modelChatModel: no model bound to primary_coder means activeModelId is null", () => {
   const state = replay(load(files[0]!));
   const m = modelChatModel(state, undefined, "ready", {
     inferenceCapable: true,
     models: [model("qwen", ["fast_coder"])],
     allowForTaskSupported: true,
   });
-  assert.equal(m.activeModel, null);
+  assert.equal(m.activeModelId, null);
 });
 
 test("modelChatModel: missing model_inference is reported even with a model bound", () => {
@@ -80,7 +86,67 @@ test("modelChatModel: missing model_inference is reported even with a model boun
     allowForTaskSupported: true,
   });
   assert.equal(m.inferenceCapable, false);
-  assert.deepEqual(m.activeModel, { role: "primary_coder", displayName: "Model qwen" });
+  assert.equal(m.activeModelId, "qwen");
+});
+
+test("modelChatModel: embedder/reranker models are excluded from the picker even when installed", () => {
+  const state = replay(load(files[0]!));
+  const embedder = { ...model("nomic", []), family: "nomic-embed" };
+  const m = modelChatModel(state, undefined, "ready", {
+    inferenceCapable: true,
+    models: [model("qwen", ["primary_coder"]), embedder],
+    allowForTaskSupported: true,
+  });
+  assert.deepEqual(m.models.map((x) => x.id), ["qwen"]);
+});
+
+test("modelChatModel: unratedForCoding flags a model absent from recommend's candidates — the Qwen 1.5B trap", () => {
+  // Regression test for a real, reproduced failure: Qwen2.5-Coder 1.5B
+  // (role_suitability: fast_coder/autocomplete/summarizer only, no
+  // primary_coder score) was activated as the coding model. Every message
+  // sent to it — including a plain "Hi" — produced a hallucinated,
+  // nonsensical edit_file tool call; denying it (correctly) failed the
+  // whole task. Core's own `candidates_for_role` already excludes anything
+  // scoring 0, so a model missing from `recommend.candidates` entirely is a
+  // real "Core thinks this can't do the job" signal, not just "unranked."
+  const state = replay(load(files[0]!));
+  const m = modelChatModel(state, undefined, "ready", {
+    inferenceCapable: true,
+    models: [model("qwen-1.5b", []), model("qwen-7b", ["primary_coder"])],
+    allowForTaskSupported: true,
+    recommend: {
+      role: "primary_coder",
+      recommended: { id: "qwen-7b" },
+      // qwen-1.5b doesn't appear here at all — suitability 0, filtered out.
+      candidates: [{ id: "qwen-7b", fit_kind: "comfortable", suitability: 92 }],
+    },
+  });
+  const oneFive = m.models.find((x) => x.id === "qwen-1.5b")!;
+  const seven = m.models.find((x) => x.id === "qwen-7b")!;
+  assert.equal(oneFive.unratedForCoding, true);
+  assert.equal(seven.unratedForCoding, false);
+});
+
+test("modelChatModel: unratedForCoding is false for everyone when recommend is unavailable — unknown, not unsuitable", () => {
+  const state = replay(load(files[0]!));
+  const m = modelChatModel(state, undefined, "ready", {
+    inferenceCapable: true,
+    models: [model("qwen-1.5b", [])],
+    allowForTaskSupported: true,
+    recommend: null,
+  });
+  assert.equal(m.models[0]!.unratedForCoding, false);
+});
+
+test("modelChatModel: activating reflects an in-flight picker request", () => {
+  const state = replay(load(files[0]!));
+  const m = modelChatModel(state, undefined, "ready", {
+    inferenceCapable: true,
+    models: [model("qwen", [])],
+    allowForTaskSupported: true,
+    activating: true,
+  });
+  assert.equal(m.activating, true);
 });
 
 const blockedTrace: CoreEvent[] = [

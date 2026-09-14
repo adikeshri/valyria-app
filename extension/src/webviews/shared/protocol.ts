@@ -249,11 +249,12 @@ export interface ModelInstallRow {
   fraction: number | null;
 }
 
-/** A managed `llama-server` backing one role, live off the event stream
- *  (`model_inference` — `model_server_starting` / `_ready` / `_failed` /
- *  `_stopped`). */
+/** A managed `llama-server` backing the coding model, live off the event
+ *  stream (`model_inference` — `model_server_starting` / `_ready` /
+ *  `_failed` / `_stopped`). There's only ever one role in play (see
+ *  `store/models.ts`'s note on `DEFAULT_MODEL_ROLE`), so this carries no
+ *  role name — just the state of *the* active model's server. */
 export interface ModelServerRow {
-  role: string;
   state: "starting" | "ready" | "failed" | "stopped";
   /** Loopback port once `ready`. */
   port: number | null;
@@ -262,8 +263,8 @@ export interface ModelServerRow {
   message: string | null;
 }
 
-/** One row of the model manager — a catalog model joined with local state,
- *  hardware fit for the focused role, and any live install. */
+/** One row of the model manager — a catalog model joined with local state
+ *  and any live install. */
 export interface ModelRow {
   id: string;
   displayName: string;
@@ -274,27 +275,31 @@ export interface ModelRow {
   sizeBytes: number;
   installed: boolean;
   license: string;
-  /** `ModelRole` names this model currently serves. */
-  activeRoles: string[];
-  /** Fit for the focused role, from `model/recommend`. Null when hardware
-   *  scoring is unavailable or the model is not a candidate for the role. */
+  /** This is the model currently active for coding. */
+  active: boolean;
+  /** Can this model actually serve chat/tool-calling? `false` for
+   *  embedder/reranker models — see `isChatCapable`'s doc comment. They can
+   *  still be installed, just never offered as the active coding model. */
+  chatCapable: boolean;
+  /** Fit for coding, from `model/recommend`. Null when hardware scoring is
+   *  unavailable or the model isn't a candidate. */
   fit: "comfortable" | "tight" | "will_not_fit" | null;
   fitDetail: string | null;
-  /** Catalog role suitability 0..100 for the focused role, when scored. */
+  /** Catalog suitability 0..100 for coding, when scored. */
   suitability: number | null;
-  /** True when this is Core's top pick for the focused role. */
+  /** True when this is Core's top pick. */
   recommended: boolean;
   /** The live install for this model, if the stream has seen one. */
   install: ModelInstallRow | null;
-  /** Every role this model is currently serving (or trying to), live off
-   *  the event stream — empty when `model_inference` is absent or nothing
-   *  has been activated yet. */
+  /** The active model's live server, if the stream has seen one — empty
+   *  when `model_inference` is absent, this isn't the active model, or
+   *  nothing has been activated yet. */
   servers: ModelServerRow[];
   /** An activate/restart request for this model is in flight. `model_activate`
    *  blocks until the server answers `/health` or fails (tens of seconds), so
    *  without this the button gives no feedback and a second click boots a
-   *  second `llama-server` for the same role — two boots contending for RAM
-   *  can starve each other past the health-check timeout. */
+   *  second `llama-server` — two boots contending for RAM can starve each
+   *  other past the health-check timeout. */
   actionPending: boolean;
 }
 
@@ -303,21 +308,15 @@ export interface ModelsModel {
   manageCapable: boolean;
   /** `hardware` — the shortlist can be fit-scored. */
   hardwareCapable: boolean;
-  /** `model_inference` — an activated role boots a real server and reports
+  /** `model_inference` — activating a model boots a real server and reports
    *  `servers` above; without it, activation still works but is silent
    *  about whether the model is actually serving. */
   inferenceCapable: boolean;
   hasList: boolean;
-  /** The role the shortlist + recommendation are scoped to. */
-  role: string;
-  /** Every assignable `ModelRole`, for the activate control. */
-  roles: string[];
-  /** Core's recommended model id for `role`, if anything fits. */
+  /** Core's recommended model id for coding, if anything fits. */
   recommendedId: string | null;
   /** Recommended first, then other fitting, then non-fitting, then the rest. */
   models: ModelRow[];
-  /** Role→model bindings from `model/list` (`active_roles`), for the summary. */
-  bindings: { role: string; modelId: string }[];
   /** Inference-engine (llama.cpp) download, if the event stream has seen
    *  one — Core fetching its own `llama-server` before the first activate. */
   engineInstall: ModelInstallRow | null;
@@ -327,18 +326,27 @@ export interface ModelsModel {
  *  Cursor's chat): a message here becomes a real Core task —
  *  `task/create`, the full agent loop (system prompt, tools, plan,
  *  verification), not a raw model probe. `transcript`/`canSubmit` are
- *  exactly {@link ChatModel}'s; this adds the read-only "what model is
- *  actually doing the work" line and an inline approval prompt, since the
- *  sidebar no longer has separate Approvals/Task/Activity panels to show
- *  one in. */
+ *  exactly {@link ChatModel}'s; this adds the in-chat model picker and an
+ *  inline approval prompt, since the sidebar no longer has separate
+ *  Models/Approvals/Task/Activity panels to show one in. */
 export interface ModelChatModel {
   connection: Connection;
-  /** `model_inference` — without it, activating a role never boots a real
-   *  server, so there's nothing behind `activeModel` even when set. */
+  /** `model_inference` — without it, activating a model never boots a real
+   *  server, so there's nothing behind `activeModelId` even when set. */
   inferenceCapable: boolean;
-  /** Whatever model Core currently has bound to `primary_coder`, if any —
-   *  read-only status, not a picker; Core's Model Manager owns the binding. */
-  activeModel: { role: string; displayName: string } | null;
+  /** Every installed, chat-capable model — the picker's option list.
+   *  `unratedForCoding`: Core's catalog gives this model no `primary_coder`
+   *  suitability at all (not just a low one) — it's tuned for something
+   *  else (autocomplete, summarizing, ...) and activating it here tends to
+   *  produce nonsense tool calls even for a plain "Hi". `false` when
+   *  hardware scoring is unavailable, not when it's actually confirmed fit. */
+  models: { id: string; displayName: string; unratedForCoding: boolean }[];
+  /** Which of `models` is currently active for coding, if any. */
+  activeModelId: string | null;
+  /** An activate request from the picker is in flight — `model_activate`
+   *  blocks for as long as the server takes to boot, so the picker disables
+   *  itself rather than let a second selection race the first. */
+  activating: boolean;
   taskId: string | null;
   objective: string | null;
   state: string | null;
@@ -463,15 +471,13 @@ export const CMD = {
   installModel: "installModel",
   /** { id: string } — cancel an in-flight install */
   cancelModelInstall: "cancelModelInstall",
-  /** { id: string, role: string } */
+  /** { id: string } — make this the active coding model */
   activateModel: "activateModel",
-  /** { id: string, role: string } — re-point a role at the model already
-   *  bound to it, e.g. after `model_server_failed` */
+  /** { id: string } — re-activate the model already bound, e.g. after
+   *  `model_server_failed` */
   restartServer: "restartServer",
   /** { id: string } */
   removeModel: "removeModel",
-  /** { role: string } — re-scope the shortlist + recommendation */
-  setModelRole: "setModelRole",
   refreshModels: "refreshModels",
   refreshHardware: "refreshHardware",
   /** open the Models view (from the Hardware recommendation) */

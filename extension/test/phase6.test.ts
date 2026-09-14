@@ -20,7 +20,7 @@ import type { CoreEvent } from "../src/bridge/protocol.ts";
 const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "../out/webviews");
 
-test("modelsModel: active roles from model/list, fit + recommendation from model/recommend", () => {
+test("modelsModel: active state from model/list, fit + recommendation from model/recommend", () => {
   const m = modelsModel({
     models: [
       { id: "qwen3-coder-7b", family: "Qwen3", display_name: "Qwen3 Coder 7B", quantization: "Q4_K_M", parameters_b: 7, context_length: 32768, size_bytes: 4.3e9, installed: true, license: "Apache-2.0", active_roles: ["primary_coder", "planner"] },
@@ -37,29 +37,45 @@ test("modelsModel: active roles from model/list, fit + recommendation from model
     installs: [],
     servers: [],
     engineInstall: null,
-    role: "primary_coder",
     manageCapable: true,
     hardwareCapable: true,
     inferenceCapable: false,
   });
   assert.equal(m.hasList, true);
-  assert.equal(m.role, "primary_coder");
   assert.equal(m.recommendedId, "qwen3-coder-7b");
   const qwen = m.models.find((x) => x.id === "qwen3-coder-7b")!;
-  assert.deepEqual(qwen.activeRoles, ["planner", "primary_coder"]);
+  // bound to primary_coder (among others) -> the one role the UI cares about
+  assert.equal(qwen.active, true);
+  assert.equal(qwen.chatCapable, true);
   assert.equal(qwen.recommended, true);
   assert.equal(qwen.fit, "comfortable");
   const llama = m.models.find((x) => x.id === "llama3-8b")!;
+  assert.equal(llama.active, false);
   assert.equal(llama.fit, "will_not_fit");
   assert.equal(llama.fitDetail, "insufficient_ram");
   // recommended first, then non-fitting last
   assert.equal(m.models[0]!.id, "qwen3-coder-7b");
   assert.equal(m.models.at(-1)!.id, "llama3-8b");
-  // role bindings summary
-  assert.deepEqual(
-    m.bindings.map((b) => `${b.role}:${b.modelId}`).sort(),
-    ["planner:qwen3-coder-7b", "primary_coder:qwen3-coder-7b"]
-  );
+});
+
+test("modelsModel: chatCapable is false for embedder/reranker families — nothing to activate them for", () => {
+  const m = modelsModel({
+    models: [
+      { id: "nomic-embed-text-v1.5", family: "nomic-embed", display_name: "Nomic Embed Text v1.5", quantization: "f16", parameters_b: 0.137, context_length: 8192, size_bytes: 2.7e8, installed: true, license: "Apache-2.0", active_roles: [] },
+      { id: "bge-reranker-base-f16", family: "bge-reranker", display_name: "BGE Reranker Base (F16)", quantization: "f16", parameters_b: 0.278, context_length: 512, size_bytes: 5.6e8, installed: true, license: "MIT", active_roles: [] },
+      { id: "qwen", family: "qwen2.5-coder", display_name: "Qwen2.5-Coder 7B", quantization: "q4_k_m", parameters_b: 7, context_length: 32768, size_bytes: 4.7e9, installed: true, license: "Apache-2.0", active_roles: [] },
+    ],
+    recommend: null,
+    installs: [],
+    servers: [],
+    engineInstall: null,
+    manageCapable: true,
+    hardwareCapable: false,
+    inferenceCapable: false,
+  });
+  assert.equal(m.models.find((x) => x.id === "nomic-embed-text-v1.5")!.chatCapable, false);
+  assert.equal(m.models.find((x) => x.id === "bge-reranker-base-f16")!.chatCapable, false);
+  assert.equal(m.models.find((x) => x.id === "qwen")!.chatCapable, true);
 });
 
 test("modelsModel: a live install projection is attached to its model row", () => {
@@ -71,7 +87,6 @@ test("modelsModel: a live install projection is attached to its model row", () =
     ],
     servers: [],
     engineInstall: null,
-    role: "primary_coder",
     manageCapable: true,
     hardwareCapable: false,
     inferenceCapable: false,
@@ -95,7 +110,6 @@ test("modelsModel: a stale 'completed' install record doesn't override model_lis
     ],
     servers: [],
     engineInstall: null,
-    role: "primary_coder",
     manageCapable: true,
     hardwareCapable: false,
     inferenceCapable: false,
@@ -115,7 +129,6 @@ test("modelsModel: actionPending marks a model with an in-flight activate/restar
     installs: [],
     servers: [],
     engineInstall: null,
-    role: "primary_coder",
     manageCapable: true,
     hardwareCapable: false,
     inferenceCapable: false,
@@ -129,7 +142,6 @@ test("modelsModel: actionPending marks a model with an in-flight activate/restar
     installs: [],
     servers: [],
     engineInstall: null,
-    role: "primary_coder",
     manageCapable: true,
     hardwareCapable: false,
     inferenceCapable: false,
@@ -144,7 +156,6 @@ test("modelsModel: manage + hardware capability gating is passed through", () =>
     installs: [],
     servers: [],
     engineInstall: null,
-    role: "primary_coder",
     manageCapable: false,
     hardwareCapable: false,
     inferenceCapable: false,
@@ -165,7 +176,6 @@ test("modelsModel: a live server is attached to the model it's serving (model_in
       { role: "primary_coder", modelId: "qwen", state: "ready", port: 51423, code: null, message: null },
     ],
     engineInstall: { id: "llama.cpp", phase: "downloading", downloadedBytes: 5e6, totalBytes: 1e7, status: "running", code: null, message: null },
-    role: "primary_coder",
     manageCapable: true,
     hardwareCapable: false,
     inferenceCapable: true,
@@ -283,24 +293,22 @@ function mount(bundle: string, model: unknown) {
 test("models render: shows the 'never downloads weights' note; no external URLs; install + progress affordances", () => {
   const { root, posted } = mount("models", {
     manageCapable: true, hardwareCapable: true, inferenceCapable: false, hasList: true,
-    role: "primary_coder",
-    roles: ["primary_coder", "fast_coder", "planner", "reviewer", "embedder", "reranker", "autocomplete", "summarizer"],
     recommendedId: "qwen",
     models: [
       {
         id: "qwen", displayName: "Qwen3 Coder 7B", family: "Qwen3", quantization: "Q4_K_M",
         parametersB: 7, contextLength: 32768, sizeBytes: 4e9, installed: false, license: "Apache-2.0",
-        activeRoles: [], fit: "comfortable", fitDetail: null, suitability: 92, recommended: true, install: null, servers: [],
+        active: false, chatCapable: true, fit: "comfortable", fitDetail: null, suitability: 92, recommended: true,
+        install: null, servers: [], actionPending: false,
       },
       {
         id: "big", displayName: "Big 70B", family: "Big", quantization: "Q4_K_M",
         parametersB: 70, contextLength: 8192, sizeBytes: 4e10, installed: false, license: "MIT",
-        activeRoles: [], fit: "will_not_fit", fitDetail: "insufficient_ram", suitability: 40, recommended: false,
+        active: false, chatCapable: true, fit: "will_not_fit", fitDetail: "insufficient_ram", suitability: 40, recommended: false,
         install: { id: "big", phase: "downloading", downloadedBytes: 1e10, totalBytes: 4e10, status: "running", code: null, message: null, fraction: 0.25 },
-        servers: [],
+        servers: [], actionPending: false,
       },
     ],
-    bindings: [],
     engineInstall: null,
   });
   assert.match(root.textContent ?? "", /never downloads model weights/i);
@@ -321,76 +329,136 @@ test("models render: shows the 'never downloads weights' note; no external URLs;
   assert.ok(posted.some((m) => m["name"] === "cancelModelInstall" && (m["args"] as Record<string, unknown>)["id"] === "big"));
 });
 
-test("models render: server chip reflects live state; Restart posts restartServer only when failed", () => {
+test("models render: server chip reflects live state; Restart posts restartServer (no role — there's only one) when failed", () => {
   const { root, posted } = mount("models", {
     manageCapable: true, hardwareCapable: false, inferenceCapable: true, hasList: true,
-    role: "primary_coder",
-    roles: ["primary_coder", "fast_coder", "planner", "reviewer", "embedder", "reranker", "autocomplete", "summarizer"],
     recommendedId: null,
     models: [
       {
         id: "qwen", displayName: "Qwen Coder", family: "Qwen", quantization: "Q8_0",
         parametersB: 1.5, contextLength: 32768, sizeBytes: 1.6e9, installed: true, license: "Apache-2.0",
-        activeRoles: ["primary_coder"], fit: null, fitDetail: null, suitability: null, recommended: false, install: null,
-        servers: [
-          { role: "primary_coder", state: "failed", port: null, code: "llamacpp.not_ready", message: "did not become ready" },
-        ],
+        active: true, chatCapable: true, fit: null, fitDetail: null, suitability: null, recommended: false, install: null,
+        servers: [{ state: "failed", port: null, code: "llamacpp.not_ready", message: "did not become ready" }],
+        actionPending: false,
       },
     ],
-    bindings: [{ role: "primary_coder", modelId: "qwen" }],
     engineInstall: null,
   });
   assert.match(root.textContent ?? "", /failed.*did not become ready/i);
   const restartBtn = [...root.querySelectorAll("button")].find((b) => /restart/i.test(b.textContent ?? ""));
-  assert.ok(restartBtn, "a failed server for the selected role offers Restart");
+  assert.ok(restartBtn, "the active model's failed server offers Restart");
   restartBtn!.dispatchEvent(new (root.ownerDocument.defaultView as unknown as typeof window).MouseEvent("click"));
   assert.ok(
     posted.some(
-      (m) =>
-        m["name"] === "restartServer" &&
-        (m["args"] as Record<string, unknown>)["id"] === "qwen" &&
-        (m["args"] as Record<string, unknown>)["role"] === "primary_coder"
+      (m) => m["name"] === "restartServer" && (m["args"] as Record<string, unknown>)["id"] === "qwen"
     )
+  );
+  assert.ok(
+    !posted.some((m) => m["name"] === "restartServer" && "role" in ((m["args"] as Record<string, unknown>) ?? {})),
+    "no role is sent — there's only ever one thing to restart it for"
   );
 });
 
-test("models render: a ready server shows no Restart button, and its port", () => {
+test("models render: a ready server shows no Restart button, no Activate button (already active), and its port", () => {
   const { root } = mount("models", {
     manageCapable: true, hardwareCapable: false, inferenceCapable: true, hasList: true,
-    role: "primary_coder",
-    roles: ["primary_coder"],
     recommendedId: null,
     models: [
       {
         id: "qwen", displayName: "Qwen Coder", family: "Qwen", quantization: "Q8_0",
         parametersB: 1.5, contextLength: 32768, sizeBytes: 1.6e9, installed: true, license: "Apache-2.0",
-        activeRoles: ["primary_coder"], fit: null, fitDetail: null, suitability: null, recommended: false, install: null,
-        servers: [{ role: "primary_coder", state: "ready", port: 51423, code: null, message: null }],
+        active: true, chatCapable: true, fit: null, fitDetail: null, suitability: null, recommended: false, install: null,
+        servers: [{ state: "ready", port: 51423, code: null, message: null }], actionPending: false,
       },
     ],
-    bindings: [{ role: "primary_coder", modelId: "qwen" }],
     engineInstall: null,
   });
   assert.match(root.textContent ?? "", /ready.*:51423/i);
+  assert.match(root.textContent ?? "", /active/i);
   assert.ok(![...root.querySelectorAll("button")].some((b) => /restart/i.test(b.textContent ?? "")));
+  assert.ok(![...root.querySelectorAll("button")].some((b) => /use for coding/i.test(b.textContent ?? "")));
+});
+
+test("models render: an installed, chat-capable model that isn't active offers 'Use for coding'; an embedder does not", () => {
+  const { root, posted } = mount("models", {
+    manageCapable: true, hardwareCapable: false, inferenceCapable: false, hasList: true,
+    recommendedId: null,
+    models: [
+      {
+        id: "qwen", displayName: "Qwen Coder", family: "Qwen", quantization: "Q8_0",
+        parametersB: 1.5, contextLength: 32768, sizeBytes: 1.6e9, installed: true, license: "Apache-2.0",
+        active: false, chatCapable: true, fit: null, fitDetail: null, suitability: null, recommended: false,
+        install: null, servers: [], actionPending: false,
+      },
+      {
+        id: "nomic", displayName: "Nomic Embed Text v1.5", family: "nomic-embed", quantization: "f16",
+        parametersB: 0.137, contextLength: 8192, sizeBytes: 2.7e8, installed: true, license: "Apache-2.0",
+        active: false, chatCapable: false, fit: null, fitDetail: null, suitability: null, recommended: false,
+        install: null, servers: [], actionPending: false,
+      },
+    ],
+    engineInstall: null,
+  });
+  const buttons = [...root.querySelectorAll("button")].filter((b) => /use for coding/i.test(b.textContent ?? ""));
+  assert.equal(buttons.length, 1, "only the chat-capable model offers to become the active model");
+  buttons[0]!.dispatchEvent(new (root.ownerDocument.defaultView as unknown as typeof window).MouseEvent("click"));
+  assert.ok(
+    posted.some((m) => m["name"] === "activateModel" && (m["args"] as Record<string, unknown>)["id"] === "qwen")
+  );
+});
+
+test("models render: a chat-capable model with no coding suitability score gets a warning, not the primary CTA", () => {
+  // Regression test for a real, reproduced failure: Qwen2.5-Coder 1.5B has
+  // no `primary_coder` entry in its role_suitability at all (only
+  // fast_coder/autocomplete/summarizer) — Core's `candidates_for_role`
+  // filters it out of `model/recommend` entirely, so `suitability` here is
+  // `null`, distinct from merely "unranked" (hardwareCapable is true, so
+  // scoring *did* run). Activating it produced hallucinated tool calls for
+  // a plain "Hi". The card must not steer someone into that with the same
+  // confident accent button used for an actually-fit model.
+  const { root } = mount("models", {
+    manageCapable: true, hardwareCapable: true, inferenceCapable: false, hasList: true,
+    recommendedId: "qwen7b",
+    models: [
+      {
+        id: "qwen1.5b", displayName: "Qwen2.5-Coder 1.5B Instruct (Q8_0)", family: "qwen2.5-coder", quantization: "q8_0",
+        parametersB: 1.5, contextLength: 32768, sizeBytes: 1.9e9, installed: true, license: "Apache-2.0",
+        active: false, chatCapable: true, fit: null, fitDetail: null, suitability: null, recommended: false,
+        install: null, servers: [], actionPending: false,
+      },
+      {
+        id: "qwen7b", displayName: "Qwen2.5-Coder 7B Instruct (Q4_K_M)", family: "qwen2.5-coder", quantization: "q4_k_m",
+        parametersB: 7, contextLength: 32768, sizeBytes: 4.7e9, installed: true, license: "Apache-2.0",
+        active: false, chatCapable: true, fit: "comfortable", fitDetail: null, suitability: 92, recommended: true,
+        install: null, servers: [], actionPending: false,
+      },
+    ],
+    engineInstall: null,
+  });
+  assert.match(root.textContent ?? "", /not rated for coding/i);
+  const buttons = [...root.querySelectorAll("button")].filter((b) => /use for coding/i.test(b.textContent ?? ""));
+  assert.equal(buttons.length, 2);
+  const unratedBtn = buttons.find((b) => b.title.includes("doesn't rate this model"))!;
+  const ratedBtn = buttons.find((b) => !b.title)!;
+  assert.ok(unratedBtn, "the unscored model's button carries an explanatory title");
+  assert.ok(ratedBtn, "the actually-fit model's button carries no warning");
+  assert.equal(unratedBtn.classList.contains("vy-btn--primary"), false, "no confident accent for an unrated model");
+  assert.equal(ratedBtn.classList.contains("vy-btn--primary"), true);
 });
 
 test("models render: a raw f64 parameter count is formatted, not dumped verbatim", () => {
   const { root } = mount("models", {
     manageCapable: true, hardwareCapable: true, inferenceCapable: false, hasList: true,
-    role: "embedder",
-    roles: ["primary_coder", "embedder"],
     recommendedId: null,
     models: [
       {
         id: "nomic", displayName: "Nomic Embed Text v1.5", family: "nomic-embed", quantization: "f16",
         // The exact kind of value Core's f64 catalog field produces.
         parametersB: 0.13699999451637268, contextLength: 8192, sizeBytes: 2.7e8, installed: false,
-        license: "Apache-2.0", activeRoles: [], fit: null, fitDetail: null, suitability: null,
-        recommended: false, install: null, servers: [],
+        license: "Apache-2.0", active: false, chatCapable: false, fit: null, fitDetail: null, suitability: null,
+        recommended: false, install: null, servers: [], actionPending: false,
       },
     ],
-    bindings: [],
     engineInstall: null,
   });
   assert.doesNotMatch(root.textContent ?? "", /0\.13699999451637268/, "never render the raw float");
@@ -400,14 +468,12 @@ test("models render: a raw f64 parameter count is formatted, not dumped verbatim
 test("models render: a short failure message is inline; a long one collapses behind a summary", () => {
   const { root } = mount("models", {
     manageCapable: true, hardwareCapable: true, inferenceCapable: false, hasList: true,
-    role: "reranker",
-    roles: ["primary_coder", "reranker"],
     recommendedId: null,
     models: [
       {
         id: "bge", displayName: "BGE Reranker Base (F16)", family: "bge-reranker", quantization: "f16",
         parametersB: 0.278, contextLength: 512, sizeBytes: 5.6e8, installed: false, license: "MIT",
-        activeRoles: [], fit: null, fitDetail: null, suitability: null, recommended: false,
+        active: false, chatCapable: false, fit: null, fitDetail: null, suitability: null, recommended: false,
         install: {
           id: "bge", phase: null, downloadedBytes: 0, totalBytes: 0, status: "failed",
           code: "model_store.download_failed",
@@ -417,10 +483,9 @@ test("models render: a short failure message is inline; a long one collapses beh
             "HTTP status client error (404 Not Found)",
           fraction: null,
         },
-        servers: [],
+        servers: [], actionPending: false,
       },
     ],
-    bindings: [],
     engineInstall: null,
   });
   // The full diagnostic is preserved (in a <details>/<pre>), just not
@@ -443,22 +508,19 @@ test("models render: a stale server chip is withheld while a fresh install is ru
   // withheld until the running install itself resolves.
   const { root } = mount("models", {
     manageCapable: true, hardwareCapable: true, inferenceCapable: true, hasList: true,
-    role: "primary_coder",
-    roles: ["primary_coder"],
     recommendedId: null,
     models: [
       {
         id: "qwen15", displayName: "Qwen2.5-Coder 1.5B Instruct (Q8_0)", family: "qwen2.5-coder", quantization: "q8_0",
         parametersB: 1.5, contextLength: 32768, sizeBytes: 1.9e9, installed: false, license: "Apache-2.0",
-        activeRoles: [], fit: null, fitDetail: null, suitability: null, recommended: false,
+        active: false, chatCapable: true, fit: null, fitDetail: null, suitability: null, recommended: false,
         install: {
           id: "qwen15", phase: "downloading", downloadedBytes: 0.46e9, totalBytes: 1.9e9,
           status: "running", code: null, message: null, fraction: 0.24,
         },
-        servers: [{ role: "primary_coder", state: "stopped", port: null, code: null, message: null }],
+        servers: [{ state: "stopped", port: null, code: null, message: null }], actionPending: false,
       },
     ],
-    bindings: [],
     engineInstall: null,
   });
   assert.match(root.textContent ?? "", /Downloading/);

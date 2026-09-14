@@ -6,7 +6,7 @@
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 10px;
 }
-.mc-active-model { font-weight: 600; font-size: var(--text-sm); flex: 1; }
+.mc-model-select { flex: 1; min-width: 0; max-width: 260px; }
 
 .mc-log {
   list-style: none;

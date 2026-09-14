@@ -48,13 +48,11 @@
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   box-shadow: 0 0 0 1px var(--accent-soft), var(--shadow-sm);
 }
-.mdl-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.mdl-name { font-weight: 600; font-size: var(--text-md); }
+.mdl-titlerow { display: flex; align-items: center; }
+.mdl-name { font-weight: 600; font-size: var(--text-md); overflow-wrap: anywhere; }
+/* Status chips are a separate row from the name, always — never sharing a
+ * line and never fighting a long title or a long fit-detail for space. */
+.mdl-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mdl-meta { color: var(--text-secondary); font-size: var(--text-sm); overflow-wrap: anywhere; }
 
 .mdl-actions {
@@ -73,14 +71,23 @@
 }
 
 /* A diagnostic message — short ones sit inline; long ones collapse behind
- * a one-line summary rather than sprawling across the card. `flex-basis`
- * only matters inside `.mdl-install`'s flex ROW (drops it to its own line
- * under the status badge); `modelCard` also appends these directly into
- * the card's flex COLUMN for server failures, where no such rule applies. */
-.mdl-err-text {
+ * a one-line summary rather than sprawling across the card. Styled as a
+ * quiet callout (tinted background + accent rule), not solid danger-red
+ * text — the "failed"/"cancelled" badge above already owns that signal;
+ * repeating it in the body text just reads as noisier, not clearer.
+ * `flex-basis` only matters inside `.mdl-install`'s flex ROW (drops it to
+ * its own line under the status badge); `modelCard` also appends these
+ * directly into the card's flex COLUMN for server failures, where no such
+ * rule applies. */
+.mdl-err-text,
+.mdl-err {
   margin: 0;
-  color: var(--danger);
+  padding: 6px 10px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-left: 2px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
   font-size: var(--text-sm);
+  color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
 .mdl-install .mdl-err-text,
@@ -90,9 +97,6 @@
 .mdl-err-summary {
   list-style: none;
   cursor: pointer;
-  color: var(--danger);
-  font-size: var(--text-sm);
-  overflow-wrap: anywhere;
 }
 .mdl-err-summary::-webkit-details-marker { display: none; }
 .mdl-err-summary::before { content: "▸ "; color: var(--text-tertiary); }

@@ -102,25 +102,35 @@ function progress(inst: ModelInstallRow): HTMLElement {
 
 function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
   const card = h("li", { class: `mdl-card${m.recommended ? " mdl-card--recommended" : ""}` });
+  const installing = m.install?.status === "running";
 
-  const head = h("div", { class: "mdl-head" });
-  head.append(h("span", { class: "mdl-name", text: m.displayName }));
-  if (m.recommended) head.append(badge("recommended", "ok"));
-  if (m.installed && !m.install) head.append(badge("installed", "muted"));
+  card.append(h("div", { class: "mdl-titlerow" }, h("span", { class: "mdl-name", text: m.displayName })));
+
+  // Status chips always live on their own row, under the name — never
+  // sharing a line with it. A long title or a long fit detail no longer
+  // fight for space or wrap unpredictably into each other.
+  const chips = h("div", { class: "mdl-chips" });
+  if (m.recommended) chips.append(badge("recommended", "ok"));
+  if (m.installed && !m.install) chips.append(badge("installed", "muted"));
   const fc = fitChip(m);
-  if (fc) head.append(fc);
-  if (model.inferenceCapable) {
-    // The live server chip supersedes the plain "serving X" badge once
-    // the stream has actually seen a lifecycle event for the role.
-    const chippedRoles = new Set(m.servers.map((s) => s.role));
-    for (const r of m.activeRoles) {
-      if (!chippedRoles.has(r)) head.append(badge(`serving ${roleLabel(r)}`, "ok"));
+  if (fc) chips.append(fc);
+  // A server chip describes a *previous* activation attempt. While a fresh
+  // install is running, that history is about to be superseded — showing
+  // e.g. "primary coder: stopped" next to "downloading 24%" reads as a
+  // contradiction, not a status update, so it's withheld until the install
+  // itself resolves.
+  if (!installing) {
+    if (model.inferenceCapable) {
+      const chippedRoles = new Set(m.servers.map((s) => s.role));
+      for (const r of m.activeRoles) {
+        if (!chippedRoles.has(r)) chips.append(badge(`serving ${roleLabel(r)}`, "ok"));
+      }
+      for (const s of m.servers) chips.append(serverChip(s));
+    } else {
+      for (const r of m.activeRoles) chips.append(badge(`serving ${roleLabel(r)}`, "ok"));
     }
-    for (const s of m.servers) head.append(serverChip(s));
-  } else {
-    for (const r of m.activeRoles) head.append(badge(`serving ${roleLabel(r)}`, "ok"));
   }
-  card.append(head);
+  if (chips.childElementCount) card.append(chips);
 
   const meta = [
     m.parametersB ? `${formatParams(m.parametersB)} params` : null,
@@ -135,23 +145,25 @@ function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
 
   // A failed server's reason gets its own line, not squeezed into the
   // `serverChip` pill above (a pill is the wrong shape for a diagnostic
-  // message, and `model/activate`'s own failure never repeats it).
-  for (const s of m.servers) {
-    if (s.state === "failed") {
-      card.append(errorBlock(`${roleLabel(s.role)}: ${s.message ?? s.code ?? "no detail reported"}`));
+  // message, and `model/activate`'s own failure never repeats it). Same
+  // "superseded by a fresh install" rule as the chip itself.
+  if (!installing) {
+    for (const s of m.servers) {
+      if (s.state === "failed") {
+        card.append(errorBlock(`${roleLabel(s.role)}: ${s.message ?? s.code ?? "no detail reported"}`));
+      }
     }
   }
 
   if (model.manageCapable) {
     const actions = h("div", { class: "mdl-actions" });
-    const installing = m.install?.status === "running";
     const installed = m.installed || m.install?.status === "completed";
 
     if (!installed && !installing) {
       const b = h(
         "button",
         { class: "vy-btn vy-btn--sm vy-btn--primary", type: "button" },
-        "Install…"
+        "Install"
       ) as HTMLButtonElement;
       b.addEventListener("click", () => ctrl?.command(CMD.installModel, { id: m.id }));
       actions.append(b);

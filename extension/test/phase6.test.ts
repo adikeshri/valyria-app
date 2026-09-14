@@ -429,6 +429,40 @@ test("models render: a short failure message is inline; a long one collapses beh
   assert.ok(details, "a long failure message collapses into a <details>");
   assert.match(details!.querySelector("summary")!.textContent ?? "", /…$/, "summary is truncated with an ellipsis");
   assert.match(details!.querySelector("pre")!.textContent ?? "", /404 Not Found/, "the full message is still present");
+
+  const installBtn = [...root.querySelectorAll("button")].find((b) => /install/i.test(b.textContent ?? ""));
+  assert.equal(installBtn?.textContent, "Install", "no trailing ellipsis");
+});
+
+test("models render: a stale server chip is withheld while a fresh install is running for the same model", () => {
+  // Regression test: a model previously bound to a role, then removed and
+  // reinstalled, still carries the old model_server_stopped event in the
+  // replayed history. Showing "primary coder: stopped" next to a live
+  // "Downloading … 24%" bar reads as a contradiction, not a status update —
+  // the stale chip (and any of its failure detail) is superseded and
+  // withheld until the running install itself resolves.
+  const { root } = mount("models", {
+    manageCapable: true, hardwareCapable: true, inferenceCapable: true, hasList: true,
+    role: "primary_coder",
+    roles: ["primary_coder"],
+    recommendedId: null,
+    models: [
+      {
+        id: "qwen15", displayName: "Qwen2.5-Coder 1.5B Instruct (Q8_0)", family: "qwen2.5-coder", quantization: "q8_0",
+        parametersB: 1.5, contextLength: 32768, sizeBytes: 1.9e9, installed: false, license: "Apache-2.0",
+        activeRoles: [], fit: null, fitDetail: null, suitability: null, recommended: false,
+        install: {
+          id: "qwen15", phase: "downloading", downloadedBytes: 0.46e9, totalBytes: 1.9e9,
+          status: "running", code: null, message: null, fraction: 0.24,
+        },
+        servers: [{ role: "primary_coder", state: "stopped", port: null, code: null, message: null }],
+      },
+    ],
+    bindings: [],
+    engineInstall: null,
+  });
+  assert.match(root.textContent ?? "", /Downloading/);
+  assert.doesNotMatch(root.textContent ?? "", /stopped/i, "a stale server chip must not contradict a live install");
 });
 
 test("context render: the disabled explanation names G7", () => {

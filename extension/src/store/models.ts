@@ -457,8 +457,11 @@ export function modelsModel(input: {
   manageCapable: boolean;
   hardwareCapable: boolean;
   inferenceCapable: boolean;
+  /** Model ids with an activate/restart request currently in flight. */
+  pendingActionIds?: ReadonlySet<string>;
 }): ModelsModel {
   const role = input.role || DEFAULT_MODEL_ROLE;
+  const pendingActionIds = input.pendingActionIds ?? new Set<string>();
   const installById = new Map(input.installs.map((i) => [i.id, i]));
   const serversByModel = new Map<string, ModelServerLike[]>();
   for (const s of input.servers) {
@@ -479,7 +482,17 @@ export function modelsModel(input: {
 
   const rows: ModelsModel["models"] = (input.models ?? []).map((m) => {
     const c = recById.get(m.id);
-    const install = installById.get(m.id);
+    const rawInstall = installById.get(m.id);
+    // `model_remove` has no compensating event, so a "completed" install
+    // record can outlive the model it describes — Core replays full event
+    // history on every reconnect, so this isn't just a same-session
+    // artifact. `model_list`'s `installed` is Core's live, authoritative
+    // answer (it owns the weights); never let a stale completed record
+    // contradict an explicit `false` from it.
+    const install =
+      rawInstall && rawInstall.status === "completed" && m.installed === false
+        ? undefined
+        : rawInstall;
     const fk = c?.fit_kind;
     const fit: FitKind | null = (FIT_KINDS as readonly string[]).includes(fk ?? "")
       ? (fk as FitKind)
@@ -507,6 +520,7 @@ export function modelsModel(input: {
         code: s.code,
         message: s.message,
       })),
+      actionPending: pendingActionIds.has(m.id),
     };
   });
 

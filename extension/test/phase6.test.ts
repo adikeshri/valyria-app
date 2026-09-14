@@ -81,6 +81,62 @@ test("modelsModel: a live install projection is attached to its model row", () =
   assert.equal(row.install?.fraction, 0.25);
 });
 
+test("modelsModel: a stale 'completed' install record doesn't override model_list saying the model was removed", () => {
+  // Core has no event for model_remove, so a model_install_completed from
+  // a past install (replayed on every reconnect, since Core persists and
+  // replays full event history) can outlive the model it describes.
+  // model_list's `installed: false` is Core's live, authoritative answer —
+  // the stale record must not resurrect the model as "installed".
+  const m = modelsModel({
+    models: [{ id: "qwen", family: "Qwen", display_name: "Qwen", quantization: "Q4", parameters_b: 7, context_length: 32768, size_bytes: 4e9, installed: false, license: "Apache-2.0", active_roles: [] }],
+    recommend: null,
+    installs: [
+      { id: "qwen", phase: "done", downloadedBytes: 4e9, totalBytes: 4e9, status: "completed", code: null, message: null },
+    ],
+    servers: [],
+    engineInstall: null,
+    role: "primary_coder",
+    manageCapable: true,
+    hardwareCapable: false,
+    inferenceCapable: false,
+  });
+  const row = m.models[0]!;
+  assert.equal(row.installed, false);
+  assert.equal(row.install, null, "stale completed install record must be suppressed once model_list says installed:false");
+});
+
+test("modelsModel: actionPending marks a model with an in-flight activate/restart request", () => {
+  // model/activate blocks for as long as the server takes to answer
+  // /health (tens of seconds); the UI needs this to disable the button so
+  // a re-click can't boot a second llama-server for the same role.
+  const m = modelsModel({
+    models: [{ id: "qwen", family: "Qwen", display_name: "Qwen", quantization: "Q4", parameters_b: 7, context_length: 32768, size_bytes: 4e9, installed: true, license: "Apache-2.0", active_roles: [] }],
+    recommend: null,
+    installs: [],
+    servers: [],
+    engineInstall: null,
+    role: "primary_coder",
+    manageCapable: true,
+    hardwareCapable: false,
+    inferenceCapable: false,
+    pendingActionIds: new Set(["qwen"]),
+  });
+  assert.equal(m.models[0]!.actionPending, true);
+
+  const idle = modelsModel({
+    models: [{ id: "qwen", family: "Qwen", display_name: "Qwen", quantization: "Q4", parameters_b: 7, context_length: 32768, size_bytes: 4e9, installed: true, license: "Apache-2.0", active_roles: [] }],
+    recommend: null,
+    installs: [],
+    servers: [],
+    engineInstall: null,
+    role: "primary_coder",
+    manageCapable: true,
+    hardwareCapable: false,
+    inferenceCapable: false,
+  });
+  assert.equal(idle.models[0]!.actionPending, false);
+});
+
 test("modelsModel: manage + hardware capability gating is passed through", () => {
   const m = modelsModel({
     models: [],

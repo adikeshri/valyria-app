@@ -446,6 +446,14 @@ button.vy-btn--primary {
   font-weight: 600;
 }
 button.vy-btn--primary:hover:not(:disabled) { background: var(--accent-strong); }
+/* A de-emphasized action (e.g. a destructive-lite "Remove") that shouldn't
+ * compete on equal visual footing with the row's primary action. */
+button.vy-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+button.vy-btn--ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
 button.vy-btn:disabled { opacity: 0.5; cursor: default; }
 textarea.vy-input, input.vy-input {
   width: 100%;

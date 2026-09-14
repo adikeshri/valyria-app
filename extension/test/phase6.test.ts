@@ -375,6 +375,62 @@ test("models render: a ready server shows no Restart button, and its port", () =
   assert.ok(![...root.querySelectorAll("button")].some((b) => /restart/i.test(b.textContent ?? "")));
 });
 
+test("models render: a raw f64 parameter count is formatted, not dumped verbatim", () => {
+  const { root } = mount("models", {
+    manageCapable: true, hardwareCapable: true, inferenceCapable: false, hasList: true,
+    role: "embedder",
+    roles: ["primary_coder", "embedder"],
+    recommendedId: null,
+    models: [
+      {
+        id: "nomic", displayName: "Nomic Embed Text v1.5", family: "nomic-embed", quantization: "f16",
+        // The exact kind of value Core's f64 catalog field produces.
+        parametersB: 0.13699999451637268, contextLength: 8192, sizeBytes: 2.7e8, installed: false,
+        license: "Apache-2.0", activeRoles: [], fit: null, fitDetail: null, suitability: null,
+        recommended: false, install: null, servers: [],
+      },
+    ],
+    bindings: [],
+    engineInstall: null,
+  });
+  assert.doesNotMatch(root.textContent ?? "", /0\.13699999451637268/, "never render the raw float");
+  assert.match(root.textContent ?? "", /137M params/);
+});
+
+test("models render: a short failure message is inline; a long one collapses behind a summary", () => {
+  const { root } = mount("models", {
+    manageCapable: true, hardwareCapable: true, inferenceCapable: false, hasList: true,
+    role: "reranker",
+    roles: ["primary_coder", "reranker"],
+    recommendedId: null,
+    models: [
+      {
+        id: "bge", displayName: "BGE Reranker Base (F16)", family: "bge-reranker", quantization: "f16",
+        parametersB: 0.278, contextLength: 512, sizeBytes: 5.6e8, installed: false, license: "MIT",
+        activeRoles: [], fit: null, fitDetail: null, suitability: null, recommended: false,
+        install: {
+          id: "bge", phase: null, downloadedBytes: 0, totalBytes: 0, status: "failed",
+          code: "model_store.download_failed",
+          message:
+            'download of "bge-reranker-base-f16" failed: HEAD failed: download of ' +
+            '"https://huggingface.co/BAAI/bge-reranker-base/resolve/main/model-f16.gguf" failed: ' +
+            "HTTP status client error (404 Not Found)",
+          fraction: null,
+        },
+        servers: [],
+      },
+    ],
+    bindings: [],
+    engineInstall: null,
+  });
+  // The full diagnostic is preserved (in a <details>/<pre>), just not
+  // sprawled across the card by default.
+  const details = root.querySelector("details.mdl-err");
+  assert.ok(details, "a long failure message collapses into a <details>");
+  assert.match(details!.querySelector("summary")!.textContent ?? "", /…$/, "summary is truncated with an ellipsis");
+  assert.match(details!.querySelector("pre")!.textContent ?? "", /404 Not Found/, "the full message is still present");
+});
+
 test("context render: the disabled explanation names G7", () => {
   const { root } = mount("context", { available: false, taskId: null, items: [] });
   assert.match(root.textContent ?? "", /G7/);

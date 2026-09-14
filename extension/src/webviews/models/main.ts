@@ -24,6 +24,29 @@ let ctrl: { command: (n: string, a?: unknown) => void } | undefined;
 const gb = (b: number) => `${(b / 1e9).toFixed(b >= 1e9 ? 1 : 2)} GB`;
 const roleLabel = (r: string) => r.replace(/_/g, " ");
 
+/** "0.27799999713897705" (a raw f64 from Core) -> "278M" / "7B" / "1.5B". */
+function formatParams(b: number): string {
+  if (b < 1) return `${Math.round(b * 1000)}M`;
+  const rounded = Math.round(b * 10) / 10;
+  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}B`;
+}
+
+/** A message that fits inline renders as plain text; a long diagnostic
+ *  chain (nested "X failed: Y" causes, URLs, hashes) collapses behind a
+ *  one-line summary instead of dominating the card. */
+const ERROR_INLINE_LIMIT = 88;
+function errorBlock(message: string): HTMLElement {
+  if (message.length <= ERROR_INLINE_LIMIT) {
+    return h("p", { class: "mdl-err-text" }, message);
+  }
+  const details = h("details", { class: "mdl-err" }) as HTMLDetailsElement;
+  details.append(
+    h("summary", { class: "mdl-err-summary" }, `${message.slice(0, ERROR_INLINE_LIMIT)}…`),
+    h("pre", { class: "mdl-err-raw" }, message)
+  );
+  return details;
+}
+
 function fitChip(m: ModelRow): HTMLElement | null {
   if (!m.fit) return null;
   const kind = m.fit === "comfortable" ? "ok" : m.fit === "tight" ? "warn" : "bad";
@@ -33,13 +56,15 @@ function fitChip(m: ModelRow): HTMLElement | null {
 }
 
 /** A per-role managed server's live state — `Starting…` / `Ready · :port`
- *  / `Failed — reason` / `Stopped`, next to the role it's serving. */
+ *  / `Failed` / `Stopped`, next to the role it's serving. The failure
+ *  reason is never inlined here — a pill is the wrong shape for a
+ *  diagnostic message; `modelCard` renders it as an `errorBlock` instead. */
 function serverChip(s: ModelServerRow): HTMLElement {
   const role = roleLabel(s.role);
   if (s.state === "starting") return badge(`${role}: starting…`, "muted");
   if (s.state === "ready") return badge(`${role}: ready · :${s.port ?? "?"}`, "ok");
   if (s.state === "stopped") return badge(`${role}: stopped`, "muted");
-  return badge(`${role}: failed — ${s.message ?? s.code ?? "no detail reported"}`, "bad");
+  return badge(`${role}: failed`, "bad");
 }
 
 function progress(inst: ModelInstallRow): HTMLElement {
@@ -69,52 +94,77 @@ function progress(inst: ModelInstallRow): HTMLElement {
     const cancelled = inst.code === "model_store.cancelled";
     wrap.append(
       badge(cancelled ? "cancelled" : "failed", cancelled ? "muted" : "bad"),
-      h("span", { class: "vy-empty", text: inst.message ?? inst.code ?? "Install did not finish." })
+      errorBlock(inst.message ?? inst.code ?? "Install did not finish.")
     );
   }
   return wrap;
 }
 
 function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
-  const card = h("li", { class: "mdl-card" });
+  const card = h("li", { class: `mdl-card${m.recommended ? " mdl-card--recommended" : ""}` });
+  const installing = m.install?.status === "running";
 
-  const head = h("div", { class: "mdl-head" });
-  head.append(h("span", { class: "mdl-name", text: m.displayName }));
-  if (m.recommended) head.append(badge("recommended", "ok"));
-  if (m.installed && !m.install) head.append(badge("installed", "muted"));
+  card.append(h("div", { class: "mdl-titlerow" }, h("span", { class: "mdl-name", text: m.displayName })));
+
+  // Status chips always live on their own row, under the name — never
+  // sharing a line with it. A long title or a long fit detail no longer
+  // fight for space or wrap unpredictably into each other.
+  const chips = h("div", { class: "mdl-chips" });
+  if (m.recommended) chips.append(badge("recommended", "ok"));
+  if (m.installed && !m.install) chips.append(badge("installed", "muted"));
   const fc = fitChip(m);
-  if (fc) head.append(fc);
-  if (model.inferenceCapable) {
-    // The live server chip supersedes the plain "serving X" badge once
-    // the stream has actually seen a lifecycle event for the role.
-    const chippedRoles = new Set(m.servers.map((s) => s.role));
-    for (const r of m.activeRoles) {
-      if (!chippedRoles.has(r)) head.append(badge(`serving ${roleLabel(r)}`, "ok"));
+  if (fc) chips.append(fc);
+  // A server chip describes a *previous* activation attempt. While a fresh
+  // install is running, that history is about to be superseded — showing
+  // e.g. "primary coder: stopped" next to "downloading 24%" reads as a
+  // contradiction, not a status update, so it's withheld until the install
+  // itself resolves.
+  if (!installing) {
+    if (model.inferenceCapable) {
+      const chippedRoles = new Set(m.servers.map((s) => s.role));
+      for (const r of m.activeRoles) {
+        if (!chippedRoles.has(r)) chips.append(badge(`serving ${roleLabel(r)}`, "ok"));
+      }
+      for (const s of m.servers) chips.append(serverChip(s));
+    } else {
+      for (const r of m.activeRoles) chips.append(badge(`serving ${roleLabel(r)}`, "ok"));
     }
-    for (const s of m.servers) head.append(serverChip(s));
-  } else {
-    for (const r of m.activeRoles) head.append(badge(`serving ${roleLabel(r)}`, "ok"));
   }
-  card.append(head);
+  if (chips.childElementCount) card.append(chips);
 
   const meta = [
-    m.parametersB ? `${m.parametersB}B params` : null,
+    m.parametersB ? `${formatParams(m.parametersB)} params` : null,
     m.quantization,
     m.contextLength ? `${(m.contextLength / 1024).toFixed(0)}K ctx` : null,
     gb(m.sizeBytes),
     m.license,
   ].filter(Boolean).join(" · ");
-  card.append(h("div", { class: "mdl-meta vy-empty", text: meta }));
+  card.append(h("div", { class: "mdl-meta", text: meta }));
 
   if (m.install) card.append(progress(m.install));
 
+  // A failed server's reason gets its own line, not squeezed into the
+  // `serverChip` pill above (a pill is the wrong shape for a diagnostic
+  // message, and `model/activate`'s own failure never repeats it). Same
+  // "superseded by a fresh install" rule as the chip itself.
+  if (!installing) {
+    for (const s of m.servers) {
+      if (s.state === "failed") {
+        card.append(errorBlock(`${roleLabel(s.role)}: ${s.message ?? s.code ?? "no detail reported"}`));
+      }
+    }
+  }
+
   if (model.manageCapable) {
     const actions = h("div", { class: "mdl-actions" });
-    const installing = m.install?.status === "running";
     const installed = m.installed || m.install?.status === "completed";
 
     if (!installed && !installing) {
-      const b = h("button", { class: "vy-btn vy-btn--sm", type: "button" }, "Install…") as HTMLButtonElement;
+      const b = h(
+        "button",
+        { class: "vy-btn vy-btn--sm vy-btn--primary", type: "button" },
+        "Install"
+      ) as HTMLButtonElement;
       b.addEventListener("click", () => ctrl?.command(CMD.installModel, { id: m.id }));
       actions.append(b);
     }
@@ -131,7 +181,7 @@ function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
       // can't boot a second llama-server for the same role and starve both.
       const act = h(
         "button",
-        { class: "vy-btn vy-btn--sm", type: "button" },
+        { class: "vy-btn vy-btn--sm vy-btn--primary", type: "button" },
         m.actionPending ? "Activating…" : "Activate"
       ) as HTMLButtonElement;
       act.disabled = m.actionPending;
@@ -154,7 +204,11 @@ function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
         actions.append(restart);
       }
 
-      const rm = h("button", { class: "vy-btn vy-btn--sm", type: "button" }, "Remove") as HTMLButtonElement;
+      const rm = h(
+        "button",
+        { class: "vy-btn vy-btn--sm vy-btn--ghost", type: "button" },
+        "Remove"
+      ) as HTMLButtonElement;
       rm.disabled = m.actionPending;
       rm.addEventListener("click", () => ctrl?.command(CMD.removeModel, { id: m.id }));
       actions.append(rm);

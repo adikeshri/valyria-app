@@ -38,6 +38,12 @@ export class ModelsViewProvider extends WebviewBase {
   private models: ModelSummary[] | null = null;
   private recommend: { role: string; recommended: unknown; candidates: unknown[] } | null = null;
   private role: string = DEFAULT_MODEL_ROLE;
+  // `model/activate` (and `model/restartServer`) block for as long as
+  // boot_model_server takes to answer /health — tens of seconds, sometimes
+  // longer under memory pressure. Without tracking this, a re-click before
+  // that resolves boots a second `llama-server` for the same role, and two
+  // boots contending for RAM can starve each other past the timeout.
+  private readonly pendingAction = new Set<string>();
 
   constructor(
     extensionUri: vscode.Uri,
@@ -60,6 +66,7 @@ export class ModelsViewProvider extends WebviewBase {
       manageCapable: this.supervisor.has("model_manage"),
       hardwareCapable: this.supervisor.has("hardware"),
       inferenceCapable: this.supervisor.has("model_inference"),
+      pendingActionIds: this.pendingAction,
     });
   }
 
@@ -84,10 +91,10 @@ export class ModelsViewProvider extends WebviewBase {
         if (a.id) void this.cancelInstall(a.id);
         break;
       case "activateModel":
-        if (a.id && a.role) void this.activate(a.id, a.role);
+        if (a.id && a.role && !this.pendingAction.has(a.id)) void this.activate(a.id, a.role);
         break;
       case "restartServer":
-        if (a.id && a.role) void this.restartServer(a.id, a.role);
+        if (a.id && a.role && !this.pendingAction.has(a.id)) void this.restartServer(a.id, a.role);
         break;
       case "removeModel":
         if (a.id) void this.remove(a.id);
@@ -177,6 +184,8 @@ export class ModelsViewProvider extends WebviewBase {
   }
 
   private async activate(id: string, role: string): Promise<void> {
+    this.pendingAction.add(id);
+    this.push();
     try {
       // Blocks until the server (when `model_inference` is served) answers
       // `/health` or fails — the `model_server_starting`/`_ready`/`_failed`
@@ -188,14 +197,22 @@ export class ModelsViewProvider extends WebviewBase {
       );
     } catch (e) {
       void vscode.window.showErrorMessage(`Valyria: activate failed — ${String(e)}`);
+    } finally {
+      this.pendingAction.delete(id);
+      this.push();
     }
   }
 
   private async restartServer(id: string, role: string): Promise<void> {
+    this.pendingAction.add(id);
+    this.push();
     try {
       await this.host.client.request("model/restartServer", { id, role });
     } catch (e) {
       void vscode.window.showErrorMessage(`Valyria: restart failed — ${String(e)}`);
+    } finally {
+      this.pendingAction.delete(id);
+      this.push();
     }
   }
 

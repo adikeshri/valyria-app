@@ -290,6 +290,12 @@ export interface ModelRow {
    *  the event stream — empty when `model_inference` is absent or nothing
    *  has been activated yet. */
   servers: ModelServerRow[];
+  /** An activate/restart request for this model is in flight. `model_activate`
+   *  blocks until the server answers `/health` or fails (tens of seconds), so
+   *  without this the button gives no feedback and a second click boots a
+   *  second `llama-server` for the same role — two boots contending for RAM
+   *  can starve each other past the health-check timeout. */
+  actionPending: boolean;
 }
 
 export interface ModelsModel {

@@ -153,12 +153,18 @@ jobs:
         shell: bash
         run: npm ci
 
-      - name: Icon tooling (Pillow for scripts/gen-icons.py, fontTools for chrome/)
+      - name: Icon tooling (Pillow for scripts/gen-icons.py, fontTools for chrome/) [macOS]
         # --break-system-packages: the macos-14 runner's system Python enforces
         # PEP 668 ("externally-managed-environment"); this is an ephemeral CI
         # runner, so overriding the guard is safe (matches pip's own suggested
-        # fix). Harmless on Linux/Windows runners that don't enforce it.
+        # fix). ubuntu-22.04's older pip doesn't even recognize this flag
+        # (errors "no such option"), so it's macOS-only.
+        if: matrix.vscode_platform == 'darwin'
         run: python3 -m pip install --user --break-system-packages Pillow "fonttools==4.60.0"
+
+      - name: Icon tooling (Pillow for scripts/gen-icons.py, fontTools for chrome/) [Linux/Windows]
+        if: matrix.vscode_platform != 'darwin'
+        run: python3 -m pip install --user Pillow "fonttools==4.60.0"
 
       - name: Bootstrap (submodule overlay + patches + icons)
         shell: bash

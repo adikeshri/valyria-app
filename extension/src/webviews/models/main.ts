@@ -126,7 +126,15 @@ function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
         if (r === model.role) opt.selected = true;
         sel.append(opt);
       }
-      const act = h("button", { class: "vy-btn vy-btn--sm", type: "button" }, "Activate") as HTMLButtonElement;
+      // `model/activate` blocks for as long as the server takes to answer
+      // /health (tens of seconds) — disable while pending so a re-click
+      // can't boot a second llama-server for the same role and starve both.
+      const act = h(
+        "button",
+        { class: "vy-btn vy-btn--sm", type: "button" },
+        m.actionPending ? "Activating…" : "Activate"
+      ) as HTMLButtonElement;
+      act.disabled = m.actionPending;
       act.addEventListener("click", () => ctrl?.command(CMD.activateModel, { id: m.id, role: sel.value }));
       actions.append(sel, act);
 
@@ -137,8 +145,9 @@ function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
         const restart = h(
           "button",
           { class: "vy-btn vy-btn--sm", type: "button" },
-          "Restart server"
+          m.actionPending ? "Restarting…" : "Restart server"
         ) as HTMLButtonElement;
+        restart.disabled = m.actionPending;
         restart.addEventListener("click", () =>
           ctrl?.command(CMD.restartServer, { id: m.id, role: model.role })
         );
@@ -146,6 +155,7 @@ function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
       }
 
       const rm = h("button", { class: "vy-btn vy-btn--sm", type: "button" }, "Remove") as HTMLButtonElement;
+      rm.disabled = m.actionPending;
       rm.addEventListener("click", () => ctrl?.command(CMD.removeModel, { id: m.id }));
       actions.append(rm);
     }

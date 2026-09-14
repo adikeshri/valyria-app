@@ -136,7 +136,9 @@ test("modelChat renders the transcript and posts createTask on send", () => {
   const { root, posted } = mount("modelChat", {
     connection: "ready",
     inferenceCapable: true,
-    activeModel: { role: "primary_coder", displayName: "Qwen2.5 Coder 7B" },
+    models: [{ id: "qwen", displayName: "Qwen2.5 Coder 7B" }],
+    activeModelId: "qwen",
+    activating: false,
     taskId: "t1",
     objective: "Add a --json flag",
     state: "completed",
@@ -164,11 +166,13 @@ test("modelChat renders the transcript and posts createTask on send", () => {
   );
 });
 
-test("modelChat with no model bound to primary_coder shows an empty state and an Open Models affordance", () => {
+test("modelChat with no models installed shows an empty state and an Open Models affordance", () => {
   const { root, posted } = mount("modelChat", {
     connection: "ready",
     inferenceCapable: true,
-    activeModel: null,
+    models: [],
+    activeModelId: null,
+    activating: false,
     taskId: null,
     objective: null,
     state: null,
@@ -179,7 +183,7 @@ test("modelChat with no model bound to primary_coder shows an empty state and an
     transcript: [],
     approval: null,
   });
-  assert.match(root.textContent ?? "", /No model set up for coding yet/);
+  assert.match(root.textContent ?? "", /No models installed yet/);
   const openBtn = [...root.querySelectorAll("button")].find((b) => b.textContent === "Open Models") as HTMLButtonElement;
   assert.ok(openBtn, "has an Open Models button");
   openBtn.click();
@@ -189,11 +193,98 @@ test("modelChat with no model bound to primary_coder shows an empty state and an
   );
 });
 
+test("modelChat: models installed but none active shows a picker; choosing one posts activateModel", () => {
+  const { root, posted } = mount("modelChat", {
+    connection: "ready",
+    inferenceCapable: true,
+    models: [
+      { id: "qwen", displayName: "Qwen2.5 Coder 7B" },
+      { id: "llama", displayName: "Llama 3.1 8B" },
+    ],
+    activeModelId: null,
+    activating: false,
+    taskId: null,
+    objective: null,
+    state: null,
+    terminal: false,
+    working: false,
+    blocked: false,
+    canSubmit: true,
+    transcript: [],
+    approval: null,
+  });
+  const sel = root.querySelector("select") as HTMLSelectElement;
+  assert.ok(sel, "shows a model picker instead of a role-scoped activate flow");
+  assert.equal(sel.value, "", "nothing preselected when nothing is active");
+  sel.value = "llama";
+  sel.dispatchEvent(new (root.ownerDocument.defaultView as unknown as typeof window).Event("change"));
+  assert.ok(
+    posted.some((m) => m.type === "command" && m["name"] === "activateModel" && (m["args"] as { id?: string })?.id === "llama"),
+    "picking a model posts activateModel with no role — there's only one thing to activate it for"
+  );
+});
+
+test("modelChat disables the picker and shows Activating… while a switch is in flight", () => {
+  const { root } = mount("modelChat", {
+    connection: "ready",
+    inferenceCapable: true,
+    models: [{ id: "qwen", displayName: "Qwen2.5 Coder 7B" }],
+    activeModelId: "qwen",
+    activating: true,
+    taskId: null,
+    objective: null,
+    state: null,
+    terminal: false,
+    working: false,
+    blocked: false,
+    canSubmit: true,
+    transcript: [],
+    approval: null,
+  });
+  const sel = root.querySelector("select") as HTMLSelectElement;
+  assert.equal(sel.disabled, true);
+  assert.match(root.textContent ?? "", /Activating…/);
+});
+
+test("modelChat warns when the active model has no coding suitability score — the Qwen 1.5B trap", () => {
+  const { root } = mount("modelChat", {
+    connection: "ready",
+    inferenceCapable: true,
+    models: [
+      { id: "qwen1.5b", displayName: "Qwen2.5-Coder 1.5B Instruct (Q8_0)", unratedForCoding: true },
+      { id: "qwen7b", displayName: "Qwen2.5-Coder 7B Instruct (Q4_K_M)", unratedForCoding: false },
+    ],
+    activeModelId: "qwen1.5b",
+    activating: false,
+    taskId: null,
+    objective: null,
+    state: null,
+    terminal: false,
+    working: false,
+    blocked: false,
+    canSubmit: true,
+    transcript: [],
+    approval: null,
+  });
+  assert.match(root.textContent ?? "", /not rated for coding/i, "a persistent warning names the active model's problem");
+  const options = [...root.querySelectorAll("option")];
+  assert.ok(
+    options.some((o) => /qwen2\.5-coder 1\.5b.*not rated for coding/i.test(o.textContent ?? "")),
+    "the unrated option itself is marked in the dropdown"
+  );
+  assert.ok(
+    !options.some((o) => /qwen2\.5-coder 7b.*not rated for coding/i.test(o.textContent ?? "")),
+    "a properly-scored option carries no warning"
+  );
+});
+
 test("modelChat surfaces a pending approval inline and posts resolveApproval", () => {
   const { root, posted } = mount("modelChat", {
     connection: "ready",
     inferenceCapable: true,
-    activeModel: { role: "primary_coder", displayName: "Qwen2.5 Coder 7B" },
+    models: [{ id: "qwen", displayName: "Qwen2.5 Coder 7B" }],
+    activeModelId: "qwen",
+    activating: false,
     taskId: "t1",
     objective: "Add a --json flag",
     state: "waiting_for_permission",

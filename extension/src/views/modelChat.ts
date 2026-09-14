@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { modelServers } from "@valyria/state";
 import { WebviewBase } from "./webviewBase";
-import { modelChatModel } from "../store/models";
+import { modelChatModel, DEFAULT_MODEL_ROLE } from "../store/models";
 import type { ModelSummary } from "../store/models";
 import type { Store } from "../store/store";
 import type { Supervisor } from "../session/supervisor";
@@ -13,8 +13,10 @@ import type { BridgeHost } from "../bridge/host";
  * Bar, like Cursor's chat). A message here becomes a real Core task
  * (`task/create`): the full agent loop — system prompt, tools, plan,
  * verification — not a raw model probe. The left sidebar carries nothing
- * but the Models panel; everything else (task progress, tool activity,
- * approvals) surfaces inline here instead of in its own panel.
+ * but the Models panel (for install/remove); which installed model is
+ * *active* is picked right here, since that's the one Model Chat–specific
+ * decision — everything else (task progress, tool activity, approvals)
+ * surfaces inline here instead of in its own panel.
  */
 export class ModelChatViewProvider extends WebviewBase {
   static readonly viewId = "valyria.modelChat";
@@ -22,6 +24,11 @@ export class ModelChatViewProvider extends WebviewBase {
   protected readonly bundle = "modelChat";
 
   private models: ModelSummary[] | null = null;
+  private recommend: { role: string; recommended: unknown; candidates: unknown[] } | null = null;
+  // Mirrors `ModelsViewProvider.pendingAction`: `model/activate` blocks for
+  // as long as the server takes to boot, so the picker disables itself
+  // rather than let a re-selection race the first and boot two servers.
+  private activating = false;
 
   constructor(
     extensionUri: vscode.Uri,
@@ -39,6 +46,8 @@ export class ModelChatViewProvider extends WebviewBase {
       inferenceCapable: this.supervisor.has("model_inference"),
       models: this.models,
       allowForTaskSupported: this.supervisor.has("approval_scope"),
+      activating: this.activating,
+      recommend: this.recommend,
     });
   }
 
@@ -47,9 +56,39 @@ export class ModelChatViewProvider extends WebviewBase {
       void vscode.commands.executeCommand("valyria.models.focus");
       return;
     }
+    if (name === "activateModel") {
+      const id = (args as { id?: string } | undefined)?.id;
+      if (id && !this.activating) void this.activate(id);
+      return;
+    }
     // createTask, cancelTask, resolveApproval, openSurface, openDiff,
     // openFile, setLayoutMode, rollbackTo — all already routed centrally.
     this.dispatch(name, args);
+  }
+
+  private modelName(id: string): string {
+    return this.models?.find((m) => m.id === id)?.display_name ?? id;
+  }
+
+  private async activate(id: string): Promise<void> {
+    this.activating = true;
+    this.push();
+    try {
+      // Server lifecycle (`model_server_starting`/`_ready`/`_failed`) drives
+      // the status pill live; this call's own success/failure drives the
+      // toast, same split as the Models panel's own `activate`.
+      await this.host.client.request("model/activate", { id, role: DEFAULT_MODEL_ROLE });
+      void vscode.window.showInformationMessage(`Valyria: ${this.modelName(id)} is now the active coding model.`);
+    } catch (e) {
+      void vscode.window.showErrorMessage(`Valyria: activate failed — ${String(e)}`);
+    } finally {
+      this.activating = false;
+      // A model that was never previously activated may emit no terminal
+      // `model_server_*` event to trip `onStoreChange`'s refetch — but
+      // `model/list`'s `active_roles` just changed either way, so fetch it
+      // directly rather than wait.
+      void this.refreshModels();
+    }
   }
 
   protected wire(refresh: () => void): vscode.Disposable[] {
@@ -89,6 +128,20 @@ export class ModelChatViewProvider extends WebviewBase {
       this.models = r.models ?? [];
     } catch {
       this.models = null;
+    }
+    // Only to flag a model with no coding suitability at all (see
+    // `unratedForCoding`'s doc comment) — `null` on failure/incapability
+    // means "unknown," so nothing gets (mis-)flagged.
+    if (this.supervisor.has("hardware")) {
+      try {
+        this.recommend = (await this.host.client.request("model/recommend", {
+          role: DEFAULT_MODEL_ROLE,
+        })) as { role: string; recommended: unknown; candidates: unknown[] };
+      } catch {
+        this.recommend = null;
+      }
+    } else {
+      this.recommend = null;
     }
     this.push();
   }

@@ -95,15 +95,41 @@ function render(m: ModelChatModel): void {
     return;
   }
 
-  // --- status line ---
+  // --- status line: the model picker itself ---
   const status = h("div", { class: "mc-status" });
-  if (m.activeModel) {
-    status.append(h("span", { class: "mc-active-model", text: m.activeModel.displayName }));
-  } else {
-    status.append(h("span", { class: "vy-empty", text: "No model set up for coding yet." }));
+  if (m.models.length === 0) {
+    status.append(h("span", { class: "vy-empty", text: "No models installed yet." }));
     const open = h("button", { class: "vy-btn", type: "button" }, "Open Models") as HTMLButtonElement;
     open.addEventListener("click", () => ctrl?.command(CMD.openModelManager));
     status.append(open);
+  } else {
+    const sel = h("select", {
+      class: "vy-select mc-model-select",
+      "aria-label": "Active coding model",
+    }) as HTMLSelectElement;
+    if (!m.activeModelId) {
+      sel.append(h("option", { value: "", disabled: true, selected: true }, "Choose a model…"));
+    }
+    for (const model of m.models) {
+      const label = model.unratedForCoding ? `⚠ ${model.displayName} (not rated for coding)` : model.displayName;
+      const opt = h("option", { value: model.id }, label) as HTMLOptionElement;
+      if (model.id === m.activeModelId) opt.selected = true;
+      sel.append(opt);
+    }
+    sel.disabled = m.activating;
+    sel.addEventListener("change", () => ctrl?.command(CMD.activateModel, { id: sel.value }));
+    status.append(sel);
+    if (m.activating) status.append(h("span", { class: "vy-empty", text: "Activating…" }));
+    // The dropdown's own option text carries the warning for anything you
+    // might *switch to*; this repeats it for whatever's active right now,
+    // since that's exactly the "why is chat behaving strangely" case —
+    // Qwen2.5-Coder 1.5B (tuned for autocomplete, not primary_coder) is
+    // the model that motivated this: it hallucinates a tool call for a
+    // plain "Hi" instead of just replying.
+    const activeModel = m.models.find((x) => x.id === m.activeModelId);
+    if (activeModel?.unratedForCoding) {
+      status.append(badge("not rated for coding — expect erratic behavior", "warn"));
+    }
   }
   const pill = statusPill(m);
   if (pill) status.append(pill);
@@ -115,7 +141,7 @@ function render(m: ModelChatModel): void {
   // --- transcript ---
   const list = h("ol", { class: "mc-log", "aria-label": "Conversation" });
   if (m.transcript.length === 0) {
-    root.append(empty(m.activeModel ? "Ask it to do something in this repo." : "Set up a coding model, then ask it to do something in this repo."));
+    root.append(empty(m.activeModelId ? "Ask it to do something in this repo." : "Pick a coding model above, then ask it to do something in this repo."));
   }
   for (const e of m.transcript) {
     list.append(

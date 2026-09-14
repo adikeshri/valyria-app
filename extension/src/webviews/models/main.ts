@@ -1,8 +1,12 @@
 /**
- * Model Manager (PLAN.md §20 / docs/MODEL-SETUP-PLAN.md). Choose and set up a
- * model from the editor: a hardware-scored shortlist for a role, a license
- * acceptance prompt (host-side), live install progress off the event stream,
- * and per-role activation.
+ * Model Manager (PLAN.md §20 / docs/MODEL-SETUP-PLAN.md). Browse the
+ * catalog, install/remove weights, and pick the active coding model, all
+ * from the editor — a hardware-scored shortlist, live install progress off
+ * the event stream, and a license acceptance prompt (host-side).
+ *
+ * There is exactly one thing to activate a model *for* (see
+ * `store/models.ts`'s note on `DEFAULT_MODEL_ROLE`), so this surface has no
+ * role picker — a model is either the active coding model or it isn't.
  *
  * The extension has NO download path for weights — Install / Cancel / Activate
  * / Remove are intents the host forwards to Core (gated on `model_manage`).
@@ -22,7 +26,6 @@ const root = document.getElementById("root")!;
 let ctrl: { command: (n: string, a?: unknown) => void } | undefined;
 
 const gb = (b: number) => `${(b / 1e9).toFixed(b >= 1e9 ? 1 : 2)} GB`;
-const roleLabel = (r: string) => r.replace(/_/g, " ");
 
 /** "0.27799999713897705" (a raw f64 from Core) -> "278M" / "7B" / "1.5B". */
 function formatParams(b: number): string {
@@ -55,16 +58,30 @@ function fitChip(m: ModelRow): HTMLElement | null {
   return badge(m.fitDetail && m.fit === "will_not_fit" ? `${label} · ${m.fitDetail}` : label, kind);
 }
 
-/** A per-role managed server's live state — `Starting…` / `Ready · :port`
- *  / `Failed` / `Stopped`, next to the role it's serving. The failure
- *  reason is never inlined here — a pill is the wrong shape for a
- *  diagnostic message; `modelCard` renders it as an `errorBlock` instead. */
+/** `suitability` is null either because hardware scoring is off entirely
+ *  (`!hardwareCapable` — true for every model, meaningless here) or because
+ *  Core's own catalog gives this model no `role_suitability` entry for
+ *  coding at all — `candidates_for_role` filters out anything scoring 0, so
+ *  it never even reaches `model/recommend`'s candidate list. That second
+ *  case is a real, specific warning: this model may be perfectly good at
+ *  autocomplete or summarizing, but Core itself doesn't think it can drive
+ *  the agent loop — e.g. Qwen2.5-Coder 1.5B (tuned for `fast_coder` /
+ *  `autocomplete`) has no `primary_coder` score, and activating it anyway
+ *  produces exactly the "hallucinates a nonsense tool call for `Hi`" failure
+ *  this comment is here to prevent silently repeating. */
+function unscoredForCoding(m: ModelRow, model: ModelsModel): boolean {
+  return model.hardwareCapable && m.chatCapable && m.suitability === null;
+}
+
+/** The active model's server, live off the event stream — `Starting…` /
+ *  `Ready · :port` / `Failed` / `Stopped`. The failure reason is never
+ *  inlined here — a pill is the wrong shape for a diagnostic message;
+ *  `modelCard` renders it as an `errorBlock` instead. */
 function serverChip(s: ModelServerRow): HTMLElement {
-  const role = roleLabel(s.role);
-  if (s.state === "starting") return badge(`${role}: starting…`, "muted");
-  if (s.state === "ready") return badge(`${role}: ready · :${s.port ?? "?"}`, "ok");
-  if (s.state === "stopped") return badge(`${role}: stopped`, "muted");
-  return badge(`${role}: failed`, "bad");
+  if (s.state === "starting") return badge("starting…", "muted");
+  if (s.state === "ready") return badge(`ready · :${s.port ?? "?"}`, "ok");
+  if (s.state === "stopped") return badge("stopped", "muted");
+  return badge("failed", "bad");
 }
 
 function progress(inst: ModelInstallRow): HTMLElement {
@@ -89,7 +106,7 @@ function progress(inst: ModelInstallRow): HTMLElement {
     cancel.addEventListener("click", () => ctrl?.command(CMD.cancelModelInstall, { id: inst.id }));
     wrap.append(cancel);
   } else if (inst.status === "completed") {
-    wrap.append(badge("installed", "ok"), h("span", { class: "vy-empty", text: "Ready to activate." }));
+    wrap.append(badge("installed", "ok"), h("span", { class: "vy-empty", text: "Ready to use." }));
   } else {
     const cancelled = inst.code === "model_store.cancelled";
     wrap.append(
@@ -114,20 +131,16 @@ function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
   if (m.installed && !m.install) chips.append(badge("installed", "muted"));
   const fc = fitChip(m);
   if (fc) chips.append(fc);
-  // A server chip describes a *previous* activation attempt. While a fresh
-  // install is running, that history is about to be superseded — showing
-  // e.g. "primary coder: stopped" next to "downloading 24%" reads as a
+  else if (unscoredForCoding(m, model)) chips.append(badge("not rated for coding", "warn"));
+  // The server chip describes a *previous* activation attempt. While a
+  // fresh install is running, that history is about to be superseded —
+  // showing e.g. "stopped" next to "downloading 24%" reads as a
   // contradiction, not a status update, so it's withheld until the install
   // itself resolves.
   if (!installing) {
+    if (m.active) chips.append(badge("active", "ok"));
     if (model.inferenceCapable) {
-      const chippedRoles = new Set(m.servers.map((s) => s.role));
-      for (const r of m.activeRoles) {
-        if (!chippedRoles.has(r)) chips.append(badge(`serving ${roleLabel(r)}`, "ok"));
-      }
       for (const s of m.servers) chips.append(serverChip(s));
-    } else {
-      for (const r of m.activeRoles) chips.append(badge(`serving ${roleLabel(r)}`, "ok"));
     }
   }
   if (chips.childElementCount) card.append(chips);
@@ -150,7 +163,7 @@ function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
   if (!installing) {
     for (const s of m.servers) {
       if (s.state === "failed") {
-        card.append(errorBlock(`${roleLabel(s.role)}: ${s.message ?? s.code ?? "no detail reported"}`));
+        card.append(errorBlock(s.message ?? s.code ?? "no detail reported"));
       }
     }
   }
@@ -170,37 +183,41 @@ function modelCard(m: ModelRow, model: ModelsModel): HTMLElement {
     }
 
     if (installed) {
-      const sel = h("select", { class: "mdl-role-select", "aria-label": "role to activate for" }) as HTMLSelectElement;
-      for (const r of model.roles) {
-        const opt = h("option", { value: r }, roleLabel(r)) as HTMLOptionElement;
-        if (r === model.role) opt.selected = true;
-        sel.append(opt);
+      // Not chat-capable (embedder/reranker) — installable, but there's
+      // nothing to activate it *for* yet.
+      if (m.chatCapable && !m.active) {
+        // A model with no coding suitability score at all still *can* be
+        // activated (maybe you know something the catalog doesn't), but it
+        // doesn't get the confident primary-accent treatment steering
+        // everyone else toward it — see `unscoredForCoding`.
+        const unscored = unscoredForCoding(m, model);
+        // `model/activate` blocks for as long as the server takes to answer
+        // /health (tens of seconds) — disable while pending so a re-click
+        // can't boot a second llama-server and starve both.
+        const act = h(
+          "button",
+          {
+            class: `vy-btn vy-btn--sm${unscored ? "" : " vy-btn--primary"}`,
+            type: "button",
+            title: unscored
+              ? "Core's catalog doesn't rate this model for coding — it may perform poorly or behave unpredictably as the active model."
+              : undefined,
+          },
+          m.actionPending ? "Activating…" : "Use for coding"
+        ) as HTMLButtonElement;
+        act.disabled = m.actionPending;
+        act.addEventListener("click", () => ctrl?.command(CMD.activateModel, { id: m.id }));
+        actions.append(act);
       }
-      // `model/activate` blocks for as long as the server takes to answer
-      // /health (tens of seconds) — disable while pending so a re-click
-      // can't boot a second llama-server for the same role and starve both.
-      const act = h(
-        "button",
-        { class: "vy-btn vy-btn--sm vy-btn--primary", type: "button" },
-        m.actionPending ? "Activating…" : "Activate"
-      ) as HTMLButtonElement;
-      act.disabled = m.actionPending;
-      act.addEventListener("click", () => ctrl?.command(CMD.activateModel, { id: m.id, role: sel.value }));
-      actions.append(sel, act);
 
-      const failedForSelectedRole = m.servers.find(
-        (s) => s.role === model.role && s.state === "failed"
-      );
-      if (failedForSelectedRole) {
+      if (m.active && m.servers.some((s) => s.state === "failed")) {
         const restart = h(
           "button",
           { class: "vy-btn vy-btn--sm", type: "button" },
           m.actionPending ? "Restarting…" : "Restart server"
         ) as HTMLButtonElement;
         restart.disabled = m.actionPending;
-        restart.addEventListener("click", () =>
-          ctrl?.command(CMD.restartServer, { id: m.id, role: model.role })
-        );
+        restart.addEventListener("click", () => ctrl?.command(CMD.restartServer, { id: m.id }));
         actions.append(restart);
       }
 
@@ -228,19 +245,6 @@ function render(model: ModelsModel): void {
       "Valyria never downloads model weights — Core does, locally and only after you accept the license.")
   );
 
-  // Role selector — the shortlist and recommendation are scoped to it.
-  const roleBar = h("div", { class: "mdl-rolebar" });
-  roleBar.append(h("label", { class: "vy-empty", for: "mdl-role" }, "Set up a model for"));
-  const roleSel = h("select", { id: "mdl-role", class: "mdl-role-select" }) as HTMLSelectElement;
-  for (const r of model.roles) {
-    const opt = h("option", { value: r }, roleLabel(r)) as HTMLOptionElement;
-    if (r === model.role) opt.selected = true;
-    roleSel.append(opt);
-  }
-  roleSel.addEventListener("change", () => ctrl?.command(CMD.setModelRole, { role: roleSel.value }));
-  roleBar.append(roleSel);
-  root.append(roleBar);
-
   if (!model.manageCapable) {
     root.append(empty("The running Core does not serve model management (needs the `model_manage` capability)."));
   }
@@ -259,21 +263,7 @@ function render(model: ModelsModel): void {
     root.append(empty("The catalog is empty."));
   } else {
     root.append(
-      section(
-        `Models for “${roleLabel(model.role)}”`,
-        h("ul", { class: "mdl-list" }, ...model.models.map((m) => modelCard(m, model)))
-      )
-    );
-  }
-
-  if (model.bindings.length) {
-    root.append(
-      section(
-        "Active role bindings",
-        h("ul", { class: "vy-list" }, ...model.bindings.map((b) =>
-          h("li", {}, h("span", { class: "vy-mono", text: roleLabel(b.role) }), h("span", { class: "vy-empty", text: "→" }), h("span", { class: "vy-mono", text: b.modelId }))
-        ))
-      )
+      section("Models", h("ul", { class: "mdl-list" }, ...model.models.map((m) => modelCard(m, model))))
     );
   }
 

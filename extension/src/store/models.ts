@@ -367,20 +367,31 @@ export function securityModel(input: {
 }
 
 // --- Models (§20, §21, §37 — select, install, activate; weights are Core's) ---
-
-/** Every assignable `ModelRole` (Core's `valyria_model_registry::ModelRole`). */
-export const MODEL_ROLES = [
-  "primary_coder",
-  "fast_coder",
-  "planner",
-  "reviewer",
-  "embedder",
-  "reranker",
-  "autocomplete",
-  "summarizer",
-] as const;
-
+//
+// Core's catalog still tags each model with `role_suitability` across 8
+// `ModelRole`s, but the agent driver only ever consults `Role::PrimaryCoder`
+// for generation (`fast_coder`/`planner`/`reviewer`/`autocomplete`/
+// `summarizer` are unused catalog metadata; `embedder`/`reranker` back no
+// live feature yet — see valyria-agent/driver.rs). Exposing an 8-way role
+// picker was surfacing internal, mostly-inert architecture rather than a
+// real choice, so the UI collapses it to one thing: which installed model
+// is currently doing the coding. Every `model/activate` call below is
+// hardcoded to this one role; `firstrun.ts` and `hardware.ts` already did
+// the same before this file caught up.
 export const DEFAULT_MODEL_ROLE = "primary_coder";
+
+/** `role_suitability` isn't on the wire (`ModelSummaryWire` carries no
+ *  per-role detail), so there's no protocol-level way to ask "can this
+ *  model actually do chat-completion." These two catalog families are the
+ *  only ones that can't (Core's own install-probe uses the identical
+ *  distinction server-side — see the `chat_capable` check in
+ *  `runtime.rs`'s probe path, "Embedder/reranker models have no
+ *  chat-completion path at all"). A real fix is a `chat_capable` field on
+ *  the wire; this is the client-side stand-in until that lands. */
+const NON_CHAT_FAMILIES = new Set(["nomic-embed", "bge-reranker"]);
+function isChatCapable(family: string): boolean {
+  return !NON_CHAT_FAMILIES.has(family);
+}
 
 export interface ModelSummary {
   id: string;
@@ -453,14 +464,12 @@ export function modelsModel(input: {
   installs: ModelInstallLike[];
   servers: ModelServerLike[];
   engineInstall: ModelInstallLike | null;
-  role: string;
   manageCapable: boolean;
   hardwareCapable: boolean;
   inferenceCapable: boolean;
   /** Model ids with an activate/restart request currently in flight. */
   pendingActionIds?: ReadonlySet<string>;
 }): ModelsModel {
-  const role = input.role || DEFAULT_MODEL_ROLE;
   const pendingActionIds = input.pendingActionIds ?? new Set<string>();
   const installById = new Map(input.installs.map((i) => [i.id, i]));
   const serversByModel = new Map<string, ModelServerLike[]>();
@@ -470,7 +479,7 @@ export function modelsModel(input: {
     serversByModel.set(s.modelId, list);
   }
 
-  const rec = input.recommend && input.recommend.role === role ? input.recommend : null;
+  const rec = input.recommend && input.recommend.role === DEFAULT_MODEL_ROLE ? input.recommend : null;
   const recById = new Map<string, RecommendCandidate>();
   for (const raw of rec?.candidates ?? []) {
     const c = raw as RecommendCandidate;
@@ -507,19 +516,16 @@ export function modelsModel(input: {
       sizeBytes: m.size_bytes,
       installed: m.installed,
       license: m.license,
-      activeRoles: (m.active_roles ?? []).slice().sort(),
+      active: (m.active_roles ?? []).includes(DEFAULT_MODEL_ROLE),
+      chatCapable: isChatCapable(m.family),
       fit,
       fitDetail: c?.fit_detail ?? null,
       suitability: typeof c?.suitability === "number" ? c.suitability : null,
       recommended: m.id === recommendedId,
       install: install ? installRow(install) : null,
-      servers: (serversByModel.get(m.id) ?? []).map((s) => ({
-        role: s.role,
-        state: s.state,
-        port: s.port,
-        code: s.code,
-        message: s.message,
-      })),
+      servers: (serversByModel.get(m.id) ?? [])
+        .filter((s) => s.role === DEFAULT_MODEL_ROLE)
+        .map((s) => ({ state: s.state, port: s.port, code: s.code, message: s.message })),
       actionPending: pendingActionIds.has(m.id),
     };
   });
@@ -541,22 +547,13 @@ export function modelsModel(input: {
     return a.displayName.localeCompare(b.displayName);
   });
 
-  const bindings: { role: string; modelId: string }[] = [];
-  for (const m of input.models ?? []) {
-    for (const boundRole of m.active_roles ?? []) bindings.push({ role: boundRole, modelId: m.id });
-  }
-  bindings.sort((a, b) => a.role.localeCompare(b.role));
-
   return {
     manageCapable: input.manageCapable,
     hardwareCapable: input.hardwareCapable,
     inferenceCapable: input.inferenceCapable,
     hasList: input.models !== null,
-    role,
-    roles: [...MODEL_ROLES],
     recommendedId,
     models: rows,
-    bindings,
     engineInstall: input.engineInstall ? installRow(input.engineInstall) : null,
   };
 }
@@ -564,16 +561,6 @@ export function modelsModel(input: {
 // --- Model Chat (the product surface, §Cursor-style right sidebar): a
 // message here is a real Core task — task/create, the full agent loop
 // (system prompt, tools, plan, verification) — not a raw model probe. ---
-
-/** Whatever model Core currently has bound to `primary_coder`, for the
- *  read-only status line — not a picker; the Models panel owns the
- *  binding. `null` when nothing is bound yet. */
-function activeCoderModel(
-  models: ModelSummary[] | null
-): { role: string; displayName: string } | null {
-  const m = (models ?? []).find((m) => (m.active_roles ?? []).includes("primary_coder"));
-  return m ? { role: "primary_coder", displayName: m.display_name ?? m.id } : null;
-}
 
 export function modelChatModel(
   state: StoreState,
@@ -583,6 +570,13 @@ export function modelChatModel(
     inferenceCapable: boolean;
     models: ModelSummary[] | null;
     allowForTaskSupported: boolean;
+    /** An activate request from the in-chat picker is in flight. */
+    activating?: boolean;
+    /** `model/recommend { role: primary_coder }`, when hardware scoring is
+     *  available — used only to flag a model with no coding suitability at
+     *  all (see `store/models.ts`'s `unscoredForCoding`-equivalent below);
+     *  `null` means "unknown," not "unsuitable," so nothing is flagged. */
+    recommend?: RecommendResult | null;
   }
 ): ModelChatModel {
   const chat = chatModel(state, focusId, connection);
@@ -590,10 +584,39 @@ export function modelChatModel(
   const p = asRecord(ap?.payload);
   const str = (k: string): string | null => (typeof p[k] === "string" ? (p[k] as string) : null);
 
+  // `candidates_for_role` (Core) filters out anything scoring 0 for
+  // primary_coder, so a model missing from here entirely — e.g.
+  // Qwen2.5-Coder 1.5B, tuned for fast_coder/autocomplete — isn't just
+  // "unranked," it's a model Core itself doesn't think can drive the agent
+  // loop. Activating it anyway produces exactly the "hallucinates a
+  // nonsense tool call for a plain 'Hi'" failure this flag exists to warn
+  // against before it happens again.
+  const rec = input.recommend && input.recommend.role === DEFAULT_MODEL_ROLE ? input.recommend : null;
+  const scoredIds = new Set(
+    (rec?.candidates ?? [])
+      .map((c) => (c && typeof c === "object" ? (c as { id?: unknown }).id : undefined))
+      .filter((id): id is string => typeof id === "string")
+  );
+
+  // Every installed, chat-capable model is a candidate for the picker —
+  // embedder/reranker models are excluded (see `isChatCapable`): activating
+  // one for `primary_coder` would boot a server with no chat-completion
+  // path at all, per Core's own install-probe comment.
+  const models = (input.models ?? [])
+    .filter((m) => m.installed && isChatCapable(m.family))
+    .map((m) => ({
+      id: m.id,
+      displayName: m.display_name ?? m.id,
+      unratedForCoding: rec !== null && !scoredIds.has(m.id),
+    }));
+  const active = (input.models ?? []).find((m) => (m.active_roles ?? []).includes(DEFAULT_MODEL_ROLE));
+
   return {
     connection,
     inferenceCapable: input.inferenceCapable,
-    activeModel: activeCoderModel(input.models),
+    models,
+    activeModelId: active?.id ?? null,
+    activating: input.activating ?? false,
     taskId: chat.taskId,
     objective: chat.objective,
     state: chat.state,

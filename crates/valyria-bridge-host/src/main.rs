@@ -181,6 +181,22 @@ fn str_array(req: &Incoming, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Core's approval decision enum is exactly "once" | "task" | "deny"
+/// (`valyria-app`'s `client.rs` matches these literally) — not
+/// "allow_once"/"allow_task", which Core rejects with
+/// `approval.unknown_decision`. A regression test pins this down directly
+/// since nothing else here exercises `permission/resolveScoped` without a
+/// live Core session.
+fn scoped_decision(allow: bool, scope: &str) -> &'static str {
+    if !allow {
+        "deny"
+    } else if scope == "task" {
+        "task"
+    } else {
+        "once"
+    }
+}
+
 fn map_err(e: BridgeError) -> RpcError {
     RpcError::bridge(e.code(), e.to_string())
 }
@@ -293,13 +309,7 @@ async fn dispatch(host: &Arc<Host>, out_tx: &OutTx, req: &Incoming) -> Result<Va
             let allow = param(req, "allow")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            let decision = if !allow {
-                "deny"
-            } else if scope == "task" {
-                "allow_task"
-            } else {
-                "allow_once"
-            };
+            let decision = scoped_decision(allow, &scope);
             with_client(host, |c| async move {
                 c.permission_resolve_scoped(&t, None, decision).await
             })
@@ -741,4 +751,21 @@ fn emit_state(out_tx: &OutTx, state: &str, detail: Option<&str>) {
         p["detail"] = Value::String(d.to_string());
     }
     send_notif(out_tx, "core/connectionState", p);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::scoped_decision;
+
+    #[test]
+    fn scoped_decision_matches_cores_literal_enum() {
+        // Regression test for a real bug: this used to return
+        // "allow_once"/"allow_task", which Core rejected with
+        // `approval.unknown_decision` — every "Allow" click in the app
+        // failed with a BridgeRpcError.
+        assert_eq!(scoped_decision(true, "once"), "once");
+        assert_eq!(scoped_decision(true, "task"), "task");
+        assert_eq!(scoped_decision(false, "once"), "deny");
+        assert_eq!(scoped_decision(false, "task"), "deny");
+    }
 }

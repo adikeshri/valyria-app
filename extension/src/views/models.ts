@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { engineInstalls, modelInstalls, modelServers } from "@valyria/state";
 import { WebviewBase } from "./webviewBase";
-import { modelsModel, DEFAULT_MODEL_ROLE, MODEL_ROLES } from "../store/models";
+import { modelsModel, DEFAULT_MODEL_ROLE } from "../store/models";
 import { promptAndInstallModel } from "./modelInstall";
 import type { Store } from "../store/store";
 import type { Supervisor } from "../session/supervisor";
@@ -21,10 +21,12 @@ interface ModelSummary {
 }
 
 /**
- * The Model Manager (PLAN.md §20 / docs/MODEL-SETUP-PLAN.md). Choose and set
- * up a model without leaving the editor: a hardware-scored shortlist, live
- * install progress off the event stream, a license acceptance prompt, and
- * per-role activation.
+ * The Model Manager (PLAN.md §20 / docs/MODEL-SETUP-PLAN.md). Browse the
+ * catalog, install/remove weights, and pick the active coding model, without
+ * leaving the editor — a hardware-scored shortlist and live install progress
+ * off the event stream. `model/activate` is always for `DEFAULT_MODEL_ROLE`
+ * (see its doc comment): there is exactly one thing to be "the active model
+ * for," not a role to choose.
  *
  * The extension has NO download path — install / cancel / activate / remove
  * all go through Core (gated on `model_manage`), which owns every weight byte
@@ -37,12 +39,11 @@ export class ModelsViewProvider extends WebviewBase {
 
   private models: ModelSummary[] | null = null;
   private recommend: { role: string; recommended: unknown; candidates: unknown[] } | null = null;
-  private role: string = DEFAULT_MODEL_ROLE;
   // `model/activate` (and `model/restartServer`) block for as long as
   // boot_model_server takes to answer /health — tens of seconds, sometimes
   // longer under memory pressure. Without tracking this, a re-click before
-  // that resolves boots a second `llama-server` for the same role, and two
-  // boots contending for RAM can starve each other past the timeout.
+  // that resolves boots a second `llama-server`, and two boots contending
+  // for RAM can starve each other past the timeout.
   private readonly pendingAction = new Set<string>();
 
   constructor(
@@ -62,7 +63,6 @@ export class ModelsViewProvider extends WebviewBase {
       installs: modelInstalls(state),
       servers: modelServers(state),
       engineInstall: engineInstalls(state)[0] ?? null,
-      role: this.role,
       manageCapable: this.supervisor.has("model_manage"),
       hardwareCapable: this.supervisor.has("hardware"),
       inferenceCapable: this.supervisor.has("model_inference"),
@@ -71,18 +71,10 @@ export class ModelsViewProvider extends WebviewBase {
   }
 
   protected onCommand(name: string, args: unknown): void {
-    const a = (args ?? {}) as { id?: string; role?: string };
+    const a = (args ?? {}) as { id?: string };
     switch (name) {
       case "refreshModels":
         void this.refresh();
-        break;
-      case "setModelRole":
-        if (a.role && (MODEL_ROLES as readonly string[]).includes(a.role)) {
-          this.role = a.role;
-          this.recommend = null;
-          this.push();
-          void this.refresh();
-        }
         break;
       case "installModel":
         if (a.id) void this.install(a.id);
@@ -91,10 +83,10 @@ export class ModelsViewProvider extends WebviewBase {
         if (a.id) void this.cancelInstall(a.id);
         break;
       case "activateModel":
-        if (a.id && a.role && !this.pendingAction.has(a.id)) void this.activate(a.id, a.role);
+        if (a.id && !this.pendingAction.has(a.id)) void this.activate(a.id);
         break;
       case "restartServer":
-        if (a.id && a.role && !this.pendingAction.has(a.id)) void this.restartServer(a.id, a.role);
+        if (a.id && !this.pendingAction.has(a.id)) void this.restartServer(a.id);
         break;
       case "removeModel":
         if (a.id) void this.remove(a.id);
@@ -152,7 +144,7 @@ export class ModelsViewProvider extends WebviewBase {
     if (this.supervisor.has("hardware")) {
       try {
         this.recommend = (await this.host.client.request("model/recommend", {
-          role: this.role,
+          role: DEFAULT_MODEL_ROLE,
         })) as { role: string; recommended: unknown; candidates: unknown[] };
       } catch {
         this.recommend = null;
@@ -183,7 +175,7 @@ export class ModelsViewProvider extends WebviewBase {
     }
   }
 
-  private async activate(id: string, role: string): Promise<void> {
+  private async activate(id: string): Promise<void> {
     this.pendingAction.add(id);
     this.push();
     try {
@@ -191,10 +183,8 @@ export class ModelsViewProvider extends WebviewBase {
       // `/health` or fails — the `model_server_starting`/`_ready`/`_failed`
       // events arrive first and drive the chip; this call's own
       // success/failure drives the toast.
-      await this.host.client.request("model/activate", { id, role });
-      void vscode.window.showInformationMessage(
-        `Valyria: ${this.modelName(id)} now serves “${role}”.`
-      );
+      await this.host.client.request("model/activate", { id, role: DEFAULT_MODEL_ROLE });
+      void vscode.window.showInformationMessage(`Valyria: ${this.modelName(id)} is now the active coding model.`);
     } catch (e) {
       void vscode.window.showErrorMessage(`Valyria: activate failed — ${String(e)}`);
     } finally {
@@ -203,11 +193,11 @@ export class ModelsViewProvider extends WebviewBase {
     }
   }
 
-  private async restartServer(id: string, role: string): Promise<void> {
+  private async restartServer(id: string): Promise<void> {
     this.pendingAction.add(id);
     this.push();
     try {
-      await this.host.client.request("model/restartServer", { id, role });
+      await this.host.client.request("model/restartServer", { id, role: DEFAULT_MODEL_ROLE });
     } catch (e) {
       void vscode.window.showErrorMessage(`Valyria: restart failed — ${String(e)}`);
     } finally {
@@ -219,7 +209,7 @@ export class ModelsViewProvider extends WebviewBase {
   private async remove(id: string): Promise<void> {
     const REMOVE = "Remove";
     const choice = await vscode.window.showWarningMessage(
-      `Remove ${this.modelName(id)}? Core deletes its weights and any role bindings.`,
+      `Remove ${this.modelName(id)}? Core deletes its weights.`,
       { modal: true },
       REMOVE
     );

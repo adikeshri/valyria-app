@@ -1,8 +1,8 @@
 {
   "$comment": "The single pinned Core revision this app is built and tested against. See docs/INTEGRATION.md §3. A bump is a deliberate PR that re-vendors schemas, re-runs TS codegen, re-captures trace fixtures, and moves the valyria-bridge git dep rev.",
   "repository": "https://github.com/adikeshri/valyria.git",
-  "git_rev": "85965f50b63d106bb642851f687e25868d4accc2",
-  "protocol_version": "1.13.0",
+  "git_rev": "366d6614748898e4752f2f43c74ec3919a650518",
+  "protocol_version": "1.15.0",
   "runtime_version": null,
   "capabilities": [
     "plan",
@@ -25,7 +25,9 @@
     "approval_scope",
     "daemon",
     "model_inference",
-    "multi_agent"
+    "multi_agent",
+    "model_endpoints",
+    "catalog_refresh"
   ],
   "$runtime_version_note": "null until the first `hello` handshake against the pinned build records it; xtask verify-core fills it in.",
   "$gap_closure_note": "Bumped from 9203d23 / protocol 1.0.0 for CORE-INTERFACE gap closure G1-G15, now landed on Core main (PRs #15-#25). git_rev is the main merge commit.",
@@ -56,5 +58,6 @@
     }
   },
   "$m0_baseline_note": "Bumped from 8ba16cb to ff74267 — Core's feat/local-inference branch (PR #32, containing 8ba16cb and one further commit, 1c139aa, a vfs watcher-test fix) merged to Core main. protocol_version stays 1.12.0 and no re-vendor was needed: `git diff --stat 8ba16cb ff74267 -- crates/valyria-protocol docs/protocol crates/valyria-events` is empty. This is the first core.lock.json bump that points at a commit actually reachable from Core's main branch since the local-inference work started (the two notes below describe the interim feature-branch pins).",
-  "$m5_protocol_1_13_note": "Bumped from ff74267 to 85965f5 — Core's `chore/m0-baseline` branch (pushed, not yet merged to Core main), landing M5 ('Planning and multi-agent'): child tasks, durable repair/loop state reconstruction (C8), the Researcher/Planner/Implementer/Tester/Reviewer role pipeline, the parallel wave executor, and protocol 1.13.0 itself. Protocol 1.13.0 adds three new request/response pairs — task_children, task_artifacts, plan_revisions (the last carrying each revision's diff against the one before it) — a new capability token `multi_agent`, an additive `TaskSummary.parent_task_id`, and three new event kinds — subtask_started, subtask_completed, artifact_published. Schemas re-vendored (`packages/protocol/schemas/`) and TS codegen re-run; the app-side TypeScript/bridge/webview wiring for this protocol is landing in the same PR as this bump."
+  "$m5_protocol_1_13_note": "Bumped from ff74267 to 85965f5 — Core's `chore/m0-baseline` branch (pushed, not yet merged to Core main), landing M5 ('Planning and multi-agent'): child tasks, durable repair/loop state reconstruction (C8), the Researcher/Planner/Implementer/Tester/Reviewer role pipeline, the parallel wave executor, and protocol 1.13.0 itself. Protocol 1.13.0 adds three new request/response pairs — task_children, task_artifacts, plan_revisions (the last carrying each revision's diff against the one before it) — a new capability token `multi_agent`, an additive `TaskSummary.parent_task_id`, and three new event kinds — subtask_started, subtask_completed, artifact_published. Schemas re-vendored (`packages/protocol/schemas/`) and TS codegen re-run; the app-side TypeScript/bridge/webview wiring for this protocol is landing in the same PR as this bump.",
+  "$m6_protocol_1_15_note": "Bumped from 85965f5 to 366d661 — Core's `chore/m0-baseline` branch (pushed, not yet merged to Core main), landing the rest of M6 ('Model platform'): the ModelPool/role-binding-auto-derive wiring, a real MLX runtime adapter (`valyria-runtime-mlx`, no longer a stub) with its own Python-venv engine provisioning, external OpenAI-compatible endpoint registration (`model_endpoint_add/remove/list`, protocol 1.14.0, a new `model_endpoints` capability), and signed catalog refresh (`catalog_refresh`, protocol 1.15.0, real ed25519 via a new `catalog_refresh` capability — verifies a detached signature against a compiled-in trusted public key and refuses a validly-signed-but-stale catalog via a strictly-increasing version check). No event-kind changes in this bump (the model_loaded/model_evicted/resource_pressure event kinds it also touches shipped earlier, as 1.13.1, before this pin). Schemas re-vendored (`packages/protocol/schemas/`) and TS codegen re-run."
 }

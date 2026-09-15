@@ -115,6 +115,14 @@ export type Response =
       value: ModelInspectResponse;
     }
   | {
+      result: "model_endpoint_list";
+      value: ModelEndpointListResponse;
+    }
+  | {
+      result: "catalog_refresh";
+      value: CatalogRefreshResponse;
+    }
+  | {
       result: "ledger_changes";
       value: LedgerChangesResponse;
     }
@@ -584,6 +592,31 @@ export interface ModelInspectResponse {
   quantization: string;
   size_bytes: number;
   source_url: string;
+}
+export interface ModelEndpointListResponse {
+  endpoints: ModelEndpointWire[];
+}
+/**
+ * One registered external endpoint, as `model_endpoint_list` reports it.
+ */
+export interface ModelEndpointWire {
+  /**
+   * Roles currently bound to this endpoint (mirrors `ModelSummaryWire:: active_roles` for installed catalog models).
+   */
+  active_roles: string[];
+  base_url: string;
+  context_length: number;
+  created_at_ms: number;
+  display_name: string;
+  id: string;
+  remote_model_name: string;
+  supports_grammar: boolean;
+  supports_native_tools: boolean;
+}
+export interface CatalogRefreshResponse {
+  model_count: number;
+  new_version: number;
+  previous_version: number;
 }
 export interface LedgerChangesResponse {
   /**

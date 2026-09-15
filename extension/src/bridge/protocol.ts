@@ -125,6 +125,25 @@ export interface Requests {
    *  means (`model_inference`). */
   "model/restartServer": [{ id: string; role: string }, unknown];
   "model/inspect": [{ id: string }, unknown];
+  // --- external endpoints / catalog refresh (M6) ---
+  /** Register (or replace) an already-running external OpenAI-compatible
+   *  server. Core neither downloads nor supervises its process. */
+  "model/endpointAdd": [
+    {
+      id: string;
+      baseUrl: string;
+      displayName?: string;
+      remoteModelName?: string;
+      contextLength?: number;
+      supportsNativeTools?: boolean;
+      supportsGrammar?: boolean;
+    },
+    unknown,
+  ];
+  "model/endpointRemove": [{ id: string }, unknown];
+  "model/endpointList": [Record<string, never>, unknown];
+  /** Fetch + verify a signed catalog and, if genuinely newer, accept it. */
+  "catalog/refresh": [{ catalogUrl: string; signatureUrl: string }, unknown];
   "hardware/probe": [Record<string, never>, unknown];
 
   // --- ledger (G8) ---

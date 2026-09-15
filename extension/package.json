@@ -153,6 +153,26 @@
         "command": "valyria.setupModel",
         "title": "Set Up a Model",
         "category": "Valyria"
+      },
+      {
+        "command": "valyria.addModelEndpoint",
+        "title": "Add Model Endpoint",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.removeModelEndpoint",
+        "title": "Remove Model Endpoint",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.listModelEndpoints",
+        "title": "List Model Endpoints",
+        "category": "Valyria"
+      },
+      {
+        "command": "valyria.refreshCatalog",
+        "title": "Refresh Catalog",
+        "category": "Valyria"
       }
     ],
     "customEditors": [
@@ -237,6 +257,22 @@
         },
         {
           "command": "valyria.setupModel",
+          "when": "valyria.hasSession"
+        },
+        {
+          "command": "valyria.addModelEndpoint",
+          "when": "valyria.hasSession"
+        },
+        {
+          "command": "valyria.removeModelEndpoint",
+          "when": "valyria.hasSession"
+        },
+        {
+          "command": "valyria.listModelEndpoints",
+          "when": "valyria.hasSession"
+        },
+        {
+          "command": "valyria.refreshCatalog",
           "when": "valyria.hasSession"
         }
       ],

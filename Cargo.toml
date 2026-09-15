@@ -30,8 +30,8 @@ repository = "https://github.com/adikeshri/valyria-app"
 # signal, cycling a task Paused<->Repairing with no progress); no
 # protocol-relevant files changed, so no re-vendor was needed. Move this
 # rev to the merged main SHA once that Core PR lands.
-valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "85965f50b63d106bb642851f687e25868d4accc2" }
-valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "85965f50b63d106bb642851f687e25868d4accc2" }
+valyria-protocol = { git = "https://github.com/adikeshri/valyria.git", rev = "366d6614748898e4752f2f43c74ec3919a650518" }
+valyria-types = { git = "https://github.com/adikeshri/valyria.git", rev = "366d6614748898e4752f2f43c74ec3919a650518" }
 
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "net"] }
 futures = "0.3"

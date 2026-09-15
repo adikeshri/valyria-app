@@ -426,6 +426,45 @@ async fn dispatch(host: &Arc<Host>, out_tx: &OutTx, req: &Incoming) -> Result<Va
             let id = str_param(req, "id")?;
             with_client(host, |c| async move { c.model_inspect(&id).await }).await
         }
+        "model/endpointAdd" => {
+            let id = str_param(req, "id")?;
+            let base_url = str_param(req, "baseUrl")?;
+            let display_name = opt_str(req, "displayName");
+            let remote_model_name = opt_str(req, "remoteModelName");
+            let context_length = param(req, "contextLength")
+                .and_then(Value::as_u64)
+                .map(|n| n as u32);
+            let supports_native_tools = param(req, "supportsNativeTools").and_then(Value::as_bool);
+            let supports_grammar = param(req, "supportsGrammar").and_then(Value::as_bool);
+            with_client(host, |c| async move {
+                c.model_endpoint_add(
+                    &id,
+                    &base_url,
+                    display_name,
+                    remote_model_name,
+                    context_length,
+                    supports_native_tools,
+                    supports_grammar,
+                )
+                .await
+            })
+            .await
+        }
+        "model/endpointRemove" => {
+            let id = str_param(req, "id")?;
+            with_client(host, |c| async move { c.model_endpoint_remove(&id).await }).await
+        }
+        "model/endpointList" => {
+            with_client(host, |c| async move { c.model_endpoint_list().await }).await
+        }
+        "catalog/refresh" => {
+            let catalog_url = str_param(req, "catalogUrl")?;
+            let signature_url = str_param(req, "signatureUrl")?;
+            with_client(host, |c| async move {
+                c.catalog_refresh(&catalog_url, &signature_url).await
+            })
+            .await
+        }
         "hardware/probe" => with_client(host, |c| async move { c.hardware_probe().await }).await,
 
         // ---- ledger (G8) -----------------------------------

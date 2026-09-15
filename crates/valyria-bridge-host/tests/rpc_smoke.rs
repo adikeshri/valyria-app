@@ -126,6 +126,37 @@ fn missing_required_param_is_invalid_params() {
     assert_eq!(resp["error"]["code"], -32602, "got {resp}");
 }
 
+/// M6: the external-endpoint / catalog-refresh RPC methods are real match
+/// arms in the dispatch table, not dead code the extension side merely
+/// declares — each rejects a missing required param the same way every
+/// other method does, which only happens if `str_param` actually runs
+/// (an unreachable/typo'd method name would 405 as `method_not_found`
+/// instead, code -32601, not -32602).
+#[test]
+fn model_endpoint_and_catalog_refresh_methods_are_wired_into_dispatch() {
+    let mut h = Host::spawn();
+    h.send(10, "model/endpointAdd", serde_json::json!({ "id": "x" })); // missing baseUrl
+    assert_eq!(h.recv_response(10)["error"]["code"], -32602);
+
+    h.send(11, "model/endpointRemove", serde_json::json!({})); // missing id
+    assert_eq!(h.recv_response(11)["error"]["code"], -32602);
+
+    // No required params — the no-session case (bridge.no_session, code
+    // -32000 with the stable string in `data`) is what proves this one
+    // reached real dispatch instead of 404ing as unknown (-32601).
+    h.send(12, "model/endpointList", serde_json::json!({}));
+    let resp = h.recv_response(12);
+    assert_eq!(resp["error"]["code"], -32000, "got {resp}");
+    assert_eq!(resp["error"]["data"], "bridge.no_session");
+
+    h.send(
+        13,
+        "catalog/refresh",
+        serde_json::json!({ "catalogUrl": "x" }),
+    ); // missing signatureUrl
+    assert_eq!(h.recv_response(13)["error"]["code"], -32602);
+}
+
 #[test]
 fn a_starting_connection_state_notification_is_emitted_on_boot() {
     let mut h = Host::spawn();

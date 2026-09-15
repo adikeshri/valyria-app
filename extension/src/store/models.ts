@@ -770,7 +770,7 @@ export function contextModel(state: StoreState, focusId: string | undefined, con
 export function aboutModel(input: {
   appName: string;
   platform: string;
-  windowsTier3: boolean;
+  windowsReducedSandbox: boolean;
   connection: Connection;
   about: { bridgeHost?: string; expectedProtocol?: string; compatibility?: string } | null;
   session: {
@@ -793,7 +793,7 @@ export function aboutModel(input: {
     expectedProtocol: input.about?.expectedProtocol ?? "?",
     connection: input.connection,
     platform: input.platform,
-    windowsTier3: input.windowsTier3,
+    windowsReducedSandbox: input.windowsReducedSandbox,
     session: input.session,
     compatibility: input.about?.compatibility ?? (input.session ? "compatible" : "no session"),
     capabilities: [...input.capabilities].sort(),

@@ -3,7 +3,10 @@
  *
  * App + bridge-host + Core runtime + protocol versions, the negotiated
  * capabilities, per-surface availability, installed models, and the
- * compatibility verdict. On Windows it also carries the tier-3 notice (G9).
+ * compatibility verdict. On Windows it also notes the reduced sandbox
+ * confinement (G9 closed the transport gap in Core protocol 1.9.0; the
+ * Security view's `doctor_run`-sourced sandbox line is the source of truth
+ * for the actual achieved level, not this static note).
  */
 import { mountWebview } from "../shared/host";
 import { h, section, badge, empty, brandLockup } from "../shared/render";
@@ -17,13 +20,13 @@ function render(m: AboutModel): void {
 
   root.append(brandLockup("Local-first autonomous coding agent"));
 
-  if (m.windowsTier3) {
+  if (m.windowsReducedSandbox) {
     root.append(
       h(
         "div",
-        { class: "ab-tier3", role: "alert" },
-        h("strong", { text: "Windows: tier 3." }),
-        h("p", { text: "Core's daemon transport and sandbox are not available on Windows yet (CORE-INTERFACE G9). This build installs and reports versions, but will not start an agent session." })
+        { class: "ab-tier3", role: "note" },
+        h("strong", { text: "Windows: reduced sandbox." }),
+        h("p", { text: "Agent sessions run normally on Windows. Command execution is not yet OS-sandboxed here (CORE-INTERFACE G9's transport gap is closed; a Windows confinement mechanism is not built yet) — see the Security view for the confinement level Core actually reports." })
       )
     );
   }

@@ -13,17 +13,19 @@ use std::time::Duration;
 
 use futures::stream::BoxStream;
 use valyria_protocol::{
-    Client, Empty, PermissionResolveRequest, Request, Response, SocketClient, TaskCreateRequest,
-    TaskIdRequest, TaskRollbackRequest, TaskStatusRequest, WireError, WireEvent,
+    CatalogRefreshRequest, CatalogRefreshResponse, ConfigSetRequest, ConfigShowResponse,
+    DoctorRunResponse, GitBranchesResponse, GitDiffRequest, GitDiffResponse, GitLogRequest,
+    GitLogResponse, GitStatusResponse, HardwareProbeResponse, HelloResponse, IndexStatusResponse,
+    LedgerChangesRequest, LedgerChangesResponse, ModelActivateRequest, ModelEndpointAddRequest,
+    ModelEndpointListResponse, ModelIdRequest, ModelInspectResponse, ModelInstallRequest,
+    ModelListResponse, ModelRecommendRequest, ModelRecommendResponse, ModelRemoveResponse,
+    PlanGetResponse, PlanRevisionsResponse, SearchQueryRequest, SearchQueryResponse,
+    TaskArtifactsResponse, TaskChildrenResponse, TaskListResponse, TaskReportResponse,
+    TaskRollbackResponse, TaskStatusResponse, WorkspaceStatusResponse,
 };
 use valyria_protocol::{
-    ConfigSetRequest, ConfigShowResponse, DoctorRunResponse, GitBranchesResponse, GitDiffRequest,
-    GitDiffResponse, GitLogRequest, GitLogResponse, GitStatusResponse, HardwareProbeResponse,
-    HelloResponse, IndexStatusResponse, LedgerChangesRequest, LedgerChangesResponse,
-    ModelActivateRequest, ModelIdRequest, ModelInspectResponse, ModelInstallRequest,
-    ModelListResponse, ModelRecommendRequest, ModelRecommendResponse, ModelRemoveResponse,
-    PlanGetResponse, SearchQueryRequest, SearchQueryResponse, TaskListResponse, TaskReportResponse,
-    TaskRollbackResponse, TaskStatusResponse, WorkspaceStatusResponse,
+    Client, Empty, PermissionResolveRequest, Request, Response, SocketClient, TaskCreateRequest,
+    TaskIdRequest, TaskRollbackRequest, TaskStatusRequest, WireError, WireEvent,
 };
 
 use crate::error::{BridgeError, Result};
@@ -169,6 +171,46 @@ impl CoreClient {
         {
             Response::TaskPlan(r) => Ok(r),
             other => Err(unexpected("TaskPlan", other)),
+        }
+    }
+
+    /// M5, protocol 1.13.0: every direct child of a task, oldest first.
+    pub async fn task_children(&self, task_id: &str) -> Result<TaskChildrenResponse> {
+        match self
+            .call(Request::TaskChildren(TaskIdRequest {
+                task_id: task_id.to_string(),
+            }))
+            .await?
+        {
+            Response::TaskChildren(r) => Ok(r),
+            other => Err(unexpected("TaskChildren", other)),
+        }
+    }
+
+    /// Every role-pipeline artifact produced against a task, oldest first.
+    pub async fn task_artifacts(&self, task_id: &str) -> Result<TaskArtifactsResponse> {
+        match self
+            .call(Request::TaskArtifacts(TaskIdRequest {
+                task_id: task_id.to_string(),
+            }))
+            .await?
+        {
+            Response::TaskArtifacts(r) => Ok(r),
+            other => Err(unexpected("TaskArtifacts", other)),
+        }
+    }
+
+    /// Every plan revision for a task, oldest first, each with its diff
+    /// against the one before it.
+    pub async fn plan_revisions(&self, task_id: &str) -> Result<PlanRevisionsResponse> {
+        match self
+            .call(Request::PlanRevisions(TaskIdRequest {
+                task_id: task_id.to_string(),
+            }))
+            .await?
+        {
+            Response::PlanRevisions(r) => Ok(r),
+            other => Err(unexpected("PlanRevisions", other)),
         }
     }
 
@@ -440,6 +482,62 @@ impl CoreClient {
         {
             Response::ModelInspect(r) => Ok(r),
             other => Err(unexpected("ModelInspect", other)),
+        }
+    }
+
+    // --- external endpoints / catalog refresh (M6) ------------------
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn model_endpoint_add(
+        &self,
+        id: &str,
+        base_url: &str,
+        display_name: Option<String>,
+        remote_model_name: Option<String>,
+        context_length: Option<u32>,
+        supports_native_tools: Option<bool>,
+        supports_grammar: Option<bool>,
+    ) -> Result<()> {
+        self.ack(Request::ModelEndpointAdd(ModelEndpointAddRequest {
+            id: id.to_string(),
+            base_url: base_url.to_string(),
+            display_name,
+            remote_model_name,
+            context_length,
+            supports_native_tools,
+            supports_grammar,
+        }))
+        .await
+    }
+
+    pub async fn model_endpoint_remove(&self, id: &str) -> Result<()> {
+        self.ack(Request::ModelEndpointRemove(ModelIdRequest {
+            id: id.to_string(),
+        }))
+        .await
+    }
+
+    pub async fn model_endpoint_list(&self) -> Result<ModelEndpointListResponse> {
+        match self.call(Request::ModelEndpointList(Empty {})).await? {
+            Response::ModelEndpointList(r) => Ok(r),
+            other => Err(unexpected("ModelEndpointList", other)),
+        }
+    }
+
+    pub async fn catalog_refresh(
+        &self,
+        catalog_url: &str,
+        signature_url: &str,
+    ) -> Result<CatalogRefreshResponse> {
+        match self
+            .call(Request::CatalogRefresh(CatalogRefreshRequest {
+                catalog_url: catalog_url.to_string(),
+                signature_url: signature_url.to_string(),
+            }))
+            .await?
+        {
+            Response::CatalogRefresh(r) => Ok(r),
+            other => Err(unexpected("CatalogRefresh", other)),
         }
     }
 

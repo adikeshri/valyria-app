@@ -3,11 +3,20 @@
 //!
 //! Against a **real** `valyria serve`: start a task, then for a fixed window
 //! hammer the local-read surfaces (`fs.list_dir` / `git.status` /
-//! `fs.read_file`) and `client.task_status` while a human PTY runs commands
-//! alongside — asserting every read cycle stays well under a bound and the
-//! event stream still reaches a terminal state gapless. This is where a
-//! regression that serialized reads behind Core I/O (e.g. holding a lock across
-//! an `.await`) would show up as a stalled cycle or a starved stream.
+//! `fs.read_file`) and `client.task_status` — asserting every read cycle
+//! stays well under a bound and the event stream still reaches a terminal
+//! state gapless. This is where a regression that serialized reads behind
+//! Core I/O (e.g. holding a lock across an `.await`) would show up as a
+//! stalled cycle or a starved stream.
+//!
+//! This used to also run a human PTY (`PtySession`) alongside the read
+//! hammering, to prove a human shell stayed responsive under load. That
+//! host-owned PTY was retired with the Tauri renderer (`apps/desktop`,
+//! deleted in Phase 10, docs/IMPLEMENTATION-PLAN.md Phase 10) — the
+//! integrated terminal is Code-OSS's own now (D7), driven through neither
+//! `valyria-bridge` nor `valyria-bridge-host`, so there is nothing left in
+//! this crate for a PTY soak to exercise. The read-surface and event-stream
+//! assertions below are unrelated to that and still stand on their own.
 //!
 //! Skips (does not fail) when no Core binary is available: set `VALYRIA_BIN`,
 //! or have `../valyria/target/release/valyria` built next to this repo.
@@ -15,13 +24,12 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use tokio::time::timeout;
 use valyria_bridge::{
-    protocol::WireEvent, spawn_or_adopt, CoreBinary, CoreClient, EventPump, GitRepo, PtyEvent,
-    PtySession, PumpMessage, SupervisorConfig, WorkspaceFs,
+    protocol::WireEvent, spawn_or_adopt, CoreBinary, CoreClient, EventPump, GitRepo, PumpMessage,
+    SupervisorConfig, WorkspaceFs,
 };
 
 fn locate_core() -> Option<PathBuf> {
@@ -135,7 +143,7 @@ fn contiguous(seqs: &BTreeSet<u64>) -> bool {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn reads_and_pty_stay_usable_through_a_running_task() {
+async fn reads_stay_usable_through_a_running_task() {
     let Some(bin) = locate_core() else {
         eprintln!("SKIP soak: no Core binary (set VALYRIA_BIN or build ../valyria)");
         return;
@@ -158,18 +166,6 @@ async fn reads_and_pty_stay_usable_through_a_running_task() {
     let fs = WorkspaceFs::new(&repo.root).expect("workspace fs");
     let git_repo = GitRepo::new(&repo.root);
 
-    // A human shell at the workspace root, collecting its output.
-    let pty_out = Arc::new(Mutex::new(String::new()));
-    let pty = {
-        let sink = pty_out.clone();
-        PtySession::start(&repo.root, 80, 24, move |ev| {
-            if let PtyEvent::Output(s) = ev {
-                sink.lock().unwrap().push_str(&s);
-            }
-        })
-        .expect("start pty")
-    };
-
     // Start a task and subscribe to its stream.
     let task_id = client
         .task_create("add a function")
@@ -177,7 +173,7 @@ async fn reads_and_pty_stay_usable_through_a_running_task() {
         .expect("task_create");
     let mut pump = EventPump::start(session.socket_path.clone(), session.auth_token.clone(), 0);
 
-    // Hammer the read surfaces for a fixed window, PTY running alongside.
+    // Hammer the read surfaces for a fixed window.
     let deadline = Instant::now() + Duration::from_secs(4);
     let mut cycles = 0u32;
     let mut worst = Duration::ZERO;
@@ -206,29 +202,12 @@ async fn reads_and_pty_stay_usable_through_a_running_task() {
         );
 
         cycles += 1;
-        if cycles.is_multiple_of(5) {
-            pty.write(&format!("echo soak-{cycles}\n"))
-                .expect("pty write");
-        }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     assert!(
         cycles > 20,
         "only {cycles} read cycles in 4s (worst {worst:?}) — reads are serializing"
     );
-
-    // The PTY is still responsive after the load.
-    pty.write("echo soak-final-marker\n").expect("pty write");
-    let mut saw_marker = false;
-    for _ in 0..60 {
-        if pty_out.lock().unwrap().contains("soak-final-marker") {
-            saw_marker = true;
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-    assert!(saw_marker, "PTY went unresponsive under load");
-    assert!(pty.is_alive(), "shell died during the soak");
 
     // The event stream still reached a terminal state, gapless.
     let tid = task_id.clone();

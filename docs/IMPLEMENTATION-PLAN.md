@@ -10,6 +10,11 @@ autonomous agent as a bundled built‑in extension**.
 - The 21‑domain editor feature ledger (delivered by the Code‑OSS base, not by
   us): tracked separately; any gap becomes an upstream contribution or a
   `build/patches/` entry.
+- **The current, re‑verified plan to finish every partial/deferred item in
+  both repos to production quality** —
+  `valyria/docs/COMPLETION-PLAN.md`. Everything below this line is each
+  phase's historical record as landed; treat COMPLETION-PLAN.md as the
+  authoritative status and gap list going forward.
 
 Each phase is a coherent increment that leaves the app in a working state. Do
 them roughly in order; 3–6 parallelise once Phase 1 lands.
@@ -669,6 +674,20 @@ small and documented.
 **Goal:** signed installers on three OSes, each carrying the bridge‑host and
 Core sidecars.
 
+> **Superseded (2026‑09‑15, docs/COMPLETION-PLAN.md M0):** G9's transport gap
+> closed in Core protocol 1.9.0 (a Windows named‑pipe `Client` impl,
+> `valyria_bridge::workspace::socket_path` builds the pipe name, `valyria
+> serve` speaks it) before this Phase 8 entry below was written, but the
+> refusal below was left in anyway. `session/open` **no longer refuses
+> Windows** — it opens a real session exactly as on macOS/Linux. What Windows
+> still lacks is OS‑level sandbox *confinement* (Core's
+> `detect_platform_launcher` falls back to `PermissiveSandbox`,
+> `Confinement::None`, honestly reported by `doctor_run`); the About view's
+> Windows note and its `windowsReducedSandbox` model field now say exactly
+> that instead of "will not start an agent session". See
+> COMPLETION-PLAN.md M7 for the real Windows sandbox (Job Objects +
+> restricted token) that closes the remaining gap.
+
 **Done (2026‑09‑02):**
 - **`valyria.about`** — a proper About / Compatibility webview (`views/about.ts`
   + `aboutModel`): app + `vscode.version`, platform, `valyria-bridge-host`
@@ -949,7 +968,7 @@ new decoder, layering unchanged.
 | G5 | model install / remove / activate | 6 | inventory only; lifecycle buttons disabled with reason |
 | G7 | `context_retrieved` event | 6 | Context Inspector disabled with an explanation |
 | G8 | ledger / change ownership | 5 | ownership decorations marked "unavailable" |
-| G9 | Windows sandbox | 8 | Windows tier 3 — launches, explains, refuses a session |
+| G9 | Windows sandbox confinement | 8 | **Transport gap closed** (Core protocol 1.9.0, named-pipe `Client`) — Windows opens a real session. Command execution just runs unsandboxed (`Confinement::None`, honestly reported by `doctor_run`); a real Windows sandbox is COMPLETION-PLAN.md M7 |
 
 ---
 

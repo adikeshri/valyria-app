@@ -13,6 +13,12 @@ import type { Store } from "./store/store";
 import type { LayoutController, LayoutMode } from "./session/layout";
 import type { EditorPanelManager } from "./views/editorPanels";
 import { resolveFocus } from "./store/models";
+import {
+  promptAndAddModelEndpoint,
+  promptAndRemoveModelEndpoint,
+  promptAndRefreshCatalog,
+  showModelEndpoints,
+} from "./views/modelEndpoints";
 
 type Reopen = (root: string, appliedThrough: number) => Promise<void>;
 
@@ -108,6 +114,34 @@ export function registerCommands(deps: CommandDeps): void {
       return;
     }
     await vscode.commands.executeCommand("valyria.models.focus");
+  });
+
+  // --- external model endpoints / signed catalog refresh (M6) ---
+  const requireCapability = (cap: string, label: string): boolean => {
+    if (!supervisor.session) return false;
+    if (!supervisor.has(cap)) {
+      void vscode.window.showWarningMessage(
+        `Valyria: the running Core does not serve ${label} (needs the \`${cap}\` capability).`
+      );
+      return false;
+    }
+    return true;
+  };
+  reg("valyria.addModelEndpoint", async () => {
+    if (!requireCapability("model_endpoints", "external model endpoints")) return;
+    await promptAndAddModelEndpoint(host);
+  });
+  reg("valyria.removeModelEndpoint", async () => {
+    if (!requireCapability("model_endpoints", "external model endpoints")) return;
+    await promptAndRemoveModelEndpoint(host);
+  });
+  reg("valyria.listModelEndpoints", async () => {
+    if (!requireCapability("model_endpoints", "external model endpoints")) return;
+    await showModelEndpoints(host);
+  });
+  reg("valyria.refreshCatalog", async () => {
+    if (!requireCapability("catalog_refresh", "signed catalog refresh")) return;
+    await promptAndRefreshCatalog(host);
   });
 
   // --- editor-area surfaces (docs/UX-DIFFERENTIATION.md, lever D) ---

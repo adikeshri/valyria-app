@@ -19,10 +19,11 @@
 
 import { z } from "zod";
 
-/** The event kinds `valyria_events::EventKind` emits (protocol 1.12.0). Keep
+/** The event kinds `valyria_events::EventKind` emits (protocol 1.15.0). Keep
  *  sorted and in sync with `schemas/event-kinds.txt`. */
 export const KNOWN_EVENT_KINDS = [
   "approval_requested",
+  "artifact_published",
   "context_retrieved",
   "engine_install_completed",
   "engine_install_failed",
@@ -31,9 +32,11 @@ export const KNOWN_EVENT_KINDS = [
   "file_changed",
   "memory_written",
   "model_completed",
+  "model_evicted",
   "model_install_completed",
   "model_install_failed",
   "model_install_progress",
+  "model_loaded",
   "model_server_failed",
   "model_server_ready",
   "model_server_starting",
@@ -44,6 +47,8 @@ export const KNOWN_EVENT_KINDS = [
   "progress_stalled",
   "resource_pressure",
   "state_changed",
+  "subtask_completed",
+  "subtask_started",
   "task_completed",
   "task_failed",
   "task_paused",
@@ -163,6 +168,12 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
   model_server_stopped: z
     .object({ role: s.optional(), id: s.optional(), reason: s.optional() })
     .passthrough(),
+  // M6: ModelPool admission/eviction (valyria-orchestrator::pool).
+  model_loaded: z
+    .object({ id: s.optional(), footprint_bytes: z.number().optional() })
+    .passthrough(),
+  // `reason` is `memory_pressure` | `manual`.
+  model_evicted: z.object({ id: s.optional(), reason: s.optional() }).passthrough(),
   external_change_detected: z
     .object({ paths: z.array(s).optional() })
     .passthrough(),
@@ -189,6 +200,18 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
   progress_stalled: z.object({ reason: s.optional() }).passthrough(),
   resource_pressure: anyObj,
   state_changed: z.object({ from: s.optional(), to: s.optional() }).passthrough(),
+  // M5: projected onto the *parent's* event stream (not the child task's
+  // own) by `TaskManager::create_child` / `TaskManager::transition`.
+  subtask_started: z
+    .object({ child_task_id: s.optional(), objective: s.optional() })
+    .passthrough(),
+  subtask_completed: z
+    .object({ child_task_id: s.optional(), final_state: s.optional() })
+    .passthrough(),
+  // M5: a role-pipeline Artifact was persisted (`valyria-agent::
+  // role_pipeline`). `role`/`kind` name the shape; the full artifact body
+  // itself is fetched via `task/artifacts`, not carried on the event.
+  artifact_published: z.object({ role: s.optional(), kind: s.optional() }).passthrough(),
   task_completed: anyObj,
   task_failed: z.object({ reason: s.optional() }).passthrough(),
   task_paused: anyObj,

@@ -4,7 +4,12 @@ import { aboutModel } from "../store/models";
 import type { Supervisor } from "../session/supervisor";
 import type { BridgeHost } from "../bridge/host";
 
-const WINDOWS_TIER3 = process.platform === "win32";
+// Windows opens a real agent session (Core protocol 1.9.0 closed G9's named-
+// pipe transport gap) but has no OS-level sandbox confinement yet — the
+// achieved level is whatever `doctor_run`'s `sandbox` check reports (rendered
+// in the Security view, not invented here). This just flags the platform so
+// the About view can add that context.
+const WINDOWS_REDUCED_SANDBOX = process.platform === "win32";
 
 export class AboutViewProvider extends WebviewBase {
   static readonly viewId = "valyria.about";
@@ -28,7 +33,7 @@ export class AboutViewProvider extends WebviewBase {
     return aboutModel({
       appName: `${vscode.env.appName} ${vscode.version}`,
       platform: `${process.platform} ${process.arch}`,
-      windowsTier3: WINDOWS_TIER3,
+      windowsReducedSandbox: WINDOWS_REDUCED_SANDBOX,
       connection: this.supervisor.state,
       about: this.about,
       session: s

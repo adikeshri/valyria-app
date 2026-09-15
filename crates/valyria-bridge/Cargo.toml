@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "The only code in valyria-app that speaks the Core protocol: socket client, session supervisor, event pump, PTY host. Depends on valyria-protocol + valyria-types ONLY (docs/PLAN.md D2, enforced by `cargo run -p xtask -- check-layering`)."
+description = "The only code in valyria-app that speaks the Core protocol: socket client, session supervisor, event pump, local-read repo surfaces. Depends on valyria-protocol + valyria-types ONLY (docs/PLAN.md D2, enforced by `cargo run -p xtask -- check-layering`)."
 
 [dependencies]
 valyria-protocol = { workspace = true }
@@ -17,7 +17,6 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 notify = "6"
 toml = "0.8"
-portable-pty = "0.9"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "test-util"] }

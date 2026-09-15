@@ -125,7 +125,7 @@ const MODELS: Record<string, unknown> = {
   customdoc: { kind: "md", name: "plan.md", text: "# Plan\n\n- step one\n- step two\n\n```\ncode block\n```\n" },
   about: {
     appName: "Valyria 1.135.0", bridgeHost: "0.1.0", expectedProtocol: "1.10.0", connection: "ready",
-    platform: "darwin arm64", windowsTier3: false,
+    platform: "darwin arm64", windowsReducedSandbox: false,
     session: { protocolVersion: "1.10.0", runtimeVersion: "0.9", origin: "spawned", ownsDaemon: true, authenticated: true, permissionMode: "manual", workspaceRoot: "/r" },
     compatibility: "compatible", capabilities: ["repo", "plan"],
     surfaces: [{ surface: "diff-viewer", available: false, missing: "ledger", gap: "G8" }],

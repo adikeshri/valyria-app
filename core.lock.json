@@ -1,7 +1,7 @@
 {
   "$comment": "The single pinned Core revision this app is built and tested against. See docs/INTEGRATION.md §3. A bump is a deliberate PR that re-vendors schemas, re-runs TS codegen, re-captures trace fixtures, and moves the valyria-bridge git dep rev.",
   "repository": "https://github.com/adikeshri/valyria.git",
-  "git_rev": "8ba16cb4337c5be2e1f2e98a8fd9e45c0fc301cc",
+  "git_rev": "ff74267d8690a57ffe5b790c07da35096ecb4823",
   "protocol_version": "1.12.0",
   "runtime_version": null,
   "capabilities": [
@@ -53,5 +53,6 @@
         "sha256": "d59a30aebc4822cc7ff60d0dc16bdbe2a4d13a813fc207f6bea7018c023bce9a"
       }
     }
-  }
+  },
+  "$m0_baseline_note": "Bumped from 8ba16cb to ff74267 — Core's feat/local-inference branch (PR #32, containing 8ba16cb and one further commit, 1c139aa, a vfs watcher-test fix) merged to Core main. protocol_version stays 1.12.0 and no re-vendor was needed: `git diff --stat 8ba16cb ff74267 -- crates/valyria-protocol docs/protocol crates/valyria-events` is empty. This is the first core.lock.json bump that points at a commit actually reachable from Core's main branch since the local-inference work started (the two notes below describe the interim feature-branch pins)."
 }

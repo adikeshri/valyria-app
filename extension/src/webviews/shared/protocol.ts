@@ -408,7 +408,7 @@ export interface AboutModel {
   expectedProtocol: string;
   connection: Connection;
   platform: string;
-  windowsTier3: boolean;
+  windowsReducedSandbox: boolean;
   session: {
     protocolVersion: string;
     runtimeVersion: string;

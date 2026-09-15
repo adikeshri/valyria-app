@@ -14,9 +14,12 @@ extension/bin/
 /VSCode-*
 /.build/
 
-# Core workspace data (a Core run against the repo root drops this; the
-# bridge integration tests spawn `valyria serve`)
-/.valyria/
+# Core workspace data (a Core run against any directory in this repo drops
+# this — e.g. `valyria serve` invoked with `extension/` as its workspace
+# during manual bridge testing, not just the repo root — so this must match
+# at any depth, not just anchored to the root).
+.valyria/
 
 # OS / editor
 .DS_Store
+.vscode/

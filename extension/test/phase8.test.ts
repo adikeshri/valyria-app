@@ -1,6 +1,8 @@
 /**
- * Phase 8 — About / Compatibility model + render, incl. the Windows tier-3
- * notice (G9).
+ * Phase 8 — About / Compatibility model + render, incl. the Windows reduced-
+ * sandbox notice (G9's transport gap is closed as of Core protocol 1.9.0 —
+ * Windows opens a session like any other platform, it just has no OS sandbox
+ * confinement yet).
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -16,7 +18,7 @@ const out = join(here, "../out/webviews");
 const base = {
   appName: "Valyria 1.135.0",
   platform: "darwin arm64",
-  windowsTier3: false,
+  windowsReducedSandbox: false,
   connection: "ready" as const,
   about: { bridgeHost: "0.1.0", expectedProtocol: "1.10.0", compatibility: "compatible" },
   session: {
@@ -41,7 +43,7 @@ test("aboutModel: assembles versions, verdict, sorted caps, active model", () =>
   assert.equal(m.compatibility, "compatible");
   assert.deepEqual(m.capabilities, ["ledger", "plan", "repo"]);
   assert.equal(m.models[0]!.active, true);
-  assert.equal(m.windowsTier3, false);
+  assert.equal(m.windowsReducedSandbox, false);
 });
 
 test("aboutModel: no session → 'no session' verdict, empty caps", () => {
@@ -50,7 +52,7 @@ test("aboutModel: no session → 'no session' verdict, empty caps", () => {
   assert.deepEqual(m.capabilities, []);
 });
 
-test("about render: Windows tier-3 shows a G9 alert and still reports versions", () => {
+test("about render: Windows shows the reduced-sandbox note and still reports versions", () => {
   const dom = new JSDOM(`<!DOCTYPE html><body><div id="root"></div></body>`, {
     url: "https://x.test/", runScripts: "outside-only", pretendToBeVisual: true,
   });
@@ -63,12 +65,12 @@ test("about render: Windows tier-3 shows a G9 alert and still reports versions",
       data: {
         type: "state",
         view: "about",
-        model: aboutModel({ ...base, windowsTier3: true, platform: "win32 x64" }),
+        model: aboutModel({ ...base, windowsReducedSandbox: true, platform: "win32 x64" }),
       },
     })
   );
   const root = dom.window.document.getElementById("root") as HTMLElement;
-  assert.ok(root.querySelector(".ab-tier3"), "tier-3 banner present");
+  assert.ok(root.querySelector(".ab-tier3"), "reduced-sandbox banner present");
   assert.match(root.textContent ?? "", /G9/);
   assert.match(root.textContent ?? "", /1\.10\.0/, "still reports the protocol version");
 });

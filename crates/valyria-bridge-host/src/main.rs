@@ -466,17 +466,20 @@ async fn session_open(
     permission_mode: Option<String>,
     applied_through: u64,
 ) -> Result<Value, RpcError> {
-    // Windows tier 3 (§39 / CORE-INTERFACE G9): Core's daemon is a UnixListener
-    // and there is no Windows sandbox. The build installs and reports versions
-    // (About surface), but an agent session is refused with the specific reason.
-    if cfg!(windows) {
-        emit_state(&out_tx, "incompatible", Some("Windows tier 3"));
-        return Err(RpcError::bridge(
-            "bridge.platform.windows_tier3",
-            "Windows is tier 3 — Core's daemon transport and sandbox are not available yet \
-             (CORE-INTERFACE G9). Versions and compatibility are shown; agent sessions are disabled.",
-        ));
-    }
+    // Windows (§39 / CORE-INTERFACE G9, closed in Core protocol 1.9.0): Core's
+    // `daemon::serve` and `SocketClient` speak a `\\.\pipe\valyria-<id>` named
+    // pipe on Windows behind the same `Client` trait as the Unix socket
+    // (valyria/crates/valyria-protocol/src/transport), and
+    // `valyria_bridge::workspace::socket_path` already builds that pipe name on
+    // this platform — a session opens exactly as it does on macOS/Linux. What
+    // is *not* available on Windows is OS-level sandbox confinement:
+    // `detect_platform_launcher` falls back to `PermissiveSandbox`
+    // (`Confinement::None`), which `doctor_run`'s `sandbox` check reports
+    // honestly (COMPLETION-PLAN.md M7 tracks building a real Windows
+    // confinement mechanism — Job Objects + a restricted token). The Security
+    // overview (`views/security.ts`) already renders whatever `doctor_run`
+    // reports rather than assuming a level, so an agent session on Windows is
+    // simply less sandboxed today, not refused.
 
     emit_state(&out_tx, "connecting", None);
 

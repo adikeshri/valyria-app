@@ -247,17 +247,21 @@ labels the column "ownership unavailable". Rollback still works — it goes thro
 `task_rollback`, which is ledger-backed inside Core.
 
 ### G9 — Windows has no transport (§39, §1)  
-**CLOSED — protocol 1.9.0** (named-pipe transport; access sandbox still deferred by Core).
+**CLOSED — protocol 1.9.0** (named-pipe transport; access sandbox still deferred by Core — see COMPLETION-PLAN.md M7).
 
-`valyria_app::daemon::serve` binds a `tokio::net::UnixListener`; that module is
-Unix-only. Core also has no Windows sandbox (Phase 1, partial). A Windows build
-of the app has nothing to talk to.
+Core's `valyria_protocol::transport` `SocketClient` and `daemon::serve` speak a
+`\\.\pipe\valyria-<id>` named pipe on Windows behind the same `Client` trait as
+the Unix socket. App-side, `valyria_bridge::workspace::socket_path` builds that
+pipe name on Windows and `valyria-bridge-host`'s `session_open` opens a real
+session on it exactly as on macOS/Linux — the `bridge.platform.windows_tier3`
+refusal that used to sit in front of it (docs/COMPLETION-PLAN.md M0) is gone.
 
-*Requested:* a named-pipe (or loopback-TCP-with-token) transport behind the same
-`Client` trait — Core's `SocketClient`/`serve` split makes this a backend swap.
-
-*Until then:* Windows is **tier 3**: the app builds and installs, and refuses to
-start a session with a specific, actionable message. See PLAN §D14.
+What Core still lacks on Windows is OS-level sandbox *confinement* for command
+execution: `detect_platform_launcher` falls back to `PermissiveSandbox`
+(`Confinement::None`), which `doctor_run`'s `sandbox` check reports honestly
+and the app's About/Security views render as-is rather than inventing a level
+(D8). See COMPLETION-PLAN.md M7 for the real Windows sandbox (Job Objects +
+restricted token + low-integrity level) that closes this remainder.
 
 ### G10 — No local authentication of the client (§43)  
 **CLOSED — protocol 1.6.0.**

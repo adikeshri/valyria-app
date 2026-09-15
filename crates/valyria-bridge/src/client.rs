@@ -22,7 +22,8 @@ use valyria_protocol::{
     HelloResponse, IndexStatusResponse, LedgerChangesRequest, LedgerChangesResponse,
     ModelActivateRequest, ModelIdRequest, ModelInspectResponse, ModelInstallRequest,
     ModelListResponse, ModelRecommendRequest, ModelRecommendResponse, ModelRemoveResponse,
-    PlanGetResponse, SearchQueryRequest, SearchQueryResponse, TaskListResponse, TaskReportResponse,
+    PlanGetResponse, PlanRevisionsResponse, SearchQueryRequest, SearchQueryResponse,
+    TaskArtifactsResponse, TaskChildrenResponse, TaskListResponse, TaskReportResponse,
     TaskRollbackResponse, TaskStatusResponse, WorkspaceStatusResponse,
 };
 
@@ -169,6 +170,46 @@ impl CoreClient {
         {
             Response::TaskPlan(r) => Ok(r),
             other => Err(unexpected("TaskPlan", other)),
+        }
+    }
+
+    /// M5, protocol 1.13.0: every direct child of a task, oldest first.
+    pub async fn task_children(&self, task_id: &str) -> Result<TaskChildrenResponse> {
+        match self
+            .call(Request::TaskChildren(TaskIdRequest {
+                task_id: task_id.to_string(),
+            }))
+            .await?
+        {
+            Response::TaskChildren(r) => Ok(r),
+            other => Err(unexpected("TaskChildren", other)),
+        }
+    }
+
+    /// Every role-pipeline artifact produced against a task, oldest first.
+    pub async fn task_artifacts(&self, task_id: &str) -> Result<TaskArtifactsResponse> {
+        match self
+            .call(Request::TaskArtifacts(TaskIdRequest {
+                task_id: task_id.to_string(),
+            }))
+            .await?
+        {
+            Response::TaskArtifacts(r) => Ok(r),
+            other => Err(unexpected("TaskArtifacts", other)),
+        }
+    }
+
+    /// Every plan revision for a task, oldest first, each with its diff
+    /// against the one before it.
+    pub async fn plan_revisions(&self, task_id: &str) -> Result<PlanRevisionsResponse> {
+        match self
+            .call(Request::PlanRevisions(TaskIdRequest {
+                task_id: task_id.to_string(),
+            }))
+            .await?
+        {
+            Response::PlanRevisions(r) => Ok(r),
+            other => Err(unexpected("PlanRevisions", other)),
         }
     }
 

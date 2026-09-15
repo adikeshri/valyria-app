@@ -27,6 +27,18 @@ export type Response =
       value: PlanGetResponse;
     }
   | {
+      result: "task_children";
+      value: TaskChildrenResponse;
+    }
+  | {
+      result: "task_artifacts";
+      value: TaskArtifactsResponse;
+    }
+  | {
+      result: "plan_revisions";
+      value: PlanRevisionsResponse;
+    }
+  | {
       result: "task_rollback";
       value: TaskRollbackResponse;
     }
@@ -138,6 +150,10 @@ export interface TaskListResponse {
 export interface TaskSummary {
   created_at_ms: number;
   objective: string;
+  /**
+   * The parent task this one was spawned under (M5, `TaskManager:: create_child`), or `None` for an ordinary top-level task. Additive as of protocol 1.13.0 — an older client ignores it.
+   */
+  parent_task_id?: string | null;
   state: string;
   task_id: string;
   updated_at_ms: number;
@@ -176,6 +192,59 @@ export interface PlanStepSummary {
   intent: string;
   rollback_boundary: boolean;
   targets: string[];
+}
+/**
+ * M5, protocol 1.13.0: every direct child of a task (`TaskManager:: children_of` — not recursive; a grandchild belongs to its own parent).
+ */
+export interface TaskChildrenResponse {
+  children: TaskSummary[];
+}
+/**
+ * M5, protocol 1.13.0: every artifact produced against a task, oldest first.
+ */
+export interface TaskArtifactsResponse {
+  artifacts: ArtifactWire[];
+}
+/**
+ * One role-pipeline `Artifact` as stored (M5, `valyria_plan::roles:: StoredArtifact`). `artifact` carries the role-specific payload verbatim (`ResearchBrief`/`Plan`/`ChangeSet`/`VerificationReport`/ `ReviewFindings`) — deliberately raw JSON rather than one struct per variant, matching how `WireEvent.payload` stays open per §4.27's own event-payload convention; `kind` names which shape it is.
+ */
+export interface ArtifactWire {
+  artifact: unknown;
+  created_at_ms: number;
+  /**
+   * `research_brief` | `plan` | `change_set` | `verification_report` | `review_findings`.
+   */
+  kind: string;
+  /**
+   * `researcher` | `planner` | `implementer` | `tester` | `reviewer`.
+   */
+  produced_by: string;
+}
+/**
+ * M5, protocol 1.13.0: every plan revision for a task, oldest first — "each revision journaled and diffable" (§4.25).
+ */
+export interface PlanRevisionsResponse {
+  revisions: PlanRevisionWire[];
+}
+/**
+ * One persisted plan revision (M5, `valyria_plan::model::PlanRevision`), with its structural diff against the immediately preceding revision — `diff_from_parent` is `None` for the first revision (`parent_hash` is also `None` then) and whenever the parent revision itself is no longer stored (defensive; `PlanStore` never actually deletes a revision).
+ */
+export interface PlanRevisionWire {
+  content_hash: string;
+  created_at_ms: number;
+  diff_from_parent?: PlanDiffWire | null;
+  parent_hash?: string | null;
+  rationale: string;
+  revision: number;
+  steps: PlanStepSummary[];
+}
+/**
+ * `valyria_plan::model::PlanDiff` — added/removed/changed step ids against the prior revision.
+ */
+export interface PlanDiffWire {
+  added: string[];
+  changed: string[];
+  removed: string[];
 }
 export interface TaskRollbackResponse {
   restored_files: string[];

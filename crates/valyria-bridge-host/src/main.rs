@@ -273,6 +273,18 @@ async fn dispatch(host: &Arc<Host>, out_tx: &OutTx, req: &Incoming) -> Result<Va
             let t = str_param(req, "taskId")?;
             with_client(host, |c| async move { c.task_report(&t).await }).await
         }
+        "task/children" => {
+            let t = str_param(req, "taskId")?;
+            with_client(host, |c| async move { c.task_children(&t).await }).await
+        }
+        "task/artifacts" => {
+            let t = str_param(req, "taskId")?;
+            with_client(host, |c| async move { c.task_artifacts(&t).await }).await
+        }
+        "plan/revisions" => {
+            let t = str_param(req, "taskId")?;
+            with_client(host, |c| async move { c.plan_revisions(&t).await }).await
+        }
         "task/rollback" => {
             let t = str_param(req, "taskId")?;
             let cp = str_param(req, "checkpointId")?;

@@ -27,6 +27,18 @@ export type Request =
       params: TaskIdRequest;
     }
   | {
+      method: "task_children";
+      params: TaskIdRequest;
+    }
+  | {
+      method: "task_artifacts";
+      params: TaskIdRequest;
+    }
+  | {
+      method: "plan_revisions";
+      params: TaskIdRequest;
+    }
+  | {
       method: "task_rollback";
       params: TaskRollbackRequest;
     }

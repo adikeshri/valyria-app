@@ -19,10 +19,11 @@
 
 import { z } from "zod";
 
-/** The event kinds `valyria_events::EventKind` emits (protocol 1.12.0). Keep
+/** The event kinds `valyria_events::EventKind` emits (protocol 1.13.0). Keep
  *  sorted and in sync with `schemas/event-kinds.txt`. */
 export const KNOWN_EVENT_KINDS = [
   "approval_requested",
+  "artifact_published",
   "context_retrieved",
   "engine_install_completed",
   "engine_install_failed",
@@ -44,6 +45,8 @@ export const KNOWN_EVENT_KINDS = [
   "progress_stalled",
   "resource_pressure",
   "state_changed",
+  "subtask_completed",
+  "subtask_started",
   "task_completed",
   "task_failed",
   "task_paused",
@@ -189,6 +192,18 @@ const PAYLOAD_DECODERS: Record<EventKind, z.ZodTypeAny> = {
   progress_stalled: z.object({ reason: s.optional() }).passthrough(),
   resource_pressure: anyObj,
   state_changed: z.object({ from: s.optional(), to: s.optional() }).passthrough(),
+  // M5: projected onto the *parent's* event stream (not the child task's
+  // own) by `TaskManager::create_child` / `TaskManager::transition`.
+  subtask_started: z
+    .object({ child_task_id: s.optional(), objective: s.optional() })
+    .passthrough(),
+  subtask_completed: z
+    .object({ child_task_id: s.optional(), final_state: s.optional() })
+    .passthrough(),
+  // M5: a role-pipeline Artifact was persisted (`valyria-agent::
+  // role_pipeline`). `role`/`kind` name the shape; the full artifact body
+  // itself is fetched via `task/artifacts`, not carried on the event.
+  artifact_published: z.object({ role: s.optional(), kind: s.optional() }).passthrough(),
   task_completed: anyObj,
   task_failed: z.object({ reason: s.optional() }).passthrough(),
   task_paused: anyObj,

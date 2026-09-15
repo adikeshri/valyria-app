@@ -71,6 +71,13 @@ export interface Requests {
   "task/status": [{ taskId: string }, unknown];
   "task/plan": [{ taskId: string }, unknown];
   "task/report": [{ taskId: string }, unknown];
+  // M5 / protocol 1.13.0 — child tasks, role-pipeline artifacts, plan
+  // revision history + diff. See @valyria/protocol's generated Response
+  // union (TaskChildrenResponse / TaskArtifactsResponse /
+  // PlanRevisionsResponse) for the typed shape behind this `unknown`.
+  "task/children": [{ taskId: string }, unknown];
+  "task/artifacts": [{ taskId: string }, unknown];
+  "plan/revisions": [{ taskId: string }, unknown];
   "task/rollback": [{ taskId: string; checkpointId: string }, unknown];
   "task/pause": [{ taskId: string }, null];
   "task/resume": [{ taskId: string }, null];

@@ -10,24 +10,7 @@
 yanked = "deny"
 # Unmaintained transitive deps of the GUI + updater stack. Not exploitable in
 # our usage; no upstream fix until Tauri migrates (GTK4 / urlpattern rewrite).
-ignore = [
-  "RUSTSEC-2024-0370", # proc-macro-error — unmaintained (via tauri macros)
-  "RUSTSEC-2024-0411", # gtk3 bindings — unmaintained (wry, Linux only)
-  "RUSTSEC-2024-0412",
-  "RUSTSEC-2024-0413",
-  "RUSTSEC-2024-0414",
-  "RUSTSEC-2024-0415",
-  "RUSTSEC-2024-0416",
-  "RUSTSEC-2024-0417",
-  "RUSTSEC-2024-0418",
-  "RUSTSEC-2024-0419",
-  "RUSTSEC-2024-0420",
-  "RUSTSEC-2025-0075", # unic-* — unmaintained (urlpattern → tauri-utils)
-  "RUSTSEC-2025-0080",
-  "RUSTSEC-2025-0081",
-  "RUSTSEC-2025-0098",
-  "RUSTSEC-2025-0100",
-]
+ignore = []
 
 [licenses]
 allow = [
